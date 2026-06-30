@@ -1,0 +1,1315 @@
+/* SPDX-License-Identifier: Elastic-2.0 */
+/* Copyright (c) 2026 ClaymoreLab */
+/* Login page — full-screen Prism hero + modal auth form. */
+
+.page {
+  position: relative;
+  height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: #181818;
+  scrollbar-gutter: stable;
+}
+
+.stage {
+  position: relative;
+  min-height: 100vh;
+  background: #181818;
+  overflow-x: hidden;
+  isolation: isolate;
+}
+
+.stageLightRays {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.stageInner {
+  --stage-x: clamp(96px, 7vw, 144px);
+  --login-header-height: 80px;
+  position: relative;
+  z-index: 3;
+  min-height: 100vh;
+  padding: var(--login-header-height) var(--stage-x) clamp(96px, 12vh, 150px);
+  display: flex;
+  flex-direction: column;
+  color: #eaf2ef;
+}
+
+.stageTopBar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 28px 42px 16px 32px;
+  background: rgba(3, 5, 10, 0);
+  border-bottom: 1px solid rgba(255, 255, 255, 0);
+  backdrop-filter: blur(0) saturate(100%);
+  -webkit-backdrop-filter: blur(0) saturate(100%);
+  transition:
+    background-color 260ms ease,
+    border-color 260ms ease,
+    backdrop-filter 260ms ease,
+    -webkit-backdrop-filter 260ms ease;
+}
+
+.pageScrolled .stageTopBar {
+  background: transparent;
+  border-bottom-color: rgba(255, 255, 255, 0.045);
+  backdrop-filter: blur(18px) saturate(126%);
+  -webkit-backdrop-filter: blur(18px) saturate(126%);
+}
+
+.stageActions {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+}
+
+.businessWechat {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.businessWechat::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: -12px;
+  right: -12px;
+  height: 18px;
+}
+
+.businessWechatTrigger {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(246, 248, 255, 0.72);
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 440;
+  line-height: 1;
+  transition: color 160ms ease;
+}
+
+.businessWechatTrigger svg {
+  width: 15px;
+  height: 15px;
+}
+
+.businessWechatTrigger:hover,
+.businessWechat:focus-within .businessWechatTrigger {
+  color: rgba(255, 255, 255, 0.94);
+}
+
+.businessWechatPopover {
+  position: absolute;
+  top: calc(100% + 18px);
+  right: 50%;
+  z-index: 40;
+  width: min(280px, calc(100vw - 48px));
+  padding: 0;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transform: translate(50%, -6px);
+  transition:
+    opacity 160ms ease,
+    transform 180ms ease,
+    visibility 160ms ease;
+}
+
+.businessWechat:hover .businessWechatPopover,
+.businessWechat:focus-within .businessWechatPopover {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translate(50%, 0);
+}
+
+.businessWechatPopover img {
+  display: block;
+  width: 70%;
+  height: auto;
+  margin: 0 auto;
+  border-radius: 10px;
+  user-select: none;
+}
+
+.businessWechatPanel {
+  overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: #282828;
+  padding: 14px 14px 18px;
+  filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.36));
+}
+
+.businessWechatText {
+  margin-top: 12px;
+  text-align: center;
+}
+
+.businessWechatTitle {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+.businessWechatSubtitle {
+  margin: 7px 0 0;
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 12px;
+  font-weight: 390;
+  line-height: 1.35;
+  letter-spacing: 0;
+}
+
+.githubLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 0;
+  height: auto;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  border: 0;
+  color: rgba(234, 242, 239, 0.92);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: color 0.18s ease;
+}
+
+.githubLink:hover {
+  color: #ffffff;
+}
+
+.githubLink svg {
+  width: 22px;
+  height: 22px;
+}
+
+.githubStarLabel {
+  color: rgba(246, 248, 255, 0.9);
+  font-size: 15px;
+  font-weight: 560;
+  line-height: 1;
+}
+
+.githubStars {
+  color: rgba(246, 248, 255, 0.72);
+  font-size: 15px;
+  font-weight: 520;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 34px;
+}
+
+.brandLogo {
+  display: block;
+  width: clamp(96px, 5.9vw, 128px);
+  height: auto;
+}
+
+.hero {
+  align-self: center;
+  width: min(980px, calc(100vw - 48px));
+  min-height: clamp(330px, 43vh, 480px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding-top: clamp(12px, 2vh, 28px);
+  transform: translateY(-10px);
+}
+
+.heroTitle {
+  display: inline-block;
+  min-width: min(100%, 11.5em);
+  text-align: center;
+  font-size: clamp(38px, 3.9vw, 72px);
+  line-height: 1.05;
+  letter-spacing: 0.14em;
+  font-weight: 390;
+  margin: 0;
+  color: #fff;
+  text-wrap: balance;
+  text-shadow: 0 0 22px rgba(255, 255, 255, 0.12);
+}
+
+.heroTitlePrefix {
+  display: inline;
+}
+
+.heroTitleBrand {
+  display: inline;
+  color: #fff;
+  text-shadow: 0 0 24px rgba(255, 255, 255, 0.25);
+}
+
+.heroTitleSuffix {
+  display: inline;
+}
+
+.heroSubtitle {
+  margin: 32px 0 0;
+  font-size: clamp(21px, 1.72vw, 34px);
+  line-height: 1.2;
+  letter-spacing: 0.28em;
+  color: rgba(245, 247, 255, 0.72);
+  font-weight: 390;
+  text-shadow: 0 0 18px rgba(255, 255, 255, 0.08);
+  text-transform: uppercase;
+}
+
+.heroSubtitlePrefix {
+  display: inline;
+  white-space: nowrap;
+}
+
+.heroSubtitleBrand {
+  margin-left: 0.28em;
+  color: rgba(21, 215, 232, 0.78);
+  text-shadow: 0 0 20px rgba(21, 215, 232, 0.12);
+}
+
+.heroSubtitleSuffix {
+  margin-left: 0.28em;
+}
+
+.heroActions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  margin-top: clamp(38px, 5vh, 58px);
+}
+
+.heroPrimary,
+.heroSecondary {
+  appearance: none;
+  position: relative;
+  isolation: isolate;
+  min-width: 122px;
+  height: 40px;
+  padding: 0 22px;
+  border: 0;
+  border-radius: 11px;
+  background: transparent;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 350ms ease;
+}
+
+.heroPrimary::before,
+.heroSecondary::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  transition:
+    transform 350ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-color 350ms ease,
+    background 350ms ease,
+    box-shadow 350ms ease;
+}
+
+.heroPrimary {
+  color: #181820;
+}
+
+.heroPrimary::before {
+  background: rgba(246, 248, 255, 0.94);
+  box-shadow: 0 16px 38px rgba(255, 255, 255, 0.06);
+}
+
+.heroSecondary {
+  color: rgba(246, 251, 255, 0.58);
+}
+
+.heroSecondary::before {
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: none;
+  backdrop-filter: blur(18px) saturate(128%);
+  -webkit-backdrop-filter: blur(18px) saturate(128%);
+}
+
+.heroPrimary:hover::before,
+.heroSecondary:hover::before {
+  transform: scale(1.035);
+}
+
+.heroPrimary:hover::before {
+  background: #ffffff;
+  box-shadow:
+    0 18px 44px rgba(255, 255, 255, 0.09),
+    0 0 22px rgba(21, 215, 232, 0.07);
+}
+
+.heroSecondary:hover {
+  color: rgba(246, 251, 255, 0.82);
+}
+
+.heroSecondary:hover::before {
+  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.communitySection {
+  align-self: center;
+  width: min(100%, 1440px);
+  margin-top: clamp(18px, 3.8vh, 48px);
+}
+
+.communityHeading {
+  margin: 0 0 22px;
+  color: rgba(248, 250, 255, 0.76);
+  font-size: 18px;
+  font-weight: 430;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+}
+
+.communityGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 32px 24px;
+}
+
+.communityCard {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: #f7f9ff;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.communityCover {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 12px;
+  border: 0;
+  background: var(--work-gradient);
+}
+
+.communityCover::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  border-radius: inherit;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.09);
+  transition: box-shadow 180ms ease;
+}
+
+.communityCard:hover .communityCover::after {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.20);
+}
+
+.communityPoster,
+.communityImage,
+.communityVideo,
+.communityCoverShade {
+  position: absolute;
+  inset: 0;
+}
+
+.communityPoster {
+  z-index: 1;
+  background:
+    radial-gradient(circle at 26% 28%, rgba(255, 255, 255, 0.28), transparent 24%),
+    radial-gradient(circle at 72% 24%, rgba(255, 255, 255, 0.18), transparent 20%),
+    radial-gradient(circle at 50% 78%, rgba(0, 0, 0, 0.32), transparent 32%),
+    var(--work-gradient);
+  transition: opacity 220ms ease, filter 220ms ease;
+}
+
+.communityImage {
+  z-index: 2;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.communityVideo {
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+
+/* The OSS cover shows by default; the clip fades in and plays on hover. */
+.communityCard:hover .communityVideo {
+  opacity: 1;
+}
+
+.communityCard:hover .communityPoster {
+  opacity: 0;
+  filter: saturate(1.12);
+}
+
+.communityCoverShade {
+  z-index: 3;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    linear-gradient(180deg, transparent 54%, rgba(0, 0, 0, 0.48) 100%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.18), transparent 36%, rgba(0, 0, 0, 0.16));
+  transition: opacity 160ms ease;
+}
+
+.communityCard:hover .communityCoverShade {
+  opacity: 1;
+}
+
+.communityLikes {
+  position: absolute;
+  right: 18px;
+  bottom: 9px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 22px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.94);
+  font-size: 12px;
+  font-weight: 520;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  opacity: 0;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.48);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  transition: opacity 160ms ease;
+}
+
+.communityCard:hover .communityLikes {
+  opacity: 1;
+}
+
+.communityLikes svg {
+  width: 14px;
+  height: 14px;
+}
+
+.communityTitle {
+  min-width: 0;
+  margin: 8px 0 0;
+  overflow: hidden;
+  color: rgba(248, 250, 255, 0.94);
+  font-size: 13px;
+  font-weight: 620;
+  line-height: 1.35;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.communityDescription {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  color: rgba(231, 237, 248, 0.56);
+  font-size: 12px;
+  font-weight: 420;
+  line-height: 1.35;
+  letter-spacing: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loginOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(2, 3, 8, 0.64);
+  backdrop-filter: blur(18px) saturate(120%);
+  -webkit-backdrop-filter: blur(18px) saturate(120%);
+  pointer-events: auto;
+}
+
+.loginDialog {
+  position: relative;
+  width: min(320px, calc(100vw - 48px));
+}
+
+.loginClose {
+  position: absolute;
+  top: -20px;
+  right: -24px;
+  z-index: 5;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.22);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: color 160ms;
+}
+
+.loginClose:hover {
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.loginClose svg {
+  width: 13px;
+  height: 13px;
+}
+
+.card {
+  position: relative;
+  width: 100%;
+  padding: 20px 16px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 16px;
+  background: rgba(7, 8, 14, 0.30);
+  box-shadow: none;
+  overflow: visible;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.fieldRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.label {
+  font-size: 13px;
+  font-weight: 510;
+  color: rgba(235, 238, 247, 0.50);
+  letter-spacing: 0;
+}
+
+.inputWrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  height: 36px;
+  padding: 0 10px 0 14px;
+  background-color: rgba(255, 255, 255, 0.05);
+  background-image: none;
+  background-clip: padding-box;
+  color: rgba(246, 248, 255, 0.86);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 5px;
+  box-shadow: none;
+  color-scheme: dark;
+  font: inherit;
+  font-size: 13px;
+  letter-spacing: 0;
+  outline: none;
+  transition:
+    border-color 160ms,
+    background-color 160ms;
+}
+
+.input:hover {
+  border-color: rgba(255, 255, 255, 0.14);
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.input:focus,
+.input:focus-visible {
+  border-color: rgba(255, 255, 255, 0.18);
+  background-color: rgba(255, 255, 255, 0.05);
+  box-shadow: none;
+}
+
+.input::placeholder {
+  color: rgba(246, 248, 255, 0.36);
+  opacity: 1;
+}
+
+.input:-webkit-autofill,
+.input:-webkit-autofill:hover,
+.input:-webkit-autofill:focus {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  background-image: none !important;
+  -webkit-text-fill-color: rgba(246, 248, 255, 0.86) !important;
+  caret-color: rgba(246, 248, 255, 0.86);
+  box-shadow: 0 0 0 1000px rgba(255, 255, 255, 0.05) inset !important;
+  transition: background-color 9999s ease-out;
+}
+
+.inputWithEye {
+  padding-right: 40px;
+}
+
+.eyeBtn {
+  position: absolute;
+  right: 8px;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 5px;
+  color: rgba(246, 248, 255, 0.42);
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition:
+    background 160ms,
+    color 160ms;
+}
+
+.eyeBtn:hover {
+  color: rgba(246, 248, 255, 0.70);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.eyeBtn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.btn {
+  appearance: none;
+  width: 100%;
+  height: 38px;
+  margin-top: 10px;
+  border: 0;
+  border-radius: 6px;
+  background: linear-gradient(92deg, #15d7e8 0%, #6ea2ff 100%);
+  color: #07131f;
+  box-shadow: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  overflow: hidden;
+  transition:
+    transform 120ms,
+    filter 160ms;
+}
+
+.btn:hover {
+  filter: brightness(1.035);
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btnArrow {
+  width: 13px;
+  height: 13px;
+  transition: transform 200ms;
+}
+
+.btn:hover .btnArrow {
+  transform: translateX(3px);
+}
+
+@keyframes shake {
+
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  15%,
+  45%,
+  75% {
+    transform: translateX(-6px);
+  }
+
+  30%,
+  60%,
+  90% {
+    transform: translateX(6px);
+  }
+}
+
+.shake {
+  animation: shake 320ms cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+.inputInvalid {
+  border-color: var(--destructive) !important;
+}
+
+@media (max-width: 640px) {
+  .stageInner {
+    --stage-x: 24px;
+    --login-header-height: 72px;
+    padding: var(--login-header-height) 24px 96px;
+  }
+
+  .stageTopBar {
+    padding: 24px 24px 14px;
+  }
+
+  .stageActions {
+    gap: 18px;
+  }
+
+  .businessWechatTrigger {
+    font-size: 12px;
+  }
+
+  .businessWechatPopover {
+    right: 0;
+    width: min(240px, calc(100vw - 40px));
+    transform: translate(0, -6px);
+  }
+
+  .businessWechat:hover .businessWechatPopover,
+  .businessWechat:focus-within .businessWechatPopover {
+    transform: translate(0, 0);
+  }
+
+  .hero {
+    width: min(100%, calc(100vw - 32px));
+    min-height: clamp(330px, 50vh, 440px);
+    padding-top: 8px;
+  }
+
+  .heroTitle {
+    font-size: clamp(34px, 10vw, 46px);
+    letter-spacing: 0.08em;
+  }
+
+  .heroSubtitle {
+    margin-top: 24px;
+    font-size: 17px;
+    letter-spacing: 0.16em;
+  }
+
+  .heroActions {
+    gap: 14px;
+    margin-top: 34px;
+  }
+
+  .communitySection {
+    width: calc(100vw - 24px);
+    margin-right: -24px;
+    margin-top: 22px;
+    overflow: hidden;
+  }
+
+  .communityHeading {
+    margin-bottom: 18px;
+    font-size: 16px;
+  }
+
+  .communityGrid {
+    display: flex;
+    gap: 14px;
+    overflow-x: auto;
+    padding: 0 24px 6px 0;
+    scroll-snap-type: x mandatory;
+    scrollbar-width: none;
+  }
+
+  .communityGrid::-webkit-scrollbar {
+    display: none;
+  }
+
+  .communityCard {
+    flex: 0 0 min(78vw, 320px);
+    scroll-snap-align: start;
+  }
+
+  .communityTitle {
+    font-size: 13px;
+  }
+
+  .communityDescription {
+    font-size: 12px;
+  }
+
+  .loginClose {
+    top: -34px;
+    right: 0;
+  }
+}
+
+@media (min-width: 641px) and (max-width: 1179px) {
+  .communityGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .heroPrimary::before,
+  .heroSecondary::before,
+  .btnArrow,
+  .shake,
+  .communityCover,
+  .communityPoster,
+  .communityVideo {
+    transition: none;
+    animation: none;
+  }
+
+  .heroPrimary:hover::before,
+  .heroSecondary:hover::before {
+    transform: none;
+  }
+
+  .communityCard:hover .communityCover {
+    transform: none;
+  }
+}
+
+.watchPage {
+  position: relative;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: #0d0d0d;
+  color: #f8fafc;
+  isolation: isolate;
+}
+
+.watchBackdrop {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.watchBackdrop img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.22;
+  filter: blur(34px) saturate(0.95);
+  transform: scale(1.08);
+}
+
+.watchBackdrop::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.52), transparent 24%, rgba(0, 0, 0, 0.72) 100%),
+    linear-gradient(90deg, rgba(0, 0, 0, 0.55), transparent 18%, transparent 82%, rgba(0, 0, 0, 0.55));
+}
+
+.watchHeader {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 12;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 28px 32px;
+  pointer-events: none;
+}
+
+.watchBack {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0;
+  color: rgba(255, 255, 255, 0.86);
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 460;
+  transition: color 160ms ease;
+}
+
+.watchBack:hover {
+  color: #ffffff;
+}
+
+.watchBack svg {
+  width: 18px;
+  height: 18px;
+}
+
+.watchMeta {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  color: rgba(255, 255, 255, 0.78);
+}
+
+.watchMeta h1 {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 13px;
+  font-weight: 540;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+
+.watchCreateCta {
+  appearance: none;
+  -webkit-appearance: none;
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 34px;
+  margin-left: auto;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 0;
+  background: rgba(22, 24, 30, 0.34);
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  font-weight: 520;
+  text-decoration: none;
+  cursor: pointer;
+  backdrop-filter: blur(18px) saturate(126%);
+  -webkit-backdrop-filter: blur(18px) saturate(126%);
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+
+.watchCreateCta:hover {
+  background: rgba(26, 28, 34, 0.46);
+  color: #ffffff;
+}
+
+.watchStage {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  min-height: 100dvh;
+  padding: 0;
+}
+
+.watchVideo {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border: 0;
+  background: #000;
+}
+
+.watchSoundToggle {
+  position: fixed;
+  right: 32px;
+  bottom: 184px;
+  z-index: 12;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px 9px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(12, 14, 18, 0.55);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.watchSoundToggle:hover {
+  background: rgba(20, 24, 30, 0.74);
+  border-color: rgba(255, 255, 255, 0.34);
+}
+
+.watchSoundToggle:active {
+  transform: scale(0.97);
+}
+
+.watchRailWrap {
+  position: fixed;
+  left: 32px;
+  right: 32px;
+  bottom: 28px;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.watchRailWrap::before,
+.watchRailWrap::after {
+  content: "";
+  position: absolute;
+  top: 18px;
+  bottom: 10px;
+  z-index: 2;
+  width: 54px;
+  pointer-events: none;
+}
+
+.watchRailWrap::before {
+  left: 0;
+  background: linear-gradient(90deg, rgba(8, 10, 12, 0.28), transparent);
+}
+
+.watchRailWrap::after {
+  right: 0;
+  background: linear-gradient(270deg, rgba(8, 10, 12, 0.28), transparent);
+}
+
+.watchRail {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding: 18px 0 10px;
+  pointer-events: auto;
+  scrollbar-width: none;
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: pan-y;
+}
+
+.watchRail:active {
+  cursor: grabbing;
+}
+
+.watchRail::-webkit-scrollbar {
+  display: none;
+}
+
+/* Leading/trailing flex spacers so the first and last thumbnails clear the
+   prev/next controls by an EQUAL amount. A scroll container's trailing padding
+   is dropped by the browser, so real flex items are used instead — they scroll
+   with the content and stay symmetric. 40px spacer + 12px gap ≈ 52px, which
+   clears the 34px-wide arrows sitting at left/right: 14px. */
+.watchRail::before,
+.watchRail::after {
+  content: "";
+  flex: 0 0 40px;
+}
+
+.watchRailItem {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  flex: 0 0 clamp(148px, 10.6vw, 210px);
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.76);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: none;
+  -webkit-user-drag: none;
+  transform: translateY(0);
+  transition:
+    color 160ms ease,
+    transform 180ms ease;
+}
+
+.watchRailItem:hover,
+.watchRailItem[data-active="true"] {
+  color: #ffffff;
+}
+
+.watchRailItem:hover,
+.watchRailItem[data-active="true"] {
+  z-index: 2;
+  transform: translateY(-6px) scale(1.025);
+}
+
+.watchRailItem::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.42);
+  transition: background-color 160ms ease;
+}
+
+.watchRailItem:hover::after,
+.watchRailItem[data-active="true"]::after {
+  background: rgba(0, 0, 0, 0);
+}
+
+.watchRailItem img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: inherit;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  transition: border-color 160ms ease;
+}
+
+.watchRailItem[data-active="true"] img {
+  border-color: rgba(255, 255, 255, 0.34);
+}
+
+.watchRailControl {
+  appearance: none;
+  -webkit-appearance: none;
+  pointer-events: auto;
+  position: absolute;
+  top: calc(18px + (100% - 28px) / 2);
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 999px;
+  border: 0;
+  background: rgba(22, 24, 30, 0.34);
+  color: rgba(255, 255, 255, 0.86);
+  cursor: pointer;
+  font: inherit;
+  text-decoration: none;
+  transform: translateY(calc(-50% + 4px));
+  backdrop-filter: blur(18px) saturate(126%);
+  -webkit-backdrop-filter: blur(18px) saturate(126%);
+  transition:
+    background-color 160ms ease,
+    box-shadow 160ms ease,
+    color 160ms ease;
+}
+
+.watchRailControl:hover {
+  background: rgba(64, 68, 78, 0.42);
+  box-shadow:
+    0 0 20px rgba(255, 255, 255, 0.14),
+    inset 0 0 18px rgba(255, 255, 255, 0.08);
+  color: #ffffff;
+}
+
+.watchRailControl svg {
+  width: 17px;
+  height: 17px;
+  transition: filter 160ms ease;
+}
+
+.watchRailControl:hover svg {
+  filter: drop-shadow(0 0 7px rgba(255, 255, 255, 0.52));
+}
+
+.watchRailControlPrev {
+  left: 14px;
+}
+
+.watchRailControlNext {
+  right: 14px;
+}
+
+@media (max-width: 760px) {
+  .watchHeader {
+    padding: 22px 24px;
+  }
+
+  .watchCreateCta {
+    height: 32px;
+    padding: 0 12px;
+    font-size: 12px;
+  }
+
+  .watchRailWrap {
+    left: 20px;
+    right: 20px;
+    bottom: 22px;
+  }
+
+  .watchRail {
+    padding-inline: 0;
+    scroll-padding-inline: 50%;
+  }
+
+  .watchRailItem {
+    flex-basis: 154px;
+  }
+
+  .watchRailControl {
+    width: 30px;
+    height: 30px;
+  }
+
+  .watchRailControlPrev {
+    left: 8px;
+  }
+
+  .watchRailControlNext {
+    right: 8px;
+  }
+}

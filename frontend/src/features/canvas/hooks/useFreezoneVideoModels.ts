@@ -1,0 +1,142 @@
+// SPDX-License-Identifier: Elastic-2.0
+// Copyright (c) 2026 ClaymoreLab
+import { useSyncExternalStore } from "react";
+
+import {
+  fetchFreezoneVideoModels,
+  type FreezoneVideoModelInfo,
+} from "@/api/ops";
+import { readUrl } from "@/lib/url-params";
+import {
+  VIDEO_MODELS,
+  type ModelOption,
+} from "@/features/canvas/ui/ProviderModelPicker";
+
+export interface UseFreezoneVideoModelsResult {
+  models: ModelOption[];
+  isLoading: boolean;
+  isFallback: boolean;
+  error: Error | null;
+}
+
+// Module-level shared store, mirrors useFreezoneImageModels but keyed under
+// a separate namespace so image and video fetches don't collide. One fetch
+// per project per tab lifetime.
+const states = new Map<string, UseFreezoneVideoModelsResult>();
+const listeners = new Map<string, Set<() => void>>();
+
+// Lazy singleton — circular import with `ProviderModelPicker.tsx` means we
+// can't touch `VIDEO_MODELS` at module top level (TDZ).
+let noProjectStateMemo: UseFreezoneVideoModelsResult | null = null;
+function getNoProjectState(): UseFreezoneVideoModelsResult {
+  if (!noProjectStateMemo) {
+    noProjectStateMemo = {
+      models: VIDEO_MODELS,
+      isLoading: false,
+      isFallback: true,
+      error: null,
+    };
+  }
+  return noProjectStateMemo;
+}
+
+function emit(project: string) {
+  listeners.get(project)?.forEach((fn) => fn());
+}
+
+function writeState(project: string, next: UseFreezoneVideoModelsResult) {
+  states.set(project, next);
+  emit(project);
+}
+
+function toModelOptions(models: FreezoneVideoModelInfo[]): ModelOption[] {
+  return models;
+}
+
+function ensureLoaded(project: string) {
+  if (states.has(project)) return;
+  states.set(project, {
+    models: VIDEO_MODELS,
+    isLoading: true,
+    isFallback: true,
+    error: null,
+  });
+  fetchFreezoneVideoModels(project)
+    .then((models) => {
+      if (models.length === 0) {
+        writeState(project, {
+          models: VIDEO_MODELS,
+          isLoading: false,
+          isFallback: true,
+          error: null,
+        });
+        return;
+      }
+      writeState(project, {
+        models: toModelOptions(models),
+        isLoading: false,
+        isFallback: false,
+        error: null,
+      });
+    })
+    .catch((error: unknown) => {
+      const normalized =
+        error instanceof Error ? error : new Error(String(error));
+      console.warn(
+        "[freezone] video models fetch failed, using hardcoded fallback:",
+        normalized.message,
+      );
+      writeState(project, {
+        models: VIDEO_MODELS,
+        isLoading: false,
+        isFallback: true,
+        error: normalized,
+      });
+    });
+}
+
+/**
+ * Trigger the shared video-model fetch eagerly for a project. Idempotent —
+ * safe to call from FreezoneShell mount alongside the image-model prefetch.
+ */
+export function prefetchFreezoneVideoModels(project: string): void {
+  if (!project) return;
+  ensureLoaded(project);
+}
+
+function subscribe(project: string | null, callback: () => void) {
+  if (!project) return () => {};
+  let bucket = listeners.get(project);
+  if (!bucket) {
+    bucket = new Set();
+    listeners.set(project, bucket);
+  }
+  bucket.add(callback);
+  return () => {
+    bucket!.delete(callback);
+    if (bucket!.size === 0) listeners.delete(project);
+  };
+}
+
+/**
+ * Read the video model list from a shared module-level store.
+ *
+ * Mirrors `useFreezoneImageModels` but hits
+ * `GET /api/v1/projects/{project}/freezone/video/models`. Failures fall back
+ * to the hardcoded `VIDEO_MODELS` so the picker is never empty.
+ */
+export function useFreezoneVideoModels(
+  projectOverride?: string | null,
+): UseFreezoneVideoModelsResult {
+  const project =
+    projectOverride !== undefined ? projectOverride : readUrl().project;
+
+  if (project) ensureLoaded(project);
+
+  return useSyncExternalStore(
+    (callback) => subscribe(project ?? null, callback),
+    () =>
+      project ? states.get(project) ?? getNoProjectState() : getNoProjectState(),
+    () => getNoProjectState(),
+  );
+}

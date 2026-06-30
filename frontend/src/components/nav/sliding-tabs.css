@@ -1,0 +1,82 @@
+/* SPDX-License-Identifier: Elastic-2.0 */
+/* Copyright (c) 2026 ClaymoreLab */
+.sliding-tabs {
+  position: relative;
+  gap: 1rem;
+}
+
+.sliding-tabs__slider {
+  position: absolute;
+  top: 0.25rem;
+  left: 0;
+  z-index: 0;
+  height: calc(100% - 0.5rem);
+  border-radius: 999px;
+  background: var(--foreground);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.sliding-tabs__slider[data-animate="true"] {
+  transition:
+    transform 300ms cubic-bezier(0.22, 0.8, 0.24, 1),
+    width 300ms cubic-bezier(0.22, 0.8, 0.24, 1),
+    opacity 120ms ease;
+}
+
+.sliding-tabs__slider[data-ready="true"] {
+  opacity: 1;
+}
+
+.sliding-tabs__trigger {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  cursor: pointer;
+  min-height: 1.75rem;
+  min-width: 5rem;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted-foreground);
+  font: inherit;
+  font-weight: 400;
+  line-height: 1;
+  padding: 0.375rem 1rem;
+  transition:
+    color 180ms ease,
+    background-color 180ms ease;
+}
+
+.sliding-tabs__trigger:hover {
+  background: rgb(255 255 255 / 0.055);
+  color: var(--foreground);
+}
+
+.sliding-tabs__trigger:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1px rgb(255 255 255 / 0.72);
+}
+
+.sliding-tabs__trigger[data-active="true"] {
+  color: var(--background);
+}
+
+.sliding-tabs__content {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-width: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sliding-tabs__slider,
+  .sliding-tabs__trigger {
+    transition: none;
+  }
+}

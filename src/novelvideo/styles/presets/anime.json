@@ -1,0 +1,10 @@
+{
+  "id": "anime",
+  "name": "Anime Style",
+  "style_instructions": "Create a high-quality Japanese anime key visual illustration. Style: 2D cel animation with crisp black outlines (medium weight), flat color fills with 2-layer cel shading (base color + single shadow tone). Eyes: large, detailed with multi-layer reflections and catchlights. Hair: flowing strands with distinct highlight bands. Background: painted watercolor-style environment with softer detail than foreground characters. Color palette: vibrant and saturated with high contrast between light and shadow areas. Render at anime production key frame quality.",
+  "avoid_instructions": "FORBIDDEN: photorealistic rendering, 3D CGI, photograph textures. NOT realistic skin pores or film grain. No gradient shading or soft blending — use FLAT cel-shading only. No watermarks, signatures, or text overlays. No bad anatomy, extra limbs, or mutated hands.",
+  "style_tag": "ANIME",
+  "label": "动漫风格",
+  "style_family": "animation",
+  "animation_subtype": "2d"
+}

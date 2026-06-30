@@ -1,11 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Questions & ideas
+  - name: "💬 讨论 / 提问 · Discussions / Questions"
     url: https://github.com/dramaclaw/dramaclaw/discussions
-    about: Open-ended questions, setup help, and early design discussion belong in Discussions — not the issue tracker.
-  - name: Showcase your project
-    url: https://github.com/dramaclaw/dramaclaw/discussions/categories/show-and-tell
-    about: Made something with DramaClaw? Share it here. We love seeing what the community ships.
-  - name: Security disclosure
-    url: https://github.com/dramaclaw/dramaclaw/blob/main/SECURITY.md
-    about: Please report sensitive security issues privately. See SECURITY.md for the responsible-disclosure flow.
+    about: "用法问题、想法交流请走 Discussions / For usage questions and ideas, use Discussions"
+  - name: "🔒 安全问题 · Security"
+    url: https://github.com/dramaclaw/dramaclaw/security/policy
+    about: "安全漏洞请勿走公开 issue，按 SECURITY.md 私下上报 / Don't file security reports as public issues; follow SECURITY.md"

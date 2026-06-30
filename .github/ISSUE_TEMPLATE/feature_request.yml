@@ -1,59 +1,30 @@
-name: Feature request
-description: Suggest an improvement, new capability, or new stage for the pipeline.
-title: "[Feature] "
-labels: ["enhancement", "triage"]
+name: "✨ 功能建议 / Feature Request"
+description: "提一个新功能或改进 / Suggest a new feature or improvement"
+labels: ["enhancement"]
 body:
-  - type: markdown
-    attributes:
-      value: |
-        Thanks for taking the time to shape DramaClaw. Good feature requests start
-        with the creator's pain — what are you trying to tell, and what's in the
-        way today?
   - type: checkboxes
-    id: prerequisites
+    id: preflight
     attributes:
-      label: Pre-flight checks
+      label: "前置检查 / Pre-flight checks"
       options:
-        - label: I searched existing issues and discussions for a similar request.
-          required: true
-        - label: I've read [ROADMAP.md](../../ROADMAP.md) and confirmed this isn't already on the roadmap.
+        - label: "我已搜索过现有 issue 与 Discussions，确认这不是重复 / I searched existing issues and Discussions"
           required: true
   - type: textarea
     id: problem
     attributes:
-      label: What problem are you trying to solve?
-      description: Describe the creator-facing pain this request addresses. Stay grounded in the story you're trying to tell.
+      label: "要解决的问题 / 场景 / Problem or use case"
+      description: "描述动机和使用场景，而不是直接给方案 / Describe the motivation and use case, not the solution"
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed solution
-      description: How would you like DramaClaw to behave? A rough sketch is fine.
-    validations:
-      required: true
-  - type: dropdown
-    id: scope
-    attributes:
-      label: Scope
-      options:
-        - New pipeline stage
-        - Improve an existing stage
-        - New model / provider integration
-        - Web studio / UI
-        - CLI / API surface
-        - Deployment / operations
-        - Documentation
-        - Something else
+      label: "期望的方案 / Proposed solution"
     validations:
       required: true
   - type: textarea
     id: alternatives
     attributes:
-      label: Alternatives considered
-      description: What have you tried or thought about that wasn't quite right?
-  - type: textarea
-    id: extra
-    attributes:
-      label: Anything else?
-      description: Links to reference projects, mockups, screenshots, or clips.
+      label: "备选方案 / 补充 / Alternatives & context"
+    validations:
+      required: false

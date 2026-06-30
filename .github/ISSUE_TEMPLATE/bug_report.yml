@@ -1,110 +1,75 @@
-name: Bug report
-description: Report a reproducible problem with DramaClaw.
-title: "[Bug] "
-labels: ["bug", "triage"]
+name: "🐞 Bug 报告 / Bug Report"
+description: "报告一个可复现的问题 / Report a reproducible problem"
+labels: ["bug"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to file a bug report. Clear reproduction steps
-        are the single most useful thing you can give us — the rest can usually be
-        inferred from them.
+        感谢反馈！请尽量填全，便于我们复现。
+        Thanks for the report — please fill in as much as you can so we can reproduce it.
   - type: checkboxes
-    id: prerequisites
+    id: preflight
     attributes:
-      label: Pre-flight checks
+      label: "前置检查 / Pre-flight checks"
       options:
-        - label: I searched the existing issues and didn't find a duplicate.
+        - label: "我已搜索过现有 issue，确认这不是重复 / I searched existing issues and this isn't a duplicate"
           required: true
-        - label: I'm on a recent version of DramaClaw (`main` or the latest release).
+        - label: "我用的是最新版本，或已在下方写明所用 commit / I'm on the latest version, or stated the commit below"
           required: true
   - type: textarea
-    id: summary
+    id: what-happened
     attributes:
-      label: What happened?
-      description: A clear, concise description of the problem.
-      placeholder: When I run stage X on novel Y, the generated first frame is…
+      label: "问题描述 / What happened"
+      description: "发生了什么？ / What went wrong?"
     validations:
       required: true
   - type: textarea
-    id: reproduction
+    id: repro
     attributes:
-      label: Steps to reproduce
-      description: Exact commands, configuration, and inputs. A minimal repro is gold.
-      value: |
-        1. Clone the repo at commit …
-        2. Run `docker run …` with these env vars …
-        3. Open the studio and click …
-        4. See error
+      label: "复现步骤 / Steps to reproduce"
+      placeholder: |
+        1. ...
+        2. ...
+        3. 看到的错误 / the error you see
     validations:
       required: true
   - type: textarea
     id: expected
     attributes:
-      label: Expected behaviour
-      description: What did you think would happen?
+      label: "期望行为 / Expected behavior"
+      description: "你期望发生什么？ / What did you expect to happen?"
+    validations:
+      required: false
+  - type: dropdown
+    id: deploy
+    attributes:
+      label: "部署方式 / Deployment"
+      options:
+        - "Docker Compose（官方 DC key / official DC key）"
+        - "Docker Compose（自托管网关 / self-hosted gateway）"
+        - "本地源码 / Local from source"
+        - "其他 / Other"
     validations:
       required: true
-  - type: textarea
-    id: actual
-    attributes:
-      label: Actual behaviour
-      description: What happened instead? Paste full stack traces or logs in a code block.
-      render: shell
-  - type: dropdown
-    id: pipeline-stage
-    attributes:
-      label: Affected pipeline stage
-      description: Which part of the 16-stage pipeline is involved? (leave blank if not sure)
-      options:
-        - 1. Create project
-        - 2. Upload novel
-        - 3. Parse / ingest
-        - 4. Configure
-        - 5. Extract characters
-        - 6. Plan episodes
-        - 7. Portraits
-        - 8. Plan identity
-        - 9. Identity images
-        - 10. Script generation
-        - 11. Staging / manual edits
-        - 12. Sketches
-        - 13. First frames
-        - 14. Voice-over (TTS)
-        - 15. Compose
-        - 16. Export
-        - Cross-stage / infrastructure
-        - Not sure
   - type: input
     id: version
     attributes:
-      label: DramaClaw version / commit
-      placeholder: "v0.x.y or git SHA"
+      label: "版本或 commit / Version or commit"
+      placeholder: "e.g. v0.1.0 / c297cbc"
     validations:
       required: true
-  - type: input
-    id: os
+  - type: textarea
+    id: env
     attributes:
-      label: Operating system
-      placeholder: "macOS 15.2 / Ubuntu 22.04 / Windows 11 WSL2"
+      label: "运行环境 / Environment"
+      description: "OS 与架构、Docker 版本、模型网关与所用模型 / OS & arch, Docker version, model gateway and models in use"
     validations:
       required: true
-  - type: input
-    id: deployment
-    attributes:
-      label: Deployment
-      placeholder: "Docker / local uv / Kubernetes / cloud"
   - type: textarea
-    id: providers
+    id: logs
     attributes:
-      label: Model / provider configuration
-      description: Which LLM / image / TTS providers are active? (redact API keys)
-      placeholder: |
-        LLM: Anthropic (Claude 4.7)
-        Image: Gemini nanobanana
-        TTS: CosyVoice
-  - type: textarea
-    id: extra
-    attributes:
-      label: Anything else?
-      description: Screenshots, config files, short clips, anything that gives context.
+      label: "相关日志 / Relevant logs"
+      description: "粘贴关键日志，会自动渲染为代码块 / Paste key logs; auto-rendered as a code block"
+      render: shell
+    validations:
+      required: false

@@ -1,0 +1,105 @@
+"""Billing error taxonomy shared by EE shims and data-plane code."""
+
+from __future__ import annotations
+
+from typing import Any
+
+INSUFFICIENT_CREDITS_CODE = "INSUFFICIENT_CREDITS"
+INSUFFICIENT_CREDITS_MESSAGE = "积分不足，请联系管理员充值"
+GENERATION_BILLING_UNITS = {"call", "item", "second", "token"}
+
+
+class InsufficientCreditsError(RuntimeError):
+    """Raised when a credit reservation cannot be covered by current balance."""
+
+    def __init__(self, *, user_id: str, cost: int, balance: int) -> None:
+        self.user_id = user_id
+        self.cost = int(cost)
+        self.balance = int(balance)
+        super().__init__(
+            f"insufficient credits for user {user_id}: required {self.cost}, "
+            f"available {self.balance}"
+        )
+
+
+class InsufficientCreditsStop(BaseException):
+    """Business stop signal used to escape broad Exception handlers."""
+
+    def __init__(self, *, user_id: str = "", cost: int = 0, balance: int = 0) -> None:
+        self.user_id = user_id
+        self.cost = int(cost or 0)
+        self.balance = int(balance or 0)
+        super().__init__(INSUFFICIENT_CREDITS_MESSAGE)
+
+
+def iter_exception_chain(exc: BaseException | None):
+    """Yield an exception and its explicit/implicit causes once each."""
+    seen: set[int] = set()
+    current = exc
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        yield current
+        current = current.__cause__ or current.__context__
+
+
+def find_insufficient_credits_error(exc: BaseException | None) -> InsufficientCreditsError | None:
+    for item in iter_exception_chain(exc):
+        if isinstance(item, InsufficientCreditsError):
+            return item
+    return None
+
+
+def find_insufficient_credits_stop(exc: BaseException | None) -> InsufficientCreditsStop | None:
+    for item in iter_exception_chain(exc):
+        if isinstance(item, InsufficientCreditsStop):
+            return item
+    return None
+
+
+def is_insufficient_credits_error(exc: BaseException | None = None, message: str = "") -> bool:
+    if (
+        find_insufficient_credits_error(exc) is not None
+        or find_insufficient_credits_stop(exc) is not None
+    ):
+        return True
+    combined = " ".join(str(item) for item in iter_exception_chain(exc))
+    if message:
+        combined = f"{combined} {message}"
+    normalized = combined.lower()
+    return (
+        "insufficient credits" in normalized
+        or INSUFFICIENT_CREDITS_CODE.lower() in normalized
+    )
+
+
+def insufficient_credits_payload(exc: BaseException | None = None) -> dict[str, Any]:
+    err = find_insufficient_credits_error(exc)
+    stop = find_insufficient_credits_stop(exc)
+    payload: dict[str, Any] = {
+        "error_code": INSUFFICIENT_CREDITS_CODE,
+        "message": INSUFFICIENT_CREDITS_MESSAGE,
+    }
+    if err is not None or stop is not None:
+        source = err or stop
+        payload.update(
+            {
+                "user_id": source.user_id,
+                "required": source.cost,
+                "balance": source.balance,
+            }
+        )
+    return payload
+
+
+__all__ = [
+    "GENERATION_BILLING_UNITS",
+    "INSUFFICIENT_CREDITS_CODE",
+    "INSUFFICIENT_CREDITS_MESSAGE",
+    "InsufficientCreditsError",
+    "InsufficientCreditsStop",
+    "find_insufficient_credits_error",
+    "find_insufficient_credits_stop",
+    "insufficient_credits_payload",
+    "is_insufficient_credits_error",
+    "iter_exception_chain",
+]

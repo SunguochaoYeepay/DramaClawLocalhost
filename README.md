@@ -1,160 +1,189 @@
 <div align="center">
 
-<!-- TBD: 替换为正式 logo assets/logo.svg -->
+<!-- TBD: replace with official logo assets/logo.svg -->
 <h1>DramaClaw</h1>
 
-## Make Your Own DC Universe.
+## Make Your Own DC.
 
 <p align="left">
 
-他们说你过时了。<br/>
-也许是「打工」这件事过时了。<br/>
+They say you're obsolete.<br/>
+Maybe it's the whole idea of "working for someone else" that's obsolete.<br/>
 <br/>
-AI 时代，真正的问题不是机器会不会替代人。<br/>
-真正的问题是：<br/>
-谁拥有机器？<br/>
-谁拥有流程？<br/>
-谁拥有工业化生产力？<br/>
+In the age of AI, the real question isn't whether machines replace people.<br/>
+The real question is:<br/>
+Who owns the machines?<br/>
+Who owns the pipeline?<br/>
+Who owns industrialized productivity?<br/>
 <br/>
-如果答案永远是大厂，<br/>
-那 AI 就不是平权。<br/>
-那只是新的高墙。<br/>
+If the answer is always Big Tech,<br/>
+then AI isn't empowerment.<br/>
+It's just a new wall.<br/>
 <br/>
-我是 Eric。<br/>
-<strong>2026 年 7 月 1 日，DramaClaw 正式开源。</strong><br/>
+I'm Eric.<br/>
 <br/>
-这不是 demo。<br/>
-不是玩具。<br/>
-不是阉割版。<br/>
-更不是拿来刷存在感的概念工程。<br/>
+This isn't a demo.<br/>
+Not a toy.<br/>
+Not a crippled edition.<br/>
 <br/>
-这是一条我们团队自己每天在跑的漫剧工业化生产线。<br/>
-从脚本到分镜，从资产到成片，全链路。<br/>
+This is the industrialized drama-production line our own team runs every day.<br/>
+From script to storyboard, from assets to finished film — the whole chain.<br/>
 <br/>
-7 月 1 日，我们把它完整交出来。<br/>
+Because people aren't beasts of burden.<br/>
+Because creativity is humanity's last line of defense.<br/>
 <br/>
-因为人不是牛马。<br/>
-因为创造力，是人类最后的防线。<br/>
+What DramaClaw sets out to do is simple:<br/>
 <br/>
-DramaClaw 要做的事很简单：<br/>
+<strong>Tear down the wall.</strong><br/>
 <br/>
-<strong>拆墙。</strong><br/>
+Put the industrialized drama-production power that only Big Tech had<br/>
+into the hands of ordinary creators.<br/>
 <br/>
-把过去只有大厂才有的漫剧工业化能力，<br/>
-交到普通创作者手里。<br/>
-<br/>
-开源倒计时已经开始。<br/>
-认同的话，留下一颗 ⭐。<br/>
-我们继续拆。
+The code is here.<br/>
+If this resonates, leave a ⭐.<br/>
+We'll keep tearing down walls.
 
 </p>
 
 <br/>
 
-[![License](https://img.shields.io/badge/License-TBD-lightgrey.svg)](./LICENSE)
+[![License](https://img.shields.io/badge/License-Elastic_2.0-blue.svg)](./LICENSE)
 [![GitHub stars](https://img.shields.io/github/stars/dramaclaw/dramaclaw?style=social)](https://github.com/dramaclaw/dramaclaw/stargazers)
 [![Release](https://img.shields.io/github/v/release/dramaclaw/dramaclaw?include_prereleases&sort=semver)](https://github.com/dramaclaw/dramaclaw/releases)
 [![Docker](https://img.shields.io/badge/docker-ready-2496ED?logo=docker&logoColor=white)](#quick-start)
 
-[English](./README.en.md) &nbsp;|&nbsp; **简体中文** &nbsp;|&nbsp; [文档](#documentation) &nbsp;|&nbsp; [快速开始](#quick-start)
+**English** &nbsp;|&nbsp; [简体中文](./readme/README_zh.md) &nbsp;|&nbsp; [Website](https://dramaclaw.ai) &nbsp;|&nbsp; [Docs](./docs/en/README.md) &nbsp;|&nbsp; [Quick Start](./docs/en/getting-started/quickstart.md)
 
 </div>
 
 <br/>
 
 <p align="center">
-  <img src="./assets/hero.png" alt="DramaClaw — 讲故事的人，重新走回镜头前" width="820"/>
+  <img src="./assets/hero.png" alt="DramaClaw — storytellers, back in front of the camera" width="820"/>
 </p>
 
 <!--
-  演示视频 —— 上传完成后，把 user-attachments 链接单独一行粘到下面。
-  上传方式：在 github.com 新建一个 Issue（别提交），把 demo 视频拖进正文，
-  等它上传完会自动生成 https://github.com/user-attachments/assets/...mp4 链接，
-  复制后粘到下面，再把 Issue 取消即可。GitHub 会把独占一行的 URL 渲染成内联播放器。
+  Demo video — after uploading, paste the user-attachments link on its own line below.
+  How to upload: open a new Issue on github.com (don't submit it), drag the demo
+  video into the body, wait for it to finish uploading and auto-generate a
+  https://github.com/user-attachments/assets/...mp4 link, copy it here, then
+  discard the Issue. GitHub renders a URL on its own line as an inline player.
 
   https://github.com/user-attachments/assets/REPLACE-AFTER-UPLOAD
 -->
 
 <p align="center">
-  <sub>更多画面：<a href="./SHOWCASE.md">作品画廊 &rarr;</a></sub>
+  <sub>🎬 Trailer: <a href="https://www.bilibili.com/video/BV1iQV26cE4S">Bilibili</a> &nbsp;·&nbsp; <a href="https://www.youtube.com/watch?v=64apa3maxK0">YouTube</a></sub>
 </p>
 
 <br/>
 
-## 当前发布状态
+<div align="center">
 
-**2026 年 7 月 1 日，DramaClaw 将正式开源。**
+## 🎬 Made with DramaClaw
 
-代码还没有放出，不是因为我们想做一个只展示概念的项目。我们要放出的，也不是一个只能跑通演示、不能进入真实生产的半成品。
+<sub>Real short dramas our team produced on this very pipeline &mdash; click a link to play.</sub>
 
-原计划里，我们准备先开源 **1.0 版本**：把已经跑通的漫剧生产链路整理出来，让大家尽快看到完整代码。但 2.0 的开发进展远超预期，底层架构、工作台体验、资产管理、分镜生产和多服务商接入都发生了比较大的升级。如果这时再放出 1.0，大家很快就会面对一次断层式迁移，也会看到一套我们已经不打算继续维护的旧实现。
+<table>
+  <tr>
+    <td align="center" width="205" valign="top">
+      <img src="https://nfg-web-assets.cdnfg.com/dramaclaw/guilingsi/guilingsi-cover.png" width="185" alt="归灵司"/><br/>
+      <b>归灵司</b><br/>
+      <a href="https://nfg-web-assets.cdnfg.com/dramaclaw/guilingsi/guilingsi-ep01.mp4">▶ 第 1 集</a>
+    </td>
+    <td align="center" width="205" valign="top">
+      <img src="https://nfg-web-assets.cdnfg.com/dramaclaw/luban/luban-cover.png" width="185" alt="鲁班"/><br/>
+      <b>鲁班</b><br/>
+      <a href="https://nfg-web-assets.cdnfg.com/dramaclaw/luban/luban-ep01.mp4">▶ 第 1 集</a>
+    </td>
+    <td align="center" width="205" valign="top">
+      <img src="https://nfg-web-assets.cdnfg.com/dramaclaw/shixiong-butianle/shixiong-butianle-cover.png" width="185" alt="师兄你怎么不舔了"/><br/>
+      <b>师兄你怎么不舔了</b><br/>
+      <a href="https://nfg-web-assets.cdnfg.com/dramaclaw/shixiong-butianle/shixiong-butianle-ep01.mp4">▶ 第 1 集</a>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" width="205" valign="top">
+      <img src="https://nfg-web-assets.cdnfg.com/dramaclaw/tianmingbukeqi/tianmingbukeqi-cover.png" width="185" alt="天命不可欺"/><br/>
+      <b>天命不可欺</b><br/>
+      <a href="https://nfg-web-assets.cdnfg.com/dramaclaw/tianmingbukeqi/tianmingbukeqi-ep02.mp4">▶ 第 02 集</a> &nbsp;·&nbsp; <a href="https://nfg-web-assets.cdnfg.com/dramaclaw/tianmingbukeqi/tianmingbukeqi-ep58.mp4">第 58 集</a>
+    </td>
+    <td align="center" width="205" valign="top">
+      <img src="https://nfg-web-assets.cdnfg.com/dramaclaw/wulongxiantu/wulongxiantu-cover.png" width="185" alt="乌龙仙途"/><br/>
+      <b>乌龙仙途</b><br/>
+      <a href="https://nfg-web-assets.cdnfg.com/dramaclaw/wulongxiantu/wulongxiantu-ep01.mp4">▶ 第 1 集</a>
+    </td>
+    <td align="center" width="205" valign="top">
+      <img src="https://nfg-web-assets.cdnfg.com/dramaclaw/feiyi-zhouwu/feiyi-zhouwu-cover.png" width="185" alt="非遗㑇舞"/><br/>
+      <b>非遗㑇舞</b><br/>
+      <a href="https://nfg-web-assets.cdnfg.com/dramaclaw/feiyi-zhouwu/feiyi-zhouwu.mp4">▶ 播放</a>
+    </td>
+  </tr>
+</table>
 
-所以我们调整了发布计划：**不再先放 1.0，而是直接准备开源最新的 2.0 版本**。
+<sub>More clips:
+<a href="https://nfg-web-assets.cdnfg.com/dramaclaw/3d-anime-montage-demo/3d-anime-montage-demo.mp4">3D 动漫混剪 demo</a> &nbsp;·&nbsp;
+<a href="https://nfg-web-assets.cdnfg.com/dramaclaw/dongtai-dadou/dongtai-dadou.mp4">动态打斗</a></sub>
 
-现在正在做的准备工作包括代码清理、配置脱敏、文档补全、示例项目整理、部署流程验证，以及许可证和贡献流程的最后确认。我们要第一次放出的就是可以被认真阅读、部署、复用和二次开发的版本，而不是一个临时快照。
-
-7 月 1 日见。DramaClaw 会把漫剧工业化生产力从高墙里拖出来，交回给真正要创作的人。
-
-<br/>
-
-## DramaClaw 是什么？
-
-DramaClaw 是一条将于 **2026 年 7 月 1 日正式开源的漫剧工业化生产线**。丢进一本原稿，DramaClaw 会接管全部繁重工作：抽取角色、规划剧集、生成剧本、绘制分镜与首帧、合成配音、最终剪成成片。
-
-它为创作者、独立工作室以及创意工程师而生 —— 让你在自己的基础设施上跑完整个「漫剧智造工厂」，不必再去拼接十几个割裂的工具，也不必把素材交给一个看不见内部的黑盒云服务。
-
-<br/>
-
-## 核心能力
-
-- **小说解析与故事图谱** &mdash; 解析原稿，构建可查询的角色、关系、时间线图谱
-- **角色抽取与身份一致性** &mdash; 多集之间保持稳定身份，生成角色肖像与单集变体
-- **剧集规划与叙事节奏** &mdash; 自动章节切分、节拍规划、多集叙事弧
-- **剧本生成** &mdash; 多种模式（改编、直译、分镜稿），带审校 / 修复循环
-- **分镜与首帧** &mdash; 按节拍风格化生成图像，网格切分，图像池选优
-- **配音合成** &mdash; 带情绪的语音合成，可切换多家服务商
-- **视频合成与导出** &mdash; 组装剧集，导出视频 + 字幕文件、整套素材包
-
-<br/>
-
-## 全流程一览
-
-```
-┌─ 摄取 ───────────┐   ┌─ 规划 ─────────────┐   ┌─ 生产 ──────────────┐   ┌─ 交付 ──────┐
-│                  │   │                    │   │                      │   │              │
-│ 1. 创建项目       │   │ 5. 抽取角色        │   │ 9. 角色身份图        │   │ 15. 合成剪辑 │
-│ 2. 上传原稿       │   │ 6. 剧集规划        │   │ 10. 剧本生成         │   │ 16. 导出成片 │
-│ 3. 解析摄取       │──▶│ 7. 角色肖像        │──▶│ 11. 分镜手动调整     │──▶│              │
-│ 4. 配置           │   │ 8. 身份方案        │   │ 12. 草图             │   │              │
-│                  │   │                    │   │ 13. 首帧             │   │              │
-│                  │   │                    │   │ 14. 配音             │   │              │
-└──────────────────┘   └────────────────────┘   └──────────────────────┘   └──────────────┘
-```
-
-每一步都有独立的接口 —— 可以按顺序跑，可以跳过，也可以从任意检查点续跑，甚至接入你自己的编排器。
+</div>
 
 <br/>
 
-## <a name="quick-start"></a>快速开始
+## What is DramaClaw?
 
-> 以下命令将在 2.0 代码发布后可用。当前仓库仍处于发布准备阶段。
+DramaClaw is an industrialized drama-production line whose **source is available**. Drop in a manuscript and DramaClaw takes over all the heavy lifting: extracting characters, planning episodes, generating scripts, drawing storyboards and first frames, synthesizing voice-over, and cutting the final film.
 
-### Docker（推荐）
+It's built for creators, indie studios, and creative engineers — letting you run the whole "drama factory" on your own infrastructure, without stitching together a dozen disconnected tools or handing your material to an opaque black-box cloud service.
+
+And although it's built around drama production, the same pipeline — characters, assets, scripts, storyboards, voice-over, and compositing — carries just as well to other visual-content formats: short-form ads, e-commerce product videos, and interactive otome (romance) games.
+
+<br/>
+
+## Core Capabilities
+
+- **Novel parsing & story graph** &mdash; parse the manuscript into a queryable graph of characters, relationships, and timeline
+- **Asset Library & identity consistency** &mdash; unified management of characters, scenes, props and voices; keep stable identities across episodes, generate character portraits and per-episode variants
+- **Episode planning & narrative pacing** &mdash; automatic chapter segmentation, beat planning, multi-episode arcs
+- **Script generation** &mdash; multiple modes (adaptive, literal, staged) with review / repair loops
+- **Storyboards & first frames** &mdash; beat-driven stylized image generation, grid splitting, image-pool selection
+- **Voice-over synthesis** &mdash; emotion-aware speech synthesis, switchable across providers
+- **Video composition & export** &mdash; assemble episodes, export video + subtitle files and the full asset pack
+- **Freezone (infinite canvas)** &mdash; node-based visual workbench: drag in project assets to generate images / video / audio, promote satisfying candidates back to the main line; the main pipeline and canvas exploration run as dual tracks
+- **Director World / 3GS (scene variants)** &mdash; a framable virtual set that locks spatial structure, character blocking and camera placement to keep the same location consistent across shots
+- **Xia Director (AI assistant)** &mdash; conversational production assistant that checks project progress, advances script / shot tasks, audits deliverable completeness and suggests next steps
+- **Visual Style (style templates)** &mdash; upload a reference image to auto-extract style parameters and apply them across the whole project for a consistent look
+- **Task Center** &mdash; status, progress, logs and cancel / retry for background generation tasks, with resume-from-checkpoint for long runs
+
+<br/>
+
+## Pipeline at a Glance
+
+<p align="center">
+  <img src="./assets/pipeline.png" alt="DramaClaw pipeline — Ingest, Plan, Produce, Deliver" width="900"/>
+</p>
+
+Every step has its own interface — run them in order, skip steps, resume from any checkpoint, or even plug in your own orchestrator.
+
+<br/>
+
+## <a name="quick-start"></a>Quick Start
+
+### Docker (recommended)
 
 ```bash
 git clone https://github.com/dramaclaw/dramaclaw.git
 cd dramaclaw
 
 cp .env.example .env
-# 编辑 .env —— 至少填一个大模型密钥和一个语音合成密钥
+# Edit .env — set PROMPT_EXPORT_PASSWORD to a non-default value.
+# NEWAPI_BASE_URL defaults to the official gateway; add your DC key here or paste it in the UI next.
 
-docker build -t dramaclaw:local .
-docker run --rm -p 7860:7860 --env-file .env dramaclaw:local
+docker compose up -d --build   # starts two services: api / web
 ```
 
-打开 <http://localhost:7860> 即可进入 Web 工作台。
+Open the app at <http://localhost:8080>; the REST API is at <http://localhost:8780>. In **Settings → Model Config → Official**, paste your DC key (get one at <https://relayclaw.cdnfg.com>) and you're ready — no model mapping needed. Full steps in the [Quick Start](docs/en/getting-started/quickstart.md).
 
-### 本地开发（uv + Python 3.10+）
+### Local development (uv + Python 3.11+)
 
 ```bash
 git clone https://github.com/dramaclaw/dramaclaw.git
@@ -163,80 +192,132 @@ cd dramaclaw
 uv sync
 cp .env.example .env && $EDITOR .env
 
-make ray       # 启动 Ray 主节点（异步任务调度）
-make ui        # 启动工作台，端口 :7860
+uv run novelvideo api --port 8780   # start the REST API (CE defaults to inline tasks, no Ray/Redis)
 ```
 
-### Kubernetes / Helm
+<br/>
 
-即将发布 &mdash; [查看进度 &rarr;](./ROADMAP.md)
+## Supported Models & Providers
+
+DramaClaw stays model-neutral — all text/image/video/audio models connect through a single **OpenAI-compatible gateway**, in two ways:
+
+- **DramaClaw official key (recommended)**: `docker compose up`, open <http://localhost:8080> → Settings → Model Config → Official, paste your DC key, save. Works instantly — no model mapping needed. Get a key at <https://relayclaw.cdnfg.com>.
+- **Bring your own gateway (BYO)**: point `NEWAPI_BASE_URL` at your own OpenAI-compatible endpoint and map model names (see [Configuring Models](docs/en/getting-started/configuring-models.md)).
+
+> Prefer fully local? Run `docker compose -f docker-compose.selfhosted.yml up` for a bundled `newapi` gateway you configure yourself.
+
+| Stage                | Connected via gateway                                               |
+|----------------------|---------------------------------------------------------------------|
+| **Text / LLM**       | via OpenAI-compatible gateway (DramaClaw official key, or BYO)      |
+| **Image**            | gpt-image · nano-banana                                             |
+| **Video**            | Seedance 1.0 / 1.5 / 2.0 series · happyhorse                        |
+| **Voice-over**       | IndexTTS2                                                           |
+| **Story graph**      | Cognee                                                             |
+| **Task runtime**     | in-process inline (no Ray / Redis / Celery)                        |
+| **Storage**          | local filesystem                                                   |
 
 <br/>
 
-## 支持的模型与服务商
+## Why DramaClaw?
 
-DramaClaw 对模型侧保持中立。所有组件都能通过 `.env` 切换。
+**Built for novel-to-short-drama.** General workflow tools can wire nodes together, but they don't know what an "episode beat" is, don't understand why a character's cross-scene identity consistency matters, and won't guard a chapter's emotional arc across image + voice + editing. DramaClaw builds all that judgment into the tool.
 
-| 角色              | 可选服务商                                                          |
-|-------------------|---------------------------------------------------------------------|
-| **大模型**        | OpenAI · Anthropic · Gemini · OpenRouter · 火山引擎（豆包）          |
-| **图像**          | Gemini nanobanana · 火山引擎 Seedream 4.5                           |
-| **配音**          | Edge-TTS · 阿里 DashScope CosyVoice · Fish Audio                    |
-| **故事图谱**      | LightRAG · Cognee（实验中）                                         |
-| **异步运行时**    | Ray                                                                 |
-| **存储**          | 本地文件系统 · 兼容 S3 的对象存储（MinIO / AWS / 阿里云 OSS）        |
+**Every step is decomposable.** Each stage is an independent async task with its own interface. Run sequentially, skip steps, resume mid-way — the toolchain itself is the product, with no hidden black box.
 
-<br/>
+**Self-hostable, model-neutral.** Your manuscript, your characters, your models, your servers. Use closed-source frontier models when you want the best results; switch to open-weight models when you want full control. DramaClaw won't lock you into any single vendor.
 
-## 为什么是 DramaClaw？
+### How DramaClaw compares
 
-**为小说转短剧而生。** 通用的工作流工具确实可以把节点拼起来，但它们不知道「剧集节拍」是什么，不懂为什么角色的跨场景身份一致性那么重要，也不会在图像 + 配音 + 剪辑里去守护一整章节的情绪弧。DramaClaw 把这些判断全部内建到工具里。
+The edge isn't "more generation" — it's organizing the whole short-drama production loop (script → assets → shots → canvas → final cut) into something reusable, collaborative and scalable.
 
-**每一步皆可拆解。** 每个阶段都是一个独立的异步任务，各有独立接口。你可以顺序跑、跳步跑、中途续跑，这套工具本身就是产品 —— 里面不藏黑箱。
+<sub>Legend: ✅ Full · ◐ Partial · ○ Planned · ❌ None — competitor names partially masked; comparison based on publicly available product docs and positioning.</sub>
 
-**可自托管，模型中立。** 你的原稿、你的角色、你的模型、你的服务器。需要最好的效果时用闭源大模型；需要完全可控时切到开源模型。DramaClaw 不会把你绑死在任何一家。
-
-<br/>
-
-## <a name="documentation"></a>文档
-
-- [架构概览](./docs/architecture.md) <!-- TBD -->
-- [接口参考](./docs/api-reference.md) <!-- TBD -->
-- [全流程详解](./docs/pipeline.md) <!-- TBD -->
-- [配置与服务商](./docs/configuration.md) <!-- TBD -->
+| Capability | L\*TV | R\*Hub | T\*Now | S\*ko | U\*dream | O\*II | J\*/K\* | **DramaClaw** |
+|---|:--:|:--:|:--:|:--:|:--:|:--:|:--:|:--:|
+| Storyboard preview (script→shots, boards) | ◐ | ✅ | ◐ | ✅ | ◐ | ❌ | ❌ | ✅ |
+| Interactive series (multi-episode, branching, IP) | ◐ | ◐ | ◐ | ✅ | ◐ | ❌ | ❌ | ✅ |
+| Asset library (characters/scenes/props/voices) | ◐ | ❌ | ◐ | ✅ | ◐ | ○ | ❌ | ✅ |
+| Scene consistency (variants, 360°, multi-state) | ✅ | ◐ | ❌ | ❌ | ○ | ❌ | ❌ | ✅ |
+| Director's world (360°/3D set, camera, framing) | ✅ | ◐ | ❌ | ❌ | ◐ | ❌ | ❌ | ✅ |
+| Final delivery (multi-shot, subtitles/SRT, pack) | ✅ | ○ | ○ | ✅ | ✅ | ❌ | ❌ | ✅ |
+| Team production (sharing, roles, tasks, cost) | ✅ | ✅ | ○ | ✅ | ○ | ○ | ○ | ✅ |
+| Infinite canvas (node-based, free exploration) | ✅ | ✅ | ✅ | ❌ | ✅ | ✅ | ✅ | ✅ |
+| Dual-track (main pipeline + canvas exploration) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Custom style (templates, prompts, negatives) | ✅ | ◐ | ○ | ✅ | ◐ | ○ | ◐ | ✅ |
+| Built-in agent (assistant, skills, suggestions) | ✅ | ✅ | ✅ | ○ | ✅ | ○ | ✅ | ✅ |
+| Creative companion (persona, nudges, feedback) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
+| Source-available (self-host, fork, customize) | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 
 <br/>
 
-## 加入社区 / 一起贡献
+## <a name="documentation"></a>Documentation
 
-- [提交 Bug](https://github.com/dramaclaw/dramaclaw/issues/new?template=bug_report.yml)
-- [提功能建议](https://github.com/dramaclaw/dramaclaw/issues/new?template=feature_request.yml)
-- [参与讨论](https://github.com/dramaclaw/dramaclaw/discussions)
-- [贡献指南](./CONTRIBUTING.md) <!-- TBD — 随首批代码一起发布 -->
-- [安全策略](./SECURITY.md)
-
-我们会持续整理并标记 [`good first issue`](https://github.com/dramaclaw/dramaclaw/labels/good%20first%20issue) —— 欢迎从这里起手。
-
-<br/>
-
-## 路线图
-
-详见 [`ROADMAP.md`](./ROADMAP.md)。主要节点：
-
-- **阶段一 &mdash; 小说推文解说剧**（当前聚焦）：我们打开这个引擎的第一个品类
-- **阶段二 &mdash; AI 漫剧**：风格化漫画 / 动画短剧生产
-- **阶段三 &mdash; AI 真人短剧**：以角色为核心的真人短剧流水线
-- **阶段四 &mdash; IP 孵化**：跨形态延续的虚拟角色与 IP
+- [**Product user manual**](https://neo-flying.feishu.cn/docx/JGNTdsjJuo748TxJkxecoYs2nth) — full UI walkthrough (Feishu)
+- [Feature overview](./docs/en/concepts/features.md)
+- [Architecture](./docs/en/concepts/architecture.md)
+- [Quick Start](./docs/en/getting-started/quickstart.md)
+- [Self-hosting guide](./docs/en/guides/self-hosting.md)
+- [Configuring model providers](./docs/en/getting-started/configuring-models.md)
+- [More docs &rarr;](./docs/en/README.md)
 
 <br/>
 
-## 许可证
+## Join the Community / Contribute
 
-许可证：待定 &mdash; 将在首批代码发布时一同公布。
+- [Report a Bug](https://github.com/dramaclaw/dramaclaw/issues/new?template=bug_report.yml)
+- [Request a Feature](https://github.com/dramaclaw/dramaclaw/issues/new?template=feature_request.yml)
+- [Join the Discussion](https://github.com/dramaclaw/dramaclaw/discussions)
+- [Contributing Guide](./CONTRIBUTING.md)
+- [Security Policy](./SECURITY.md)
+
+We continuously curate and label [`good first issue`](https://github.com/dramaclaw/dramaclaw/labels/good%20first%20issue) — a great place to start.
 
 <br/>
 
-## 星标走势
+## Contributors
+
+The people building DramaClaw — thank you. 💜
+
+<table>
+  <tr>
+    <td align="center"><a href="https://github.com/bopy-zou"><img src="https://github.com/bopy-zou.png?size=100" width="72" alt="bopy-zou"/><br/><sub>bopy-zou</sub></a></td>
+    <td align="center"><a href="https://github.com/Handanhhhy"><img src="https://github.com/Handanhhhy.png?size=100" width="72" alt="Handanhhhy"/><br/><sub>Handanhhhy</sub></a></td>
+    <td align="center"><a href="https://github.com/Hanlin-Gabriel"><img src="https://github.com/Hanlin-Gabriel.png?size=100" width="72" alt="Hanlin-Gabriel"/><br/><sub>Hanlin-Gabriel</sub></a></td>
+    <td align="center"><a href="https://github.com/honggui-duat"><img src="https://github.com/honggui-duat.png?size=100" width="72" alt="honggui-duat"/><br/><sub>honggui-duat</sub></a></td>
+    <td align="center"><a href="https://github.com/lywaterman"><img src="https://github.com/lywaterman.png?size=100" width="72" alt="lywaterman"/><br/><sub>lywaterman</sub></a></td>
+    <td align="center"><a href="https://github.com/n7s4"><img src="https://github.com/n7s4.png?size=100" width="72" alt="n7s4"/><br/><sub>n7s4</sub></a></td>
+  </tr>
+  <tr>
+    <td align="center"><a href="https://github.com/NewYuee"><img src="https://github.com/NewYuee.png?size=100" width="72" alt="NewYuee"/><br/><sub>NewYuee</sub></a></td>
+    <td align="center"><a href="https://github.com/SimonRen"><img src="https://github.com/SimonRen.png?size=100" width="72" alt="SimonRen"/><br/><sub>SimonRen</sub></a></td>
+    <td align="center"><a href="https://github.com/vkiki"><img src="https://github.com/vkiki.png?size=100" width="72" alt="vkiki"/><br/><sub>vkiki</sub></a></td>
+    <td align="center"><a href="https://github.com/wangwenqq"><img src="https://github.com/wangwenqq.png?size=100" width="72" alt="wangwenqq"/><br/><sub>wangwenqq</sub></a></td>
+    <td align="center"><a href="https://github.com/zhen2025109"><img src="https://github.com/zhen2025109.png?size=100" width="72" alt="zhen2025109"/><br/><sub>zhen2025109</sub></a></td>
+  </tr>
+</table>
+
+<br/>
+
+## Produced By
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./assets/partners/neoflying-lab-dark.png">
+    <img src="./assets/partners/neoflying-lab.png" alt="Neo Flying AI Laboratory" height="48">
+  </picture>
+</p>
+
+<p align="center"><sub>Logo is a trademark of its respective owner, shown with permission.</sub></p>
+
+<br/>
+
+## License
+
+[Elastic License 2.0](./LICENSE). Source available — use, modify, and redistribute freely; the only restriction is that you may not resell the software as a hosted service. **This project is source-available, not OSI-defined open source.** See the [license explainer](./docs/en/license.md).<!-- banned-word-allow -->
+
+<br/>
+
+## Star History
 
 <a href="https://star-history.com/#dramaclaw/dramaclaw&Date">
   <img src="https://api.star-history.com/svg?repos=dramaclaw/dramaclaw&type=Date" alt="Star history" width="620"/>
@@ -245,5 +326,9 @@ DramaClaw 对模型侧保持中立。所有组件都能通过 `.env` 切换。
 <br/><br/>
 
 <div align="center">
-  <sub>为讲故事的人而建。开源给所有人。</sub>
+  <sub>Built for storytellers. Source, open to all.</sub>
 </div>
+
+## Notices
+
+See `NOTICE` for required branding and third-party attribution notices.

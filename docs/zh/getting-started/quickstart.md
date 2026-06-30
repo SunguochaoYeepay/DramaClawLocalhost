@@ -1,0 +1,57 @@
+<!-- lang-switch -->
+[English](../../en/getting-started/quickstart.md) · **简体中文**
+
+# 快速开始
+
+> 本地跑起 DramaClaw,产出第一个结果。
+
+DramaClaw 是社区版(CE),单机运行、无需 PostgreSQL / Redis。默认 `docker compose` 起两个服务:`api`(创作后端,:8780)与 `web`(浏览器界面,:8080);模型走 **DramaClaw 官方网关(RelayClaw)**,填一个 DC key 即用。
+
+## 前置
+
+- Docker(Desktop 或 Engine),支持 `docker compose`。
+- 一个 **DC key** —— 到 <https://relayclaw.cdnfg.com> 注册 / 购买。(或用自己的 OpenAI 兼容网关,见末尾 BYO。)
+
+## 步骤
+
+```bash
+# 1. 取得代码(当前版本由源码构建镜像;后续将改为拉取已发布镜像)
+git clone https://github.com/dramaclaw/dramaclaw.git
+cd dramaclaw
+
+# 2. 准备配置
+cp .env.example .env
+#    打开 .env,至少把 PROMPT_EXPORT_PASSWORD 改成非默认值。
+#    NEWAPI_BASE_URL 已默认指向官方网关 relayclaw/v1;DC key 可在 .env 填,或下一步在网页里粘贴。
+
+# 3. 启动(首次构建镜像,稍慢)—— 起 api / web 两个服务
+docker compose up -d --build
+
+# 4. 确认已起
+docker compose ps   # api、web 均应 running
+```
+
+## 填入 DC key(必做一次)
+
+1. 浏览器打开 **`http://localhost:8080`** —— 这就是 DramaClaw 的界面。
+2. 进入设置 → **模型配置 → 官方渠道**。网关地址已预填 `https://relayclaw.cdnfg.com/v1`。
+3. **粘贴你的 DC key**,点「保存并启用」。立即可用,**无需映射任何模型**(RelayClaw 后台已配齐)。
+
+> CE 默认免登录、单本地用户(`ST_EDITION=ce`,compose 已强制)。REST API 在 `http://localhost:8780`(浏览器只与 `web` 通信,它再反代到 `api`)。
+
+## 想用自己的网关(BYO)?
+
+在同一个「官方渠道」面板把地址换成你的网关,或在 `.env` 填:
+
+```bash
+NEWAPI_BASE_URL=https://你的网关/v1
+NEWAPI_API_KEY=你的_token
+```
+
+BYO 需映射约 30 个 `*_MODEL` 逻辑名 —— 详见 [配置模型供应商](configuring-models.md)。
+想完全本地、不依赖外部网关?见 [配置模型供应商 · C 纯本地内置 newapi](configuring-models.md)(用 `docker-compose.selfhosted.yml`)。
+
+## 下一步
+
+- 完整部署/升级/备份:[自托管手册](../guides/self-hosting.md)
+- 接入自己的模型:[配置模型供应商](configuring-models.md)

@@ -17,7 +17,7 @@ before a fix ships puts every self-hosted deployment at risk.
 
 Use either of the following private channels:
 
-- **Email:** `security@dramaclaw.xxx` <!-- TBD: set final inbox before launch -->
+- **Email:** `security@dramaclaw.ai`
 - **GitHub Security Advisory:** open a private advisory via
   <https://github.com/dramaclaw/dramaclaw/security/advisories/new> &mdash; this
   keeps the discussion scoped to project maintainers until a fix is ready.
