@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Elastic-2.0
 // Copyright (c) 2026 ClaymoreLab
 import { createFileRoute, Link, Navigate, useNavigate } from "@tanstack/react-router";
-import { ChevronLeft, ChevronRight, Volume2, VolumeX } from "lucide-react";
+import { ChevronLeft, ChevronRight, Play } from "lucide-react";
 import { useEffect, useRef, useState, type PointerEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { LoginModal } from "@/components/login/login-modal";
+import { WatchPlayer } from "@/components/login/watch-player";
 import { loginCommunityWorks } from "@/lib/login-community";
 import styles from "@/components/login/login.module.css";
 
@@ -30,21 +31,15 @@ function WatchPage() {
   const activeEntry = findWatchRailEntry(selectedRailId) ?? findWatchRailEntry(workId);
   const activeWork = activeEntry?.work;
   const [loginOpen, setLoginOpen] = useState(false);
-  const [soundOn, setSoundOn] = useState(false);
+  const [playerOpen, setPlayerOpen] = useState(false);
+  // Fit mode is aspect-dependent: landscape (16:9) fills the full width
+  // edge-to-edge (cover); portrait (9:16) shows the whole frame centered
+  // (contain). Resolved from the clip's real dimensions on loadedmetadata.
+  // Defaults to cover (the common landscape case) to avoid a first-frame flash.
+  const [videoFit, setVideoFit] = useState<"cover" | "contain">("cover");
 
-  const toggleSound = () => {
-    const next = !soundOn;
-    setSoundOn(next);
-    const video = stageVideoRef.current;
-    if (video) {
-      video.muted = !next;
-      // Unmuting happens inside a click handler, so the browser allows audio.
-      void video.play().catch(() => {});
-    }
-  };
   const railRef = useRef<HTMLElement | null>(null);
   const activeRailItemRef = useRef<HTMLButtonElement | null>(null);
-  const stageVideoRef = useRef<HTMLVideoElement | null>(null);
   const railDragRef = useRef({
     isDragging: false,
     moved: false,
@@ -176,26 +171,28 @@ function WatchPage() {
       <section className={styles.watchStage} aria-label={activeWork.title}>
         <video
           key={activeEntry.railId}
-          ref={stageVideoRef}
           className={styles.watchVideo}
+          style={{ objectFit: videoFit }}
           src={activeWork.preview}
           poster={activeWork.cover}
           autoPlay
-          muted={!soundOn}
+          muted
+          loop
           playsInline
+          onLoadedMetadata={(event) => {
+            const video = event.currentTarget;
+            // Portrait 9:16 → contain (whole frame, centered, blurred bars);
+            // landscape 16:9 → cover (fills the full width, minor top/bottom crop).
+            setVideoFit(video.videoHeight > video.videoWidth ? "contain" : "cover");
+          }}
         />
         <button
           type="button"
-          className={styles.watchSoundToggle}
-          onClick={toggleSound}
-          aria-pressed={soundOn}
+          className={styles.watchPlayCta}
+          onClick={() => setPlayerOpen(true)}
         >
-          {soundOn ? (
-            <Volume2 size={18} strokeWidth={1.9} aria-hidden="true" />
-          ) : (
-            <VolumeX size={18} strokeWidth={1.9} aria-hidden="true" />
-          )}
-          <span>{soundOn ? t("auth.watch.soundOn") : t("auth.watch.soundOff")}</span>
+          <Play size={18} strokeWidth={2.2} aria-hidden="true" />
+          <span>{t("auth.watch.watchNow")}</span>
         </button>
       </section>
 
@@ -261,6 +258,15 @@ function WatchPage() {
       </div>
 
       <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} />
+
+      {playerOpen ? (
+        <WatchPlayer
+          src={activeWork.preview}
+          poster={activeWork.cover}
+          title={activeWork.title}
+          onClose={() => setPlayerOpen(false)}
+        />
+      ) : null}
     </main>
   );
 }

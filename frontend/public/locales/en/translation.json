@@ -961,8 +961,16 @@
       "createNow": "Create now",
       "previous": "Switch to previous work",
       "next": "Switch to next work",
-      "soundOn": "Sound on",
-      "soundOff": "Enable sound"
+      "watchNow": "Watch now",
+      "play": "Play",
+      "pause": "Pause",
+      "seek": "Seek",
+      "speed": "Playback speed",
+      "quality": "1080p",
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "fullscreen": "Fullscreen",
+      "exitFullscreen": "Exit fullscreen"
     }
   },
   "project": {

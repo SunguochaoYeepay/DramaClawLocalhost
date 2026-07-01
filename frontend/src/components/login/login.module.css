@@ -1057,44 +1057,66 @@
 
 .watchVideo {
   position: absolute;
-  inset: 0;
+  top: 0;
+  left: 0;
   z-index: 1;
+  /* <video> is a replaced element: with left+right insets but width:auto the
+     box collapses to the clip's INTRINSIC width and anchors left (the `right`
+     inset is dropped) — which shoved portrait 9:16 clips against the left edge.
+     Give an explicit full-width box (height reserves the bottom rail band) so
+     object-fit: contain can CENTER the frame instead. */
   width: 100%;
+  /* Full-bleed: the preview fills the whole viewport (like libtv) — the bottom
+     rail floats OVER it rather than the video stopping above the rail. Fit is
+     set per-clip inline (16:9 cover → edge-to-edge; 9:16 contain → whole frame
+     centered with the blurred backdrop filling the side bars). */
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   border: 0;
-  background: #000;
+  background: transparent;
 }
 
-.watchSoundToggle {
+/* "Watch now" CTA over the full-bleed preview: horizontally centered, sitting
+   just above the bottom rail (not vertically centered). */
+.watchPlayCta {
+  appearance: none;
+  -webkit-appearance: none;
   position: fixed;
-  right: 32px;
-  bottom: 184px;
+  left: 50%;
+  bottom: 190px;
+  transform: translateX(-50%);
   z-index: 12;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 9px 14px 9px 12px;
+  gap: 10px;
+  height: 46px;
+  padding: 0 22px 0 20px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(12, 14, 18, 0.55);
-  -webkit-backdrop-filter: blur(8px);
-  backdrop-filter: blur(8px);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 500;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  background: rgba(18, 20, 26, 0.42);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 560;
   line-height: 1;
   cursor: pointer;
+  -webkit-backdrop-filter: blur(16px) saturate(120%);
+  backdrop-filter: blur(16px) saturate(120%);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.34);
   transition: background 160ms ease, border-color 160ms ease, transform 160ms ease;
 }
 
-.watchSoundToggle:hover {
-  background: rgba(20, 24, 30, 0.74);
-  border-color: rgba(255, 255, 255, 0.34);
+.watchPlayCta:hover {
+  background: rgba(28, 30, 38, 0.58);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: translateX(-50%) scale(1.03);
 }
 
-.watchSoundToggle:active {
-  transform: scale(0.97);
+.watchPlayCta:active {
+  transform: translateX(-50%) scale(0.98);
+}
+
+.watchPlayCta svg {
+  fill: currentColor;
 }
 
 .watchRailWrap {
@@ -1106,30 +1128,13 @@
   pointer-events: none;
 }
 
-.watchRailWrap::before,
-.watchRailWrap::after {
-  content: "";
-  position: absolute;
-  top: 18px;
-  bottom: 10px;
-  z-index: 2;
-  width: 54px;
-  pointer-events: none;
-}
-
-.watchRailWrap::before {
-  left: 0;
-  background: linear-gradient(90deg, rgba(8, 10, 12, 0.28), transparent);
-}
-
-.watchRailWrap::after {
-  right: 0;
-  background: linear-gradient(270deg, rgba(8, 10, 12, 0.28), transparent);
-}
-
 .watchRail {
   display: flex;
   gap: 12px;
+  /* `safe center` keeps the strip centered (equal side gaps) when it's narrower
+     than the container, but falls back to flex-start when it overflows so the
+     first thumbnail stays reachable/scrollable. */
+  justify-content: safe center;
   overflow-x: auto;
   padding: 18px 0 10px;
   pointer-events: auto;
@@ -1279,6 +1284,10 @@
     padding: 22px 24px;
   }
 
+  .watchPlayCta {
+    bottom: 150px;
+  }
+
   .watchCreateCta {
     height: 32px;
     padding: 0 12px;
@@ -1311,5 +1320,242 @@
 
   .watchRailControlNext {
     right: 8px;
+  }
+}
+
+/* ── Fullscreen watch player (opened by the "watch now" CTA) ───────────── */
+.playerOverlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000000;
+  animation: playerFadeIn 200ms ease;
+}
+
+.playerOverlay[data-idle="true"] {
+  cursor: none;
+}
+
+@keyframes playerFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.playerVideo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000000;
+  cursor: pointer;
+}
+
+.playerTopBar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 22px 28px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent);
+  opacity: 1;
+  transition: opacity 220ms ease;
+}
+
+.playerControls {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 40px 28px 22px;
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.62), transparent);
+  opacity: 1;
+  transition: opacity 220ms ease;
+}
+
+.playerOverlay[data-idle="true"] .playerTopBar,
+.playerOverlay[data-idle="true"] .playerControls {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.playerBack {
+  appearance: none;
+  -webkit-appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 4px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 160ms ease;
+}
+
+.playerBack:hover {
+  color: #ffffff;
+}
+
+.playerBack svg {
+  width: 20px;
+  height: 20px;
+}
+
+.playerPlay {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #ffffff;
+  cursor: pointer;
+  transition: background 160ms ease, transform 160ms ease;
+}
+
+.playerPlay:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.playerPlay:active {
+  transform: scale(0.94);
+}
+
+.playerTime {
+  flex: 0 0 auto;
+  min-width: 92px;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+
+.playerSeek {
+  flex: 1 1 auto;
+  height: 4px;
+  min-width: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    #ffffff 0%,
+    #ffffff var(--player-progress, 0%),
+    rgba(255, 255, 255, 0.26) var(--player-progress, 0%),
+    rgba(255, 255, 255, 0.26) 100%
+  );
+  cursor: pointer;
+}
+
+.playerSeek::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  background: #ffffff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+
+.playerSeek::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border: 0;
+  border-radius: 999px;
+  background: #ffffff;
+  cursor: pointer;
+}
+
+.playerSpeed {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 0 0 auto;
+  min-width: 40px;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px;
+  font-weight: 560;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  transition: background 160ms ease;
+}
+
+.playerSpeed:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.playerQuality {
+  flex: 0 0 auto;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.playerIconBtn {
+  appearance: none;
+  -webkit-appearance: none;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+
+.playerIconBtn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
+@media (max-width: 760px) {
+  .playerTopBar {
+    padding: 16px 18px;
+  }
+
+  .playerControls {
+    gap: 10px;
+    padding: 32px 16px 16px;
+  }
+
+  .playerQuality {
+    display: none;
+  }
+
+  .playerTime {
+    min-width: 78px;
+    font-size: 12px;
   }
 }
