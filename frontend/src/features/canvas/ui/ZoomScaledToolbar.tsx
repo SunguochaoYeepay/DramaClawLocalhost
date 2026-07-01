@@ -10,6 +10,12 @@ interface ZoomScaledToolbarProps {
    * 'bottom left'。
    */
   origin?: CSSProperties['transformOrigin'];
+  /**
+   * 缩放下限。默认无下限（跟随 zoom 一路缩小，与顶部操作工具条一致）。侧边
+   * 按钮栏（NodeSideActionRail）传一个下限，避免画布缩到 minZoom(0.1) 时按钮
+   * 太小到点不准。
+   */
+  min?: number;
 }
 
 /**
@@ -25,9 +31,13 @@ interface ZoomScaledToolbarProps {
  * 缩放比例来自根元素的 `--st-canvas-zoom` CSS 变量(由 Canvas 单一写入器维护),
  * 纯 CSS 跟随,不再 useStore 订阅 zoom —— 缩放时本组件不会因 zoom 变化而重渲染。
  */
-export function ZoomScaledToolbar({ children, origin = 'bottom center' }: ZoomScaledToolbarProps) {
+export function ZoomScaledToolbar({ children, origin = 'bottom center', min }: ZoomScaledToolbarProps) {
+  const scale =
+    min !== undefined
+      ? `max(${min}, var(--st-canvas-zoom, 1))`
+      : 'var(--st-canvas-zoom, 1)';
   return (
-    <div style={{ transform: 'scale(var(--st-canvas-zoom, 1))', transformOrigin: origin }}>
+    <div style={{ transform: `scale(${scale})`, transformOrigin: origin }}>
       {children}
     </div>
   );

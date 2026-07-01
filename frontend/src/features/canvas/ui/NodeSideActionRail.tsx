@@ -4,6 +4,7 @@ import { NodeToolbar as ReactFlowNodeToolbar, Position, useStore } from '@xyflow
 import { useState, type ReactNode } from 'react';
 
 import { useCanvasStore } from '@/stores/canvasStore';
+import { ZoomScaledToolbar } from '@/features/canvas/ui/ZoomScaledToolbar';
 
 interface NodeSideActionRailProps {
   nodeId: string;
@@ -20,11 +21,9 @@ interface NodeSideActionRailProps {
 }
 
 // NodeToolbar 默认恒定屏幕尺寸（不随缩放变化），于是整理画布缩小后节点变成缩略图、
-// 这条上传/替换按钮栏却仍是原大小，显得格外突兀。和 NodeSpawnPlusOverlay 的「+」一致，
-// 让它跟随画布 zoom 缩放：缩小时一起变小，夹下限避免太小到点不准；上限为 1，保证放大态
-// 维持原有恒定尺寸、不会反而被撑大。
-const RAIL_SCALE_MIN = 0.6;
-const RAIL_SCALE_MAX = 1;
+// 这条上传/替换按钮栏却仍是原大小，显得格外突兀。改用 ZoomScaledToolbar 跟随画布
+// zoom：不再夹上限（之前夹 1 导致放大态不跟着变大、和其余 UI 脱节），放大时与顶部
+// 操作工具条一致地一起变大；仅保留 min=0.6 下限，避免缩到 minZoom(0.1) 时点不准。
 
 export const NODE_SIDE_ACTION_BUTTON_CLASS =
   'nodrag inline-flex h-8 items-center gap-1.5 rounded-[12px] border border-white/10 bg-[#242426]/95 px-3 text-xs font-medium text-text-dark backdrop-blur-xl transition-colors hover:border-white/18 hover:bg-[#29292b]/95 hover:text-white disabled:cursor-not-allowed disabled:opacity-50';
@@ -39,9 +38,6 @@ export function NodeSideActionRail({
   selected = false,
 }: NodeSideActionRailProps) {
   const isLeft = position === Position.Left;
-  // 缩放比例改用根元素的 --st-canvas-zoom CSS 变量(Canvas 单一写入器维护),夹在
-  // [MIN, MAX] 之间。不再 useStore 订阅 zoom —— 缩放时本栏不会因 zoom 变化而重渲染。
-  const railScaleStyle = `clamp(${RAIL_SCALE_MIN}, var(--st-canvas-zoom, 1), ${RAIL_SCALE_MAX})`;
   // Canvas 维护的节点 hover（离开带 400ms 延迟，桥接「从节点移到上方按钮」的
   // 空隙）；railHovered 进一步保证鼠标停在按钮栏上时不被那个延迟清掉而隐藏。
   const nodeHovered = useCanvasStore((state) => state.hoveredNodeId === nodeId);
@@ -64,30 +60,32 @@ export function NodeSideActionRail({
       style={{ zIndex: nodeZ + 2 }}
     >
       {/*
-        Lift the rail to sit just above the node's top-right corner. The spawn
-        "+" (NodeSpawnPlusOverlay) lives on the same right edge but vertically
-        centered, so a top-aligned rail collides with it on short nodes (audio)
-        — worse now that the "+" scales with zoom. Anchoring the rail above the
-        node's top edge keeps it clear of the centered "+" at any zoom/height,
-        while staying below the top action toolbar (which is horizontally
-        centered, so the two never share screen space).
+        Right rail (upload): lift it just above the node's top-right corner. The
+        spawn "+" (NodeSpawnPlusOverlay) lives on the same right edge but
+        vertically centered, so a top-aligned rail collides with it on short
+        nodes (audio) — worse now that the "+" scales with zoom. Anchoring above
+        the top edge keeps it clear of the centered "+" at any zoom/height.
+
+        Left rail (替换素材): do NOT lift above the top edge. This rail AND the
+        centered top action toolbar both now scale with zoom, so a lifted left
+        rail grows up into the toolbar's band and overlaps it at high zoom (the
+        toolbar's left end reaches the rail's column). Anchoring at the node's
+        top-left corner and growing downward keeps the rail below the toolbar —
+        which sits entirely above the node's top edge — at any zoom.
       */}
       <div
-        style={{ transform: "translateY(calc(-100% - 2px))" }}
+        style={isLeft ? undefined : { transform: "translateY(calc(-100% - 2px))" }}
         onMouseEnter={() => setRailHovered(true)}
         onMouseLeave={() => setRailHovered(false)}
       >
-        {/* 跟随画布缩放。锚定靠近节点的下边角（右栏 bottom-left / 左栏 bottom-right），
-            缩小时朝远离节点方向收拢，始终贴在节点角上。 */}
-        <div
-          className={`flex flex-col gap-2 ${isLeft ? 'items-end' : 'items-start'}`}
-          style={{
-            transform: `scale(${railScaleStyle})`,
-            transformOrigin: isLeft ? "bottom right" : "bottom left",
-          }}
-        >
-          {children}
-        </div>
+        {/* 跟随画布缩放，与顶部操作工具条同一套逻辑。锚点贴住靠节点的那个角
+            （右栏 bottom-left 抬起后朝上、左栏 top-right 朝下），缩放时朝远离
+            节点方向展开，始终贴在节点角上。 */}
+        <ZoomScaledToolbar origin={isLeft ? 'top right' : 'bottom left'} min={0.6}>
+          <div className={`flex flex-col gap-2 ${isLeft ? 'items-end' : 'items-start'}`}>
+            {children}
+          </div>
+        </ZoomScaledToolbar>
       </div>
     </ReactFlowNodeToolbar>
   );
