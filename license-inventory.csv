@@ -591,6 +591,7 @@ frontend/src/components/login/poster-column.tsx,Elastic-2.0,2026 SuperTale contr
 frontend/src/components/login/poster-wall.module.css,Elastic-2.0,2026 SuperTale contributors,REUSE.toml aggregate annotation
 frontend/src/components/login/poster-wall.tsx,Elastic-2.0,2026 SuperTale contributors,REUSE.toml aggregate annotation
 frontend/src/components/login/region-selector.tsx,Elastic-2.0,2026 SuperTale contributors,REUSE.toml aggregate annotation
+frontend/src/components/login/watch-player.tsx,Elastic-2.0,2026 SuperTale contributors,REUSE.toml aggregate annotation
 frontend/src/components/nav/sliding-tabs.css,Elastic-2.0,2026 SuperTale contributors,REUSE.toml aggregate annotation
 frontend/src/components/nav/sliding-tabs.tsx,Elastic-2.0,2026 SuperTale contributors,REUSE.toml aggregate annotation
 frontend/src/components/notifications/notification-drawer.tsx,Elastic-2.0,2026 SuperTale contributors,REUSE.toml aggregate annotation
