@@ -44,6 +44,14 @@ server {
     location / {
         try_files $uri $uri/ /index.html;
 
+        # index.html（SPA 外壳）把 CSP 等安全头作为 HTTP 响应头下发。若不显式设
+        # Cache-Control，nginx 只给 ETag/Last-Modified，浏览器会启发式缓存 index.html，
+        # 发版后仍套用【缓存里的旧 CSP】——例如某媒体来源刚加进白名单之前的版本，导致新
+        # 放行的图片/视频被旧策略拦掉，直到用户手动硬性重载才好。no-cache = 每次用 ETag
+        # 回源校验（命中即 304，开销很小），新外壳/CSP 在下次导航即刻生效。带内容 hash 的
+        # /assets/* 不受影响，仍走下面 1 年 immutable 缓存。
+        add_header Cache-Control "no-cache" always;
+
         add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'sha256-LvxLzCeWBZ/DC3ejUm4WcZpQNZXYDUz4p/53gA+dzKk='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://novelvideo-assets-chengdu.oss-cn-chengdu.aliyuncs.com https://nfg-web-assets.cdnfg.com; media-src 'self' blob: https://novelvideo-assets-chengdu.oss-cn-chengdu.aliyuncs.com https://nfg-web-assets.cdnfg.com; font-src 'self' data:; connect-src 'self' https://novelvideo-assets-chengdu.oss-cn-chengdu.aliyuncs.com https://nfg-web-assets.cdnfg.com https://api.github.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'${csp_upgrade}" always;
         add_header Strict-Transport-Security $hsts_value always;
         add_header X-Frame-Options "DENY" always;
