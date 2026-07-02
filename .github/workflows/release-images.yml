@@ -37,7 +37,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: dramaclaw/dramaclaw
+          images: claymorelab/dramaclaw
           # release: latest=auto(prerelease 不推 latest);手动触发由 push_latest 决定,
           # 默认 false —— 重建历史版本时避免把 latest 回退到旧版。
           tags: |
@@ -67,7 +67,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: dramaclaw/dramaclaw-frontend
+          images: claymorelab/dramaclaw-frontend
           tags: |
             type=semver,pattern={{version}},value=${{ env.RELEASE_TAG }}
           flavor: |
