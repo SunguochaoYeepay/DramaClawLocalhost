@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  orderedReferenceUrlsWithOwnFirst,
   sortUpstreamByReferenceOrder,
   upstreamNodesInEdgeOrder,
 } from "@/features/canvas/nodes/referenceOrdering";
@@ -96,5 +97,28 @@ describe("upstreamNodesInEdgeOrder", () => {
     const upstream = upstreamNodesInEdgeOrder(nodes, edges, "video");
 
     expect(ids(upstream)).toEqual(["a"]);
+  });
+});
+
+describe("orderedReferenceUrlsWithOwnFirst", () => {
+  it("puts the node's own reference image first, upstream images after", () => {
+    // 回归用例：图片节点自带参考图时，提交给后端的第 1 张就是它 —— @图片N
+    // 编号必须也把它算作图片1，否则 prompt 里所有 @图片N 到后端整体偏移 1。
+    expect(
+      orderedReferenceUrlsWithOwnFirst("own.png", ["a.png", "b.png"]),
+    ).toEqual(["own.png", "a.png", "b.png"]);
+  });
+
+  it("returns upstream urls unchanged when there is no own reference image", () => {
+    expect(orderedReferenceUrlsWithOwnFirst(null, ["a.png", "b.png"])).toEqual([
+      "a.png",
+      "b.png",
+    ]);
+  });
+
+  it("dedupes an upstream url that equals the own reference image, keeping the front slot", () => {
+    expect(
+      orderedReferenceUrlsWithOwnFirst("a.png", ["a.png", "b.png"]),
+    ).toEqual(["a.png", "b.png"]);
   });
 });

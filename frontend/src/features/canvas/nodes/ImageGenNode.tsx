@@ -171,6 +171,7 @@ import {
   type ContextPromptPaletteEntry,
 } from '@/features/canvas/nodes/contextPromptPalette';
 import { hasImageGenPromptOverride } from '@/features/canvas/nodes/imageGenPrompt';
+import { orderedReferenceUrlsWithOwnFirst } from '@/features/canvas/nodes/referenceOrdering';
 import { useReferenceMentionSync } from '@/features/canvas/nodes/useReferenceMentionSync';
 
 type ImageGenNodeProps = NodeProps & {
@@ -451,6 +452,14 @@ export const ImageGenNode = memo(({ id, data, selected, width, height }: ImageGe
       ),
     [upstreamImageContents],
   );
+  // 提交给后端的参考图有序列表：自身参考图排第 1、上游图接在后面（URL 去重）。
+  // @图片N 编号、mention 重排基线、提交三处共用这一份 —— 后端按位置解释 图片N，
+  // 曾经编号只数上游图、提交却把自身参考图前置，节点自带参考图时所有 @图片N
+  // 到后端整体偏移 1（@图片1 实际指向自身参考图）。
+  const orderedReferenceUrls = useMemo(
+    () => orderedReferenceUrlsWithOwnFirst(referenceImageUrl, upstreamReferenceUrls),
+    [referenceImageUrl, upstreamReferenceUrls],
+  );
   // collectCandidateBindingsForNode 只关心连到 this node 的边。用 useShallow 只订阅
   // 本节点相连的边(逐元素比较),拖动无关节点时边引用稳定,本节点不再重渲染。
   const connectedEdges = useCanvasStore(
@@ -461,21 +470,27 @@ export const ImageGenNode = memo(({ id, data, selected, width, height }: ImageGe
     [connectedEdges, id],
   );
 
+  // 候选按 orderedReferenceUrls 编号（自身参考图在场时就是图片1），保证 @ 出来的
+  // 缩略图与后端解析到的 图片N 是同一张。key 优先用上游 nodeId；自身参考图没有
+  // 上游节点，用 URL 兜底（key 只需在候选内稳定唯一）。
   const mentionCandidates = useMemo<MentionCandidate[]>(
     () =>
-      upstreamImageContents.map((content, index) => ({
-        key: content.nodeId,
+      orderedReferenceUrls.map((url, index) => ({
+        key:
+          upstreamImageContents.find((content) => content.imageUrl === url)
+            ?.nodeId ?? `self:${url}`,
         name: `图片${index + 1}`,
-        imageUrl: resolveImageDisplayUrl(content.imageUrl as string),
+        imageUrl: resolveImageDisplayUrl(url),
         index: index + 1,
       })),
-    [upstreamImageContents],
+    [orderedReferenceUrls, upstreamImageContents],
   );
 
-  // 让 prompt 里的 @图片N 始终跟随上游图片引用编号：删除 / 重排 / 新增引用连线后，
-  // mentionCandidates 会重新编号，这里把 prompt 里的数字一并重写、被删引用的 mention
-  // 移除。有序基线 = upstreamReferenceUrls（去重 URL、连接顺序，与编号口径一致；用 URL
-  // 而非 nodeId 作身份，避免「两个上游节点图同一 URL」时删其一被误判为引用消失）。
+  // 让 prompt 里的 @图片N 始终跟随参考图引用编号：删除 / 重排 / 新增引用连线、
+  // 上传或移除自身参考图后，mentionCandidates 会重新编号，这里把 prompt 里的数字
+  // 一并重写、被删引用的 mention 移除。有序基线 = orderedReferenceUrls（自身参考图
+  // 在前、去重 URL、连接顺序，与编号和提交口径一致；用 URL 而非 nodeId 作身份，
+  // 避免「两个上游节点图同一 URL」时删其一被误判为引用消失）。
   const applyPromptRemap = useCallback(
     (next: string) => {
       setPromptDraft(next);
@@ -485,7 +500,7 @@ export const ImageGenNode = memo(({ id, data, selected, width, height }: ImageGe
   );
   useReferenceMentionSync(
     prompt,
-    [{ prefix: "图片", ids: upstreamReferenceUrls }],
+    [{ prefix: "图片", ids: orderedReferenceUrls }],
     applyPromptRemap,
   );
 
@@ -786,15 +801,10 @@ export const ImageGenNode = memo(({ id, data, selected, width, height }: ImageGe
       selectedModel?.apiModel
       ?? SHARED_MODELS.find((m) => m.id === modelId)?.apiModel
       ?? modelId;
-    // 自身参考图（用户手动上传） + 所有上游图片/视频 URL，去重。
+    // 自身参考图（用户手动上传） + 所有上游图片/视频 URL，去重 —— 与 @图片N
+    // 编号共用同一份有序列表（orderedReferenceUrls），后端按位置解释 图片N。
     // 后端 reference_urls 接受 image / video 混合数组。
-    const referenceUrls = Array.from(
-      new Set(
-        [referenceImageUrl, ...upstreamReferenceUrls].filter(
-          (url): url is string => typeof url === 'string' && url.length > 0,
-        ),
-      ),
-    );
+    const referenceUrls = orderedReferenceUrls;
     const hasCamera = Boolean(
       cameraSelection
       && (cameraSelection.cameraBodyId
@@ -965,15 +975,14 @@ export const ImageGenNode = memo(({ id, data, selected, width, height }: ImageGe
     id,
     isImage2,
     modelId,
+    orderedReferenceUrls,
     prompt,
     quality,
-    referenceImageUrl,
     size,
     styleTemplateId,
     submitDisabled,
     shouldInlineUpstreamTextAsPrompt,
     updateNodeData,
-    upstreamReferenceUrls,
     upstreamTextJoined,
     refreshHistory,
   ]);

@@ -29,6 +29,25 @@ export function upstreamNodesInEdgeOrder<T extends { id: string }>(
     .filter((node): node is T => node !== undefined);
 }
 
+/**
+ * 图片节点提交给后端的参考图有序列表：节点自带参考图（用户直接上传到节点上的）
+ * 排第 1，上游连线的图按序接在后面，URL 去重（自带图与某张上游图同 URL 时保留
+ * 最前的位置）。后端按位置解释 图片N，所以 @图片N 编号、mention 重排基线、提交
+ * 三处必须共用这一份列表 —— 否则自带参考图会占掉第 1 位，让所有 @图片N 偏移 1。
+ */
+export function orderedReferenceUrlsWithOwnFirst(
+  ownReferenceUrl: string | null,
+  upstreamUrls: string[],
+): string[] {
+  return Array.from(
+    new Set(
+      [ownReferenceUrl, ...upstreamUrls].filter(
+        (url): url is string => typeof url === "string" && url.length > 0,
+      ),
+    ),
+  );
+}
+
 export function sortUpstreamByReferenceOrder<T extends { id: string }>(
   nodes: T[],
   referenceOrder: string[] | undefined,
