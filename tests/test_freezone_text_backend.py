@@ -105,7 +105,7 @@ async def test_translate_freezone_text_flips_invalid_same_language_result(
 
 def test_translation_defaults_use_newapi_gemini_flash() -> None:
     assert FREEZONE_TRANSLATION_PROVIDER == "newapi"
-    assert FREEZONE_TRANSLATION_MODEL == "gemini-3.5-flash"
+    assert FREEZONE_TRANSLATION_MODEL == "DC-freezone-translator-LLM"
 
 
 def test_build_freezone_story_script_task_mentions_required_columns() -> None:

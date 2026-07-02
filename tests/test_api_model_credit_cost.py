@@ -209,7 +209,12 @@ async def test_generation_credit_cost_route_resolves_freezone_audio_music(monkey
 async def test_generation_credit_cost_route_resolves_freezone_story_script(monkeypatch):
     from novelvideo.api.routes import model_credits
 
-    patch_quote(monkeypatch, model_credits, expected_model="gemini-3.5-flash", cost=4)
+    patch_quote(
+        monkeypatch,
+        model_credits,
+        expected_model="DC-freezone-story-script-writer-LLM",
+        cost=4,
+    )
 
     result = await model_credits.get_generation_credit_cost(
         kind="freezone_story_script",

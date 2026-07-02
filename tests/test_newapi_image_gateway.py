@@ -9,7 +9,16 @@ from novelvideo.shared.billing_errors import InsufficientCreditsError
 pytestmark = pytest.mark.m04
 
 
-def test_dc_image_2_selection_maps_to_newapi_gpt_image2(monkeypatch):
+def _isolate_settings_db(monkeypatch, tmp_path):
+    import novelvideo.config as config
+
+    state_dir = str(tmp_path / "state")
+    monkeypatch.setenv("NOVELVIDEO_STATE_DIR", state_dir)
+    monkeypatch.setattr(config, "STATE_DIR", state_dir)
+
+
+def test_dc_image_2_selection_maps_to_newapi_gpt_image2(monkeypatch, tmp_path):
+    _isolate_settings_db(monkeypatch, tmp_path)
     monkeypatch.setenv("NEWAPI_API_KEY", "newapi-token")
     monkeypatch.setenv("NEWAPI_BASE_URL", "http://newapi.test/v1")
     monkeypatch.setenv("NEWAPI_IMAGE_MODEL", "gpt-image-2")
@@ -29,7 +38,8 @@ def test_dc_image_2_selection_maps_to_newapi_gpt_image2(monkeypatch):
     assert image_config["model"] == "gpt-image-2"
 
 
-def test_dc_banana_2_selection_maps_to_newapi_nanobanana2(monkeypatch):
+def test_dc_banana_2_selection_maps_to_newapi_nanobanana2(monkeypatch, tmp_path):
+    _isolate_settings_db(monkeypatch, tmp_path)
     monkeypatch.setenv("NEWAPI_API_KEY", "newapi-token")
     monkeypatch.setenv("NEWAPI_BASE_URL", "http://newapi.test/v1")
     monkeypatch.setenv("NEWAPI_NANOBANANA2_MODEL", "nano-banana-2")
@@ -827,6 +837,7 @@ def test_newapi_character_portrait_raise_on_error_preserves_provider_detail(monk
 
 
 def test_newapi_scene_master_uses_text_only_nanobanana2(monkeypatch, tmp_path):
+    _isolate_settings_db(monkeypatch, tmp_path)
     from novelvideo.generators import scene_reference_images
     from novelvideo.models import NovelScene
 
@@ -984,6 +995,7 @@ def test_newapi_scene_variant_plate_master_keeps_described_lighting(monkeypatch,
 
 
 def test_newapi_reverse_master_uses_master_reference_nanobanana2(monkeypatch, tmp_path):
+    _isolate_settings_db(monkeypatch, tmp_path)
     from novelvideo.generators import scene_reference_images
     from novelvideo.models import NovelScene
 
@@ -1045,6 +1057,7 @@ def test_newapi_reverse_master_uses_master_reference_nanobanana2(monkeypatch, tm
 
 
 def test_newapi_reverse_master_can_use_gpt_image2_quality_low(monkeypatch, tmp_path):
+    _isolate_settings_db(monkeypatch, tmp_path)
     from novelvideo.generators import scene_reference_images
     from novelvideo.models import NovelScene
 
@@ -1099,6 +1112,7 @@ def test_newapi_reverse_master_can_use_gpt_image2_quality_low(monkeypatch, tmp_p
 
 
 def test_newapi_prop_reference_gpt_image2_sends_quality_medium(monkeypatch, tmp_path):
+    _isolate_settings_db(monkeypatch, tmp_path)
     import httpx
     import novelvideo.config as config
     from novelvideo.generators import nanobanana_prop
@@ -1164,6 +1178,7 @@ def test_newapi_prop_reference_gpt_image2_sends_quality_medium(monkeypatch, tmp_
 
 
 def test_newapi_prop_reference_nanobanana2_omits_quality(monkeypatch, tmp_path):
+    _isolate_settings_db(monkeypatch, tmp_path)
     import httpx
     import novelvideo.config as config
     from novelvideo.generators import nanobanana_prop
@@ -1224,6 +1239,7 @@ def test_newapi_prop_reference_nanobanana2_omits_quality(monkeypatch, tmp_path):
 
 
 def test_newapi_prop_reference_reraises_insufficient_credit(monkeypatch, tmp_path):
+    _isolate_settings_db(monkeypatch, tmp_path)
     import novelvideo.config as config
     from novelvideo.generators import nanobanana_prop
 
