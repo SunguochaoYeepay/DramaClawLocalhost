@@ -1198,7 +1198,7 @@ const MessageBubble = memo(function MessageBubble({
     <div
       className={cn(
         isUser
-          ? "-mx-2 flex max-h-0 items-center justify-end gap-1 overflow-hidden rounded-xl px-2 py-0 text-foreground/75 opacity-0 transition-[max-height,opacity,padding] duration-150 pointer-events-none group-hover/message-actions:max-h-14 group-hover/message-actions:py-2 group-hover/message-actions:pointer-events-auto group-hover/message-actions:opacity-100 group-focus-within/message-actions:max-h-14 group-focus-within/message-actions:py-2 group-focus-within/message-actions:pointer-events-auto group-focus-within/message-actions:opacity-100"
+          ? "pointer-events-none absolute right-1.5 top-1.5 z-10 flex translate-y-0.5 items-center gap-0.5 rounded-full border border-border/70 bg-background/85 px-1 py-0.5 text-foreground/75 opacity-0 shadow-sm backdrop-blur transition-opacity group-hover/message-actions:pointer-events-auto group-hover/message-actions:opacity-100 group-focus-within/message-actions:pointer-events-auto group-focus-within/message-actions:opacity-100"
           : "mt-2 flex items-center gap-1 text-muted-foreground/70",
       )}
     >
@@ -1260,13 +1260,13 @@ const MessageBubble = memo(function MessageBubble({
                 "relative rounded-[14px] border-0 bg-white/[0.12] px-4 py-2.5 text-sm leading-6 text-foreground shadow-none",
               )}
             >
+              {actions}
               <AttachmentList attachments={message.attachments} align="end" />
               {displayText && (
                 <div className="whitespace-pre-wrap break-words">{displayText}</div>
               )}
               <StructuredRenderer blocks={blocks} />
             </div>
-            {actions}
           </div>
         </article>
       </div>
