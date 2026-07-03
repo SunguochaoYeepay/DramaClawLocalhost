@@ -49,7 +49,8 @@ export function useGenerationCreditCost(
     cleanKind === "model" ||
     cleanKind === "image_selection" ||
     cleanKind === "fixed_image" ||
-    cleanKind === "video_backend";
+    cleanKind === "video_backend" ||
+    cleanKind === "feature";
   return useQuery({
     queryKey: generationCreditCostQueryKey(cleanKind, cleanValue, {
       params: options.params,

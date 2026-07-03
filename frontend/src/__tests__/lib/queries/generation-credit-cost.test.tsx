@@ -89,6 +89,35 @@ describe("generation credit cost query hook", () => {
     expect(result.current.data?.data.display).toBe("5");
   });
 
+  it("sends value when querying by feature", async () => {
+    let requestedKind = "";
+    let requestedValue = "";
+    server.use(
+      http.get("http://localhost:3000/api/v1/generation-credit-cost", ({ request }) => {
+        const url = new URL(request.url);
+        requestedKind = url.searchParams.get("kind") ?? "";
+        requestedValue = url.searchParams.get("value") ?? "";
+        return HttpResponse.json({
+          ok: true,
+          data: {
+            cost: 6,
+            display: "6",
+          },
+        });
+      }),
+    );
+
+    const { result } = renderHook(
+      () => useGenerationCreditCost("feature", "ingest_fast"),
+      { wrapper },
+    );
+
+    await waitFor(() => expect(result.current.data).toBeDefined());
+    expect(requestedKind).toBe("feature");
+    expect(requestedValue).toBe("ingest_fast");
+    expect(result.current.data?.data.display).toBe("6");
+  });
+
   it("sends value when querying by image selection", async () => {
     let requestedKind = "";
     let requestedValue = "";

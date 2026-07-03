@@ -7,6 +7,7 @@ import { apiCall } from "@/api/client";
 import {
   backendErrorToastMessage,
   errorFromBackendBody,
+  InsufficientCreditsError,
   ProjectQueueLimitError,
 } from "@/lib/api-errors";
 
@@ -153,5 +154,52 @@ describe("apiCall backend errors", () => {
     expect(tMock).toHaveBeenCalledWith("common.projectDefaultQueueUserFull", {
       defaultValue: "common.projectDefaultQueueFull",
     });
+  });
+
+  it("uses i18n for insufficient credits display text", () => {
+    const error = errorFromBackendBody(
+      402,
+      {
+        ok: false,
+        error: "积分不足，请联系管理员充值",
+        data: {
+          error_code: "INSUFFICIENT_CREDITS",
+          required: 6,
+          balance: 1,
+        },
+      },
+      "Payment Required",
+    );
+    const tMock = vi.fn((key: string, options?: { defaultValue?: string }) => {
+      if (key === "common.insufficientCredits") {
+        return "Insufficient credits. Please contact your administrator to recharge.";
+      }
+      return options?.defaultValue ?? key;
+    });
+    const t = tMock as unknown as TFunction;
+
+    expect(error).toBeInstanceOf(InsufficientCreditsError);
+    expect(backendErrorToastMessage(error, t)).toBe(
+      "Insufficient credits. Please contact your administrator to recharge.",
+    );
+    expect(tMock).toHaveBeenCalledWith("common.insufficientCredits", {
+      defaultValue: "积分不足，请联系管理员充值",
+    });
+  });
+
+  it("treats bare 402 responses as insufficient credits", () => {
+    const error = errorFromBackendBody(402, null, "Payment Required");
+    const tMock = vi.fn((key: string, options?: { defaultValue?: string }) => {
+      if (key === "common.insufficientCredits") {
+        return "Insufficient credits. Please contact your administrator to recharge.";
+      }
+      return options?.defaultValue ?? key;
+    });
+    const t = tMock as unknown as TFunction;
+
+    expect(error).toBeInstanceOf(InsufficientCreditsError);
+    expect(backendErrorToastMessage(error, t)).toBe(
+      "Insufficient credits. Please contact your administrator to recharge.",
+    );
   });
 });

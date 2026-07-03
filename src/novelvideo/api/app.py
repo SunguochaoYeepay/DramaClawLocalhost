@@ -14,6 +14,11 @@ from fastapi.responses import JSONResponse, PlainTextResponse
 from novelvideo.api import OPENAPI_TAGS, api_router, register_verification_routes
 from novelvideo.api.auth import get_api_user
 from novelvideo.api.routes.files import preview_project_media_file
+from novelvideo.shared.billing_errors import (
+    INSUFFICIENT_CREDITS_MESSAGE,
+    InsufficientCreditsError,
+    insufficient_credits_payload,
+)
 from novelvideo.shared.api_coverage import mount_api_coverage_middleware
 from novelvideo.task_backend.limits import (
     GlobalLaneQueueLimitExceeded,
@@ -143,6 +148,22 @@ def create_app() -> FastAPI:
                     "queued": exc.queued,
                     "limit_scope": "global_lane_queue",
                 },
+            },
+        )
+
+    @application.exception_handler(InsufficientCreditsError)
+    async def _insufficient_credits(
+        request: Request,
+        exc: InsufficientCreditsError,
+    ) -> JSONResponse:
+        _ = request
+        payload = insufficient_credits_payload(exc)
+        return JSONResponse(
+            status_code=402,
+            content={
+                "ok": False,
+                "error": INSUFFICIENT_CREDITS_MESSAGE,
+                "data": payload,
             },
         )
 

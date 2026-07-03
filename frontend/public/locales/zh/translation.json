@@ -1269,6 +1269,7 @@
     "loading": "加载中...",
     "back": "返回",
     "error": "出错了",
+    "insufficientCredits": "积分不足，请联系管理员充值",
     "projectDefaultQueueFull": "当前项目默认队列已满",
     "projectQueueFull": "当前项目{{queue}}队列已满",
     "projectDefaultQueueUserFull": "你在当前项目默认队列的任务已达个人上限",

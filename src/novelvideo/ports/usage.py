@@ -25,6 +25,20 @@ class UsageMeter(Protocol):
         metadata: Optional[dict[str, Any]] = None,
     ) -> None: ...
 
+    async def confirm_feature_credit_reservation(
+        self,
+        reservation_id: str,
+        *,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> None: ...
+
+    async def refund_feature_credit_reservation(
+        self,
+        reservation_id: str,
+        *,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> None: ...
+
     async def bump_model_call(
         self,
         *,

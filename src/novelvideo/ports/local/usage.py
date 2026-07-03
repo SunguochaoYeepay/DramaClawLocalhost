@@ -32,6 +32,22 @@ class NoOpUsageMeter:
     ) -> None:
         return None
 
+    async def confirm_feature_credit_reservation(
+        self,
+        reservation_id: str,
+        *,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> None:
+        return None
+
+    async def refund_feature_credit_reservation(
+        self,
+        reservation_id: str,
+        *,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> None:
+        return None
+
     async def bump_model_call(
         self,
         *,

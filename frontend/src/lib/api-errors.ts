@@ -30,6 +30,17 @@ export class BackendStatusError extends Error {
   }
 }
 
+export class InsufficientCreditsError extends BackendStatusError {
+  constructor(
+    message: string,
+    status: number,
+    body?: unknown,
+  ) {
+    super(message, status, body);
+    this.name = "InsufficientCreditsError";
+  }
+}
+
 function queueLabelForPlainMessage(queueKind: string): string {
   if (queueKind === "default") return "默认";
   if (queueKind === "video") return "视频";
@@ -50,7 +61,12 @@ function projectQueueLimitPlainMessage(
 }
 
 export function errorFromBackendBody(status: number, body: unknown, fallback: string): Error | null {
-  if (!body || typeof body !== "object") return null;
+  if (!body || typeof body !== "object") {
+    if (status === 402) {
+      return new InsufficientCreditsError(fallback, status, body);
+    }
+    return null;
+  }
 
   const data = (body as { data?: unknown }).data;
   const queueKind =
@@ -63,12 +79,23 @@ export function errorFromBackendBody(status: number, body: unknown, fallback: st
       : undefined;
   const apiError = (body as { error?: unknown }).error;
   const detail = (body as { detail?: unknown }).detail;
+  const errorCode =
+    data && typeof data === "object"
+      ? (data as { error_code?: unknown }).error_code
+      : undefined;
   const message =
     typeof apiError === "string" && apiError.trim()
       ? apiError
       : typeof detail === "string" && detail.trim()
         ? detail
         : fallback;
+
+  if (errorCode === "INSUFFICIENT_CREDITS") {
+    return new InsufficientCreditsError(message, status, body);
+  }
+  if (status === 402) {
+    return new InsufficientCreditsError(message, status, body);
+  }
 
   if (status === 429 && typeof queueKind === "string" && queueKind.trim()) {
     const normalizedScope = limitScope === "user" ? "user" : "project";
@@ -162,6 +189,11 @@ export function humanizeTaskError(
 }
 
 export function backendErrorToastMessage(error: unknown, t: TFunction): string {
+  if (error instanceof InsufficientCreditsError) {
+    return t("common.insufficientCredits", {
+      defaultValue: error.message || t("common.error"),
+    });
+  }
   if (error instanceof ProjectQueueLimitError) {
     const scopeSuffix = error.limitScope === "user" ? "UserFull" : "ProjectFull";
     if (error.queueKind === "default") {
