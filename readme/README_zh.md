@@ -173,6 +173,25 @@ DramaClaw 是一条**源码可见的漫剧工业化生产线**。丢进一本原
 
 <br/>
 
+## 系统要求
+
+DramaClaw 的所有模型推理都走**远程 OpenAI 兼容网关** —— 本机不跑模型 —— 所以本地占用很低。一台普通笔记本或小 VPS 就够用。
+
+| 项目 | 要求 |
+|---|---|
+| **CPU / 内存** | 建议 ≥ 2 vCPU / 4 GB（不含模型推理，推理在网关侧） |
+| **GPU** | 标准流程**无需 GPU**。仅可选的 `world` 扩展（体素 / 全景转 3D）才需要 GPU + CUDA 镜像 |
+| **磁盘** | 预留几 GB 放镜像及 `ce-data` 卷中的生成媒体/状态（无硬性下限） |
+| **操作系统** | macOS（Apple Silicon / Intel）、Windows（Docker Desktop + WSL2 后端）、Linux（Docker Engine + compose 插件） |
+| **Docker** | Docker + `docker compose` |
+| **端口** | `8080` 网页 · `8780` REST API · `3000` 自带网关（仅 selfhosted 版） |
+| **数据库** | 全部不需要 —— 无 Postgres、Redis、Celery、Ray。任务进程内内联执行，状态存本地文件系统（SQLite + 文件） |
+| **网络** | 需能出网访问模型网关（官方 `relayclaw.cdnfg.com`，或你自己的 BYO 端点） |
+
+> 本地开发（非 Docker）还需 Python 3.11–3.12 + [`uv`](https://docs.astral.sh/uv/) + `ffmpeg`。完整前置条件见[自托管指南](../docs/zh/guides/self-hosting.md)。
+
+<br/>
+
 ## <a name="quick-start"></a>快速开始
 
 ### Docker（推荐）
