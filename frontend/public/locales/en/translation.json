@@ -3302,7 +3302,8 @@
       "audio": {
         "title": "Generate Audio",
         "on": "On",
-        "off": "Off"
+        "off": "Off",
+        "durationExceeded": "Total audio duration must not exceed {{max}} seconds. Shorten or replace the audio reference and try again."
       },
       "count": {
         "format": "{{count}}"

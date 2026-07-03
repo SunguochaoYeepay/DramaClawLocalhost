@@ -3302,7 +3302,8 @@
       "audio": {
         "title": "生成音频",
         "on": "开启",
-        "off": "关闭"
+        "off": "关闭",
+        "durationExceeded": "音频总时长不能超过 {{max}} 秒，请缩短或替换配乐参考后再试。"
       },
       "count": {
         "format": "{{count}}个"
