@@ -234,4 +234,45 @@ describe("apiCall backend errors", () => {
       defaultValue: "计费规则未配置，请联系管理员设置积分规则",
     });
   });
+
+  it("maps task metadata missing billing rule responses to the billing rule error", () => {
+    const error = errorFromBackendBody(
+      409,
+      {
+        ok: false,
+        error: "计费规则未配置，请联系管理员设置积分规则",
+        data: {
+          task_id: "task_1",
+          status: "failed",
+          metadata: {
+            error_code: "BILLING_RULE_NOT_CONFIGURED",
+            billing_kind: "feature",
+            billing_key: "ingest_fast",
+          },
+        },
+      },
+      "Request failed with status code 409 Conflict",
+    );
+
+    expect(error).toBeInstanceOf(BillingRuleNotConfiguredError);
+    expect(error?.message).toBe("计费规则未配置，请联系管理员设置积分规则");
+  });
+
+  it("maps FastAPI detail object missing billing rule responses to the billing rule error", () => {
+    const error = errorFromBackendBody(
+      409,
+      {
+        detail: {
+          error_code: "BILLING_RULE_NOT_CONFIGURED",
+          message: "计费规则未配置，请联系管理员设置积分规则",
+          billing_kind: "feature",
+          billing_key: "ingest_fast",
+        },
+      },
+      "Request failed with status code 409 Conflict",
+    );
+
+    expect(error).toBeInstanceOf(BillingRuleNotConfiguredError);
+    expect(error?.message).toBe("计费规则未配置，请联系管理员设置积分规则");
+  });
 });

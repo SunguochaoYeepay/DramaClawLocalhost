@@ -96,7 +96,10 @@ export function useStartIngest(project: string) {
       spine_template?: SpineTemplate;
     }) => {
       const response = await jsonWithBackendError<TaskResponse | ErrorResponse>(
-        api.post(p`api/v1/projects/${project}/ingest/start`, { json: params }),
+        api.post(p`api/v1/projects/${project}/ingest/start`, {
+          json: params,
+          throwHttpErrors: false,
+        }),
       );
       if (!response.ok) {
         throw new Error(response.error);

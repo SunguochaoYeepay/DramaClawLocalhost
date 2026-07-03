@@ -36,7 +36,10 @@ import { useCancelTask } from "@/lib/queries/tasks";
 import { useGenerationCreditCost } from "@/lib/queries/generation-credit-cost";
 import { useTaskStream } from "@/hooks/use-task-stream";
 import { queryKeys } from "@/lib/query-keys";
-import { backendErrorToastMessage } from "@/lib/api-errors";
+import {
+  backendErrorToastMessage,
+  BillingRuleNotConfiguredError,
+} from "@/lib/api-errors";
 import { CreditCostInline } from "@/components/credit-cost-inline";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -703,7 +706,11 @@ export function IngestPageContent({ project }: { project: string }) {
   const { data: charactersRes } = useCharacters(project);
   const hasCharacters = (charactersRes?.data?.length ?? 0) > 0;
   const ingestFeatureCost = useGenerationCreditCost("feature", "ingest_fast");
-  const ingestFeatureCostDisplay = ingestFeatureCost.data?.data.display;
+  const ingestFeatureCostDisplay =
+    ingestFeatureCost.data?.data.display ??
+    (ingestFeatureCost.error instanceof BillingRuleNotConfiguredError
+      ? t("common.billingRuleNotConfiguredShort")
+      : null);
 
   // SSE task streaming
   const [ingestStarted, setIngestStarted] = useState(false);

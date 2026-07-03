@@ -79,6 +79,18 @@ export function errorFromBackendBody(status: number, body: unknown, fallback: st
     return null;
   }
 
+  const findNestedString = (value: unknown, key: string): string | undefined => {
+    if (!value || typeof value !== "object") return undefined;
+    const record = value as Record<string, unknown>;
+    const direct = record[key];
+    if (typeof direct === "string" && direct.trim()) return direct;
+    for (const nested of Object.values(record)) {
+      const found = findNestedString(nested, key);
+      if (found) return found;
+    }
+    return undefined;
+  };
+
   const data = (body as { data?: unknown }).data;
   const queueKind =
     data && typeof data === "object"
@@ -90,16 +102,20 @@ export function errorFromBackendBody(status: number, body: unknown, fallback: st
       : undefined;
   const apiError = (body as { error?: unknown }).error;
   const detail = (body as { detail?: unknown }).detail;
-  const errorCode =
+  const directErrorCode =
     data && typeof data === "object"
       ? (data as { error_code?: unknown }).error_code
       : undefined;
+  const errorCode =
+    typeof directErrorCode === "string" && directErrorCode.trim()
+      ? directErrorCode
+      : findNestedString(body, "error_code");
   const message =
     typeof apiError === "string" && apiError.trim()
       ? apiError
       : typeof detail === "string" && detail.trim()
         ? detail
-        : fallback;
+        : findNestedString(body, "message") ?? fallback;
 
   if (errorCode === "INSUFFICIENT_CREDITS") {
     return new InsufficientCreditsError(message, status, body);
