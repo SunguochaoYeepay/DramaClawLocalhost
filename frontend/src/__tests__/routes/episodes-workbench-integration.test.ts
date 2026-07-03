@@ -44,6 +44,14 @@ describe("episodes workbench integration", () => {
     expect(routeSource).toContain("showReplan={!selectedEpisode && displayEpisodes.length > 0}");
   });
 
+  it("shows feature credit cost on episode planning actions", () => {
+    expect(routeSource).toContain('useGenerationCreditCost("feature", "build_episodes")');
+    expect(routeSource).toContain("planEpisodesCost.error instanceof BillingRuleNotConfiguredError");
+    expect(routeSource).toContain("planCostDisplay={planEpisodesCostDisplay}");
+    expect(routeSource).toContain("<CreditCostInline display={planCostDisplay} />");
+    expect(routeSource).toContain("<CreditCostInline display={planEpisodesCostDisplay} />");
+  });
+
   it("uses localized copy for the episode detail back action", () => {
     expect(routeSource).toContain('t("episode.list.backToEpisodes")');
     expect(routeSource).not.toContain("返回剧集列表");
