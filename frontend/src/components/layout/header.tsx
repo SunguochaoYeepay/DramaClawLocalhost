@@ -25,7 +25,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { CreditBalanceBadge } from "@/components/layout/credit-balance-badge";
-import { BrandHolidayBadge } from "@/components/layout/brand-holiday-badge";
 import { NotificationDrawer } from "@/components/notifications/notification-drawer";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
 import {
@@ -223,7 +222,6 @@ export function Header({ showBrand: _showBrand = false }: { showBrand?: boolean 
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
-        <BrandHolidayBadge />
       </div>
 
       {/* Actions */}
