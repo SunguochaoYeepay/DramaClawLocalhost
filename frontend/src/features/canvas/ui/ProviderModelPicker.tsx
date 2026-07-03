@@ -78,7 +78,7 @@ export const DEFAULT_SHARED_MODEL_ID = 'huimeng/gpt-image-2';
 // /freezone/video/gen so we don't need a separate apiModel mapping.
 export const VIDEO_PROVIDERS: ProviderOption[] = [
   { id: 'seedance', label: 'Seedance' },
-  { id: 'huimeng', label: '惠盟 / HuiMeng' },
+  { id: 'huimeng', label: '绘梦 / HuiMeng' },
 ];
 
 export const VIDEO_MODELS: ModelOption[] = [
