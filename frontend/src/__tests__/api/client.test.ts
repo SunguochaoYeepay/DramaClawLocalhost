@@ -6,6 +6,7 @@ import type { TFunction } from "i18next";
 import { apiCall } from "@/api/client";
 import {
   backendErrorToastMessage,
+  BillingRuleNotConfiguredError,
   errorFromBackendBody,
   InsufficientCreditsError,
   ProjectQueueLimitError,
@@ -201,5 +202,36 @@ describe("apiCall backend errors", () => {
     expect(backendErrorToastMessage(error, t)).toBe(
       "Insufficient credits. Please contact your administrator to recharge.",
     );
+  });
+
+  it("uses i18n for missing billing rule display text", () => {
+    const error = errorFromBackendBody(
+      409,
+      {
+        ok: false,
+        error: "计费规则未配置，请联系管理员设置积分规则",
+        data: {
+          error_code: "BILLING_RULE_NOT_CONFIGURED",
+          billing_kind: "feature",
+          billing_key: "build_characters",
+        },
+      },
+      "Conflict",
+    );
+    const tMock = vi.fn((key: string, options?: { defaultValue?: string }) => {
+      if (key === "common.billingRuleNotConfigured") {
+        return "Billing rule is not configured. Please contact an administrator to set credit pricing.";
+      }
+      return options?.defaultValue ?? key;
+    });
+    const t = tMock as unknown as TFunction;
+
+    expect(error).toBeInstanceOf(BillingRuleNotConfiguredError);
+    expect(backendErrorToastMessage(error, t)).toBe(
+      "Billing rule is not configured. Please contact an administrator to set credit pricing.",
+    );
+    expect(tMock).toHaveBeenCalledWith("common.billingRuleNotConfigured", {
+      defaultValue: "计费规则未配置，请联系管理员设置积分规则",
+    });
   });
 });

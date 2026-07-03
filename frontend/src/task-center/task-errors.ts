@@ -9,5 +9,10 @@ export function taskErrorMessage(task: TaskState, t: TFunction): string {
       defaultValue: task.error || t("common.error"),
     });
   }
+  if (task.error_code === "BILLING_RULE_NOT_CONFIGURED") {
+    return t("common.billingRuleNotConfigured", {
+      defaultValue: task.error || t("common.error"),
+    });
+  }
   return task.error || t("common.error");
 }

@@ -41,6 +41,17 @@ export class InsufficientCreditsError extends BackendStatusError {
   }
 }
 
+export class BillingRuleNotConfiguredError extends BackendStatusError {
+  constructor(
+    message: string,
+    status: number,
+    body?: unknown,
+  ) {
+    super(message, status, body);
+    this.name = "BillingRuleNotConfiguredError";
+  }
+}
+
 function queueLabelForPlainMessage(queueKind: string): string {
   if (queueKind === "default") return "默认";
   if (queueKind === "video") return "视频";
@@ -96,6 +107,9 @@ export function errorFromBackendBody(status: number, body: unknown, fallback: st
   if (status === 402) {
     return new InsufficientCreditsError(message, status, body);
   }
+  if (errorCode === "BILLING_RULE_NOT_CONFIGURED") {
+    return new BillingRuleNotConfiguredError(message, status, body);
+  }
 
   if (status === 429 && typeof queueKind === "string" && queueKind.trim()) {
     const normalizedScope = limitScope === "user" ? "user" : "project";
@@ -114,9 +128,21 @@ export function errorFromBackendBody(status: number, body: unknown, fallback: st
   return null;
 }
 
+async function safeJsonFromResponse(response: Response): Promise<unknown> {
+  try {
+    return await response.clone().json();
+  } catch {
+    try {
+      return await response.json();
+    } catch {
+      return null;
+    }
+  }
+}
+
 async function backendError(error: unknown): Promise<Error | null> {
   if (!(error instanceof HTTPError)) return null;
-  const body = await error.response.json().catch(() => null);
+  const body = await safeJsonFromResponse(error.response);
   return errorFromBackendBody(error.response.status, body, error.message);
 }
 
@@ -191,6 +217,11 @@ export function humanizeTaskError(
 export function backendErrorToastMessage(error: unknown, t: TFunction): string {
   if (error instanceof InsufficientCreditsError) {
     return t("common.insufficientCredits", {
+      defaultValue: error.message || t("common.error"),
+    });
+  }
+  if (error instanceof BillingRuleNotConfiguredError) {
+    return t("common.billingRuleNotConfigured", {
       defaultValue: error.message || t("common.error"),
     });
   }

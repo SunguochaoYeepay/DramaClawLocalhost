@@ -1270,6 +1270,8 @@
     "back": "Back",
     "error": "Something went wrong",
     "insufficientCredits": "Insufficient credits. Please contact your administrator to recharge.",
+    "billingRuleNotConfigured": "Billing rule is not configured. Please contact an administrator to set credit pricing.",
+    "billingRuleNotConfiguredShort": "Configure",
     "projectDefaultQueueFull": "The current project's default queue is full",
     "projectQueueFull": "The current project's {{queue}} queue is full",
     "projectDefaultQueueUserFull": "You have reached your personal default queue limit in this project",
