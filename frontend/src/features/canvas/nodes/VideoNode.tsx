@@ -2018,7 +2018,7 @@ export const VideoNode = memo(
                   : probeAudioDurationMs(ref.url),
               ),
             );
-            const totalAudioMs = resolvedDurations.reduce(
+            const totalAudioMs = resolvedDurations.reduce<number>(
               (sum, ms) => sum + (ms ?? 0),
               0,
             );
