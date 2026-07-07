@@ -932,16 +932,21 @@ OPENAI_SKETCH_IMAGE_QUALITY = os.environ.get("OPENAI_SKETCH_IMAGE_QUALITY", "low
 _DEFAULT_SKETCH_SELECTION_EXPLICIT = "DEFAULT_SKETCH_IMAGE_SELECTION" in os.environ
 _DEFAULT_RENDER_SELECTION_EXPLICIT = "DEFAULT_RENDER_IMAGE_SELECTION" in os.environ
 DEFAULT_SKETCH_IMAGE_SELECTION = os.environ.get(
-    "DEFAULT_SKETCH_IMAGE_SELECTION", "newapi_gpt_image2"
+    "DEFAULT_SKETCH_IMAGE_SELECTION", "huimeng_gpt_image2"
 )
 DEFAULT_RENDER_IMAGE_SELECTION = os.environ.get(
-    "DEFAULT_RENDER_IMAGE_SELECTION", "newapi_gpt_image2"
+    "DEFAULT_RENDER_IMAGE_SELECTION", "huimeng_gpt_image2"
 )
 CHARACTER_IMAGE_SELECTION = os.environ.get("CHARACTER_IMAGE_SELECTION") or os.environ.get(
     "DEFAULT_CHARACTER_IMAGE_SELECTION"
 )
 
 IMAGE_GENERATION_SELECTIONS: dict[str, dict[str, str]] = {
+    "google_gemini_image": {
+        "label": "Google Gemini Image",
+        "provider": "google",
+        "model": NANOBANANA_MODEL,
+    },
     "huimeng_gpt_image2": {
         "label": "HuiMeng GPT Image 2",
         "provider": "huimeng",
@@ -985,19 +990,20 @@ IMAGE_GENERATION_SELECTIONS: dict[str, dict[str, str]] = {
 }
 
 VISIBLE_IMAGE_GENERATION_SELECTION_KEYS = (
+    "huimeng_gpt_image2",
+    "huimeng_image2_official",
     "newapi_gpt_image2",
     "newapi_nanobanana2",
 )
 
 LEGACY_IMAGE_GENERATION_SELECTION_ALIASES = {
-    "huimeng_gpt_image2": "newapi_gpt_image2",
-    "huimeng_image2_official": "newapi_gpt_image2",
-    "openai_gpt_image2": "newapi_gpt_image2",
-    "openrouter_gpt_image2": "newapi_gpt_image2",
-    "huimeng_nanobanana2": "newapi_nanobanana2",
-    "openrouter_nanobanana2": "newapi_nanobanana2",
-    "nanobanana": "newapi_nanobanana2",
-    "seedream": "newapi_gpt_image2",
+    "google_gemini_image": "huimeng_gpt_image2",
+    "openai_gpt_image2": "huimeng_gpt_image2",
+    "openrouter_gpt_image2": "huimeng_gpt_image2",
+    "huimeng_nanobanana2": "huimeng_gpt_image2",
+    "openrouter_nanobanana2": "huimeng_gpt_image2",
+    "nanobanana": "huimeng_gpt_image2",
+    "seedream": "huimeng_gpt_image2",
 }
 
 # 网格生成模式配置
@@ -1074,7 +1080,7 @@ def _default_image_generation_selection(fallback: str | None = None) -> str:
         fallback,
         DEFAULT_SKETCH_IMAGE_SELECTION,
         DEFAULT_RENDER_IMAGE_SELECTION,
-        "newapi_gpt_image2",
+        "huimeng_gpt_image2",
         *VISIBLE_IMAGE_GENERATION_SELECTION_KEYS,
     ):
         selection = _visible_image_generation_selection(candidate)

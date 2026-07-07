@@ -45,6 +45,7 @@ from novelvideo.generators.huimengi import (
     extract_huimeng_result_url,
     validate_huimeng_media_download,
 )
+from novelvideo.storage.media_relay import upload_image_bytes
 from novelvideo.generators.prompt_builder import (
     PromptComponents,
     PromptContext,
@@ -3637,7 +3638,10 @@ async def _call_huimeng_image_api(
                     image_bytes = bytes(image_ref[0])
             else:
                 image_bytes = bytes(image_ref)
-            ref_urls.append(bytes_to_data_url(bytes(image_bytes)))
+            # 上传到 Cloudinary 获取公开 URL（汇梦不支持 Base64）
+            ext = "png" if bytes(image_bytes).startswith(b"\x89PNG") else "jpg"
+            ref_url = upload_image_bytes(bytes(image_bytes), ext=ext)
+            ref_urls.append(ref_url)
         params["image"] = ref_urls[0] if len(ref_urls) == 1 else ref_urls
 
     request_context = f"model={model}, ratio={ratio}, refs={len(reference_images or [])}"

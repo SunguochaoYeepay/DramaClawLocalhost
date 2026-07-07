@@ -21,7 +21,13 @@ ENV VITE_EDITION=${VITE_EDITION}
 # keep `pnpm install` from erroring on skipped (unneeded) dependency build scripts.
 RUN corepack enable
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile
+# Increase timeout and retries for large packages like onnxruntime-node
+ENV NPM_CONFIG_FETCH_TIMEOUT=120000 \
+    NPM_CONFIG_FETCH_RETRIES=5 \
+    NPM_CONFIG_NETWORK_CONCURRENCY=10
+RUN pnpm config set fetch-timeout 120000 && \
+    pnpm config set network-concurrency 10 && \
+    pnpm install --frozen-lockfile
 
 COPY . .
 RUN pnpm build

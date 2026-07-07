@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import os
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -24,9 +25,9 @@ from novelvideo.freezone.paths import resolve_static_url_to_path, safe_upload_fi
 from novelvideo.freezone.video_node import load_video_character_library
 from novelvideo.task_identity import task_state_key
 
-FREEZONE_DEFAULT_IMAGE_SELECTION = "newapi_gpt_image2"
+FREEZONE_DEFAULT_IMAGE_SELECTION = "huimeng_gpt_image2"
 FREEZONE_DEFAULT_IMAGE_MODEL = FREEZONE_DEFAULT_IMAGE_SELECTION
-SUPPORTED_FREEZONE_IMAGE_PROVIDERS = {"huimeng", "newapi", "openrouter", "openai"}
+SUPPORTED_FREEZONE_IMAGE_PROVIDERS = {"google", "huimeng", "newapi", "openrouter", "openai"}
 FREEZONE_IMAGE_CAMERA_OPTIONS = {
     "camera_bodies": [
         {"id": "panavision_dxl2", "label": "Panavision DXL2"},
@@ -271,7 +272,8 @@ def resolve_freezone_image_provider(provider: Optional[str], *, strict: bool = T
             )
         return normalized
 
-    return "newapi"
+    # 默认使用 NANOBANANA_PROVIDER 环境变量，回退到 huimeng
+    return os.environ.get("NANOBANANA_PROVIDER", "huimeng").strip().lower()
 
 
 def new_freezone_job_id() -> str:
