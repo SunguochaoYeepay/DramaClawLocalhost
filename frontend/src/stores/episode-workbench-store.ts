@@ -26,7 +26,11 @@ export const DEFAULT_BEAT_SELECTION: PersistedBeatSelection = {
   mode: "none",
   activeBeat: null,
 };
-export const DEFAULT_ACTION_PANEL_SECTIONS: readonly BeatActionPanelSectionId[] = [];
+// 默认展开「文案」区块：台词/类型/场景/画面描述等核心信息无需额外点击即可见
+// (#21)。仅作用于未自定义过的 scope；用户手动折叠后会按 scope 持久化覆盖此默认。
+export const DEFAULT_ACTION_PANEL_SECTIONS: readonly BeatActionPanelSectionId[] = [
+  "text",
+];
 export const DEFAULT_VIEW_TOGGLES: readonly BeatViewToggleId[] = [
   "text",
   "sketch",
