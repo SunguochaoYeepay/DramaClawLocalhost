@@ -84,7 +84,7 @@ def create_video_prompt_builder_agent(language: str = "en") -> Agent:
         feature_provider_env="VIDEO_PROMPT_PROVIDER",
         feature_model_env="VIDEO_PROMPT_MODEL",
     )
-    return Agent(model, system_prompt=VIDEO_PROMPT_BUILDER_INSTRUCTIONS_EN, output_type=str, name="Video Prompt Builder")
+    return Agent(model, system_prompt=VIDEO_PROMPT_BUILDER_INSTRUCTIONS_EN, output_type=str, name="Video Prompt Builder", output_retries=3)
 
 
 class VideoPromptBuilder:
@@ -269,6 +269,9 @@ class VideoPromptBuilder:
             return result
 
         except Exception as e:
+            import traceback
+            print(f"[VideoPromptBuilder ERROR] {type(e).__name__}: {e}")
+            print(traceback.format_exc())
             log_agent_end("视频提示词生成师", success=False, result=str(e))
             # 失败时回退到规则映射
             return self._fallback_build(duration, language)

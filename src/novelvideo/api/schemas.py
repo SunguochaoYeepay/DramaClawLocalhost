@@ -1,5 +1,6 @@
 """API 请求/响应 Pydantic 模型。"""
 
+import os
 from typing import Any, Literal, Optional
 
 from fastapi import HTTPException
@@ -14,6 +15,11 @@ FREEZONE_DEFAULT_IMAGE_SELECTION = "huimeng_gpt_image2"
 FREEZONE_DEFAULT_IMAGE_MODEL = FREEZONE_DEFAULT_IMAGE_SELECTION
 CANVAS_MAX_NODES = 50_000
 CANVAS_MAX_EDGES = 200_000
+
+
+def _get_default_video_backend() -> str:
+    """从环境变量或项目配置获取默认视频后端。"""
+    return os.environ.get("VIDEO_BACKEND", "huimeng_seedance-2.0-fast")
 
 
 # ── 通用响应 ──────────────────────────────────────────────────────────────────
@@ -223,7 +229,7 @@ class GlobalOptimizeRequest(BaseModel):
 
 class VideoGenerateRequest(BaseModel):
     resolution: str = "720x1280"
-    video_backend: str = "newapi_seedance-1.0-pro-fast"
+    video_backend: str = Field(default_factory=_get_default_video_backend)
     use_director_render: bool = False
 
 
@@ -345,7 +351,7 @@ class InsertManualShotRequest(BaseModel):
 
 class SingleVideoRequest(BaseModel):
     resolution: str = "720x1280"
-    video_backend: str = "newapi_seedance-1.0-pro-fast"
+    video_backend: str = Field(default_factory=_get_default_video_backend)
     use_director_render: bool = False
     seedance2_config_json: Optional[str] = None
     mode: Optional[str] = None

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import subprocess
 from pathlib import Path
@@ -93,12 +94,15 @@ async def _audio_duration_seconds(audio_path: Path) -> float:
 
 
 class IndexTTS2FalClient:
-    """Small IndexTTS2 client.
+    """Beat audio client supporting IndexTTS2 and CosyVoice voice cloning.
 
-    The class name is retained for compatibility with existing v2.0 call sites.
-    ``INDEXTTS2_PROVIDER=newapi`` routes through newAPI's OpenAI audio endpoint;
-    ``INDEXTTS2_PROVIDER=fal`` keeps the original fal.ai direct path available.
+    ``INDEXTTS2_PROVIDER=newapi`` routes through NewAPI's OpenAI audio endpoint;
+    ``INDEXTTS2_PROVIDER=fal`` uses fal.ai direct;
+    ``INDEXTTS2_PROVIDER=cosyvoice`` uses DashScope CosyVoice voice cloning.
     """
+
+    # Shared cache of enrolled CosyVoice voice IDs keyed by reference audio URL
+    _cosyvoice_voice_cache: dict[str, str] = {}
 
     def __init__(
         self,
@@ -110,6 +114,9 @@ class IndexTTS2FalClient:
         timeout_seconds: float | None = None,
     ):
         from novelvideo.config import (
+            COSYVOICE_BEAT_MODEL,
+            COSYVOICE_BEAT_VOICE_ID,
+            DASHSCOPE_API_KEY,
             FAL_API_KEY,
             INDEXTTS2_FAL_ENDPOINT,
             INDEXTTS2_NEWAPI_MODEL,
@@ -119,13 +126,18 @@ class IndexTTS2FalClient:
         )
 
         self.provider = (provider if provider is not None else INDEXTTS2_PROVIDER).strip().lower()
-        if self.provider not in {"newapi", "fal"}:
+        if self.provider not in {"newapi", "fal", "cosyvoice"}:
             self.provider = "newapi"
         if self.provider == "newapi":
             gateway = get_effective_newapi_gateway_config()
             self.api_key = api_key if api_key is not None else gateway.api_key
             self.endpoint = endpoint or gateway.base_url
             self.model = model or INDEXTTS2_NEWAPI_MODEL
+        elif self.provider == "cosyvoice":
+            self.api_key = api_key if api_key is not None else (DASHSCOPE_API_KEY or "")
+            self.endpoint = endpoint or ""
+            self.model = model or COSYVOICE_BEAT_MODEL
+            self._cosyvoice_preset_voice_id = COSYVOICE_BEAT_VOICE_ID
         else:
             self.api_key = (
                 api_key if api_key is not None else (FAL_API_KEY or os.getenv("FAL_KEY", ""))
@@ -148,7 +160,12 @@ class IndexTTS2FalClient:
     ) -> TTSResult:
         """Generate dialogue audio from a reference sample and save it to ``output_path``."""
         if not self.api_key:
-            key_name = "DramaClawAPI API key" if self.provider == "newapi" else "FAL_KEY/FAL_API_KEY"
+            if self.provider == "newapi":
+                key_name = "DramaClawAPI API key"
+            elif self.provider == "cosyvoice":
+                key_name = "DASHSCOPE_API_KEY"
+            else:
+                key_name = "FAL_KEY/FAL_API_KEY"
             return TTSResult(success=False, error=f"{key_name} not set")
         prompt = str(prompt or "").strip()
         if not prompt:
@@ -161,7 +178,7 @@ class IndexTTS2FalClient:
         target.parent.mkdir(parents=True, exist_ok=True)
         self._last_provider_request_id = ""
         self._last_provider_response_id = ""
-        source = "indextts2_newapi" if self.provider == "newapi" else "indextts2_fal"
+        source = f"indextts2_{self.provider}"
         reservation_id = ""
         try:
             reservation_id = await _reserve_tts_model_call(self.model, source=source)
@@ -173,6 +190,13 @@ class IndexTTS2FalClient:
 
         if self.provider == "newapi":
             result = await self._generate_via_newapi(
+                prompt=prompt,
+                audio_url=audio_url,
+                output_path=target,
+                emotion_prompt=emotion_prompt,
+            )
+        elif self.provider == "cosyvoice":
+            result = await self._generate_via_cosyvoice(
                 prompt=prompt,
                 audio_url=audio_url,
                 output_path=target,
@@ -249,6 +273,203 @@ class IndexTTS2FalClient:
                 raise
             detail = str(exc) or repr(exc) or exc.__class__.__name__
             return TTSResult(success=False, error=f"{exc.__class__.__name__}: {detail}")
+
+    async def _generate_via_cosyvoice(
+        self,
+        *,
+        prompt: str,
+        audio_url: str,
+        output_path: Path,
+        emotion_prompt: str = "",
+    ) -> TTSResult:
+        """Generate audio via DashScope CosyVoice voice cloning.
+
+        Flow:
+        1. Resolve a CosyVoice voice ID from the reference audio
+           (use pre-configured COSYVOICE_BEAT_VOICE_ID, or enroll a new voice)
+        2. Synthesize speech using SpeechSynthesizer with the cloned voice
+        """
+        try:
+            import dashscope
+            from dashscope.audio.tts_v2 import SpeechSynthesizer, ResultCallback
+        except ImportError:
+            return TTSResult(
+                success=False,
+                error="dashscope not installed. Run: pip install dashscope",
+            )
+
+        dashscope.api_key = self.api_key
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # --- Step 1: resolve voice ID ---
+        voice_id = ""
+        preset = getattr(self, "_cosyvoice_preset_voice_id", "")
+        if preset:
+            voice_id = preset
+
+        if not voice_id:
+            voice_id = self._cosyvoice_voice_cache.get(audio_url, "")
+
+        if not voice_id:
+            public_url = await self._resolve_public_audio_url(audio_url)
+            if not public_url:
+                return TTSResult(
+                    success=False,
+                    error="CosyVoice 声音克隆需要公网可访问的参考音频 URL。"
+                    "请配置 CLOUDINARY_RELAY_* 或设置 COSYVOICE_BEAT_VOICE_ID。",
+                )
+            try:
+                voice_id = await self._enroll_cosyvoice_voice(public_url)
+            except Exception as exc:
+                detail = str(exc) or repr(exc)
+                return TTSResult(
+                    success=False,
+                    error=f"CosyVoice 声音注册失败: {detail}",
+                )
+            if not voice_id:
+                return TTSResult(
+                    success=False,
+                    error="CosyVoice 声音注册未返回 voice_id",
+                )
+            self._cosyvoice_voice_cache[audio_url] = voice_id
+
+        # --- Step 2: synthesize speech ---
+        import threading
+
+        class _FileCallback(ResultCallback):
+            def __init__(self, path: Path):
+                self.path = path
+                self.file = None
+                self.error_msg = None
+                self.completed = threading.Event()
+
+            def on_open(self):
+                self.file = open(self.path, "wb")
+
+            def on_data(self, data: bytes):
+                if self.file:
+                    self.file.write(data)
+
+            def on_complete(self):
+                pass
+
+            def on_error(self, message: str):
+                self.error_msg = message
+
+            def on_close(self):
+                if self.file:
+                    self.file.close()
+                self.completed.set()
+
+        callback = _FileCallback(output_path)
+        try:
+            synthesizer = SpeechSynthesizer(
+                model=self.model,
+                voice=voice_id,
+                callback=callback,
+            )
+            synthesizer.call(prompt)
+
+            import asyncio
+
+            loop = asyncio.get_event_loop()
+            completed = await loop.run_in_executor(
+                None, lambda: callback.completed.wait(timeout=120)
+            )
+            if not completed:
+                return TTSResult(
+                    success=False,
+                    error="CosyVoice 合成超时（120s）",
+                )
+            if callback.error_msg:
+                return TTSResult(success=False, error=f"CosyVoice: {callback.error_msg}")
+
+            if not output_path.exists() or output_path.stat().st_size <= 0:
+                return TTSResult(success=False, error="CosyVoice 未生成音频文件")
+
+            return TTSResult(
+                success=True,
+                audio_path=str(output_path),
+                duration_seconds=await _audio_duration_seconds(output_path),
+            )
+        except Exception as exc:
+            if is_insufficient_credits_error(exc):
+                raise
+            detail = str(exc) or repr(exc) or exc.__class__.__name__
+            return TTSResult(success=False, error=f"CosyVoice: {detail}")
+
+    # ------------------------------------------------------------------
+    # CosyVoice helpers
+    # ------------------------------------------------------------------
+
+    async def _enroll_cosyvoice_voice(self, audio_url: str) -> str:
+        """Enroll a new CosyVoice voice from a public audio URL.
+
+        Uses DashScope VoiceEnrollmentService to create a cloned voice.
+        Returns the voice_id string.
+        """
+        from novelvideo.config import COSYVOICE_BEAT_LANGUAGE, COSYVOICE_BEAT_TARGET_MODEL
+
+        def _create() -> str:
+            from dashscope.audio.tts_v2 import VoiceEnrollmentService
+
+            service = VoiceEnrollmentService()
+            return service.create_voice(
+                target_model=COSYVOICE_BEAT_TARGET_MODEL,
+                prefix="dramaclaw",
+                url=audio_url,
+                language_hints=[COSYVOICE_BEAT_LANGUAGE],
+            )
+
+        import asyncio
+
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, _create)
+
+    async def _resolve_public_audio_url(self, audio_url: str) -> str:
+        """Convert a data: URL to a publicly accessible URL via Cloudinary.
+
+        Returns the original URL if it is already an http(s) URL.
+        Returns empty string if conversion fails.
+        """
+        if audio_url.startswith(("http://", "https://")):
+            return audio_url
+        if not audio_url.startswith("data:"):
+            return ""
+
+        try:
+            import base64
+
+            header, b64_data = audio_url.split(",", 1)
+            raw_bytes = base64.b64decode(b64_data)
+
+            mime = "audio/mpeg"
+            if ";" in header and "mime=" in header:
+                mime = header.split("mime=")[1].split(";")[0]
+
+            ext = "mp3"
+            if "wav" in mime:
+                ext = "wav"
+            elif "ogg" in mime:
+                ext = "ogg"
+
+            import cloudinary.uploader
+
+            def _upload() -> dict:
+                return cloudinary.uploader.upload_raw(
+                    raw_bytes,
+                    resource_type="raw",
+                    folder="dramaclaw/voices",
+                    filename=f"voice_ref_{hashlib.md5(raw_bytes[:1024]).hexdigest()[:8]}.{ext}",
+                )
+
+            import asyncio
+
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(None, _upload)
+            return result.get("secure_url", "")
+        except Exception:
+            return ""
 
     async def _generate_via_newapi(
         self,

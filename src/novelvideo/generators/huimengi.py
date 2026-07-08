@@ -23,11 +23,13 @@ SUPPORTED_HUIMENG_VIDEO_MODEL_NAMES = (
     "seedance-2.0-fast",
     "seedance-1.0-pro-fast",
     "seedance-1.5-pro",
+    "happyhorse-1.1",
 )
 FALLBACK_HUIMENG_VIDEO_MODELS = [
     {"name": "seedance-2.0-fast", "display_name": "Seedance 2.0 Fast"},
     {"name": "seedance-1.0-pro-fast", "display_name": "Seedance 1.0 Pro Fast"},
     {"name": "seedance-1.5-pro", "display_name": "Seedance 1.5 Pro"},
+    {"name": "happyhorse-1.1", "display_name": "HappyHorse 1.1"},
 ]
 HUIMENG_DONE_STATUSES = {"completed", "succeeded", "success", "done"}
 HUIMENG_FAILED_STATUSES = {"failed", "error", "canceled", "cancelled"}

@@ -599,7 +599,8 @@ def _is_seedance2_backend(video_backend: str | None) -> bool:
 
 
 def _is_happyhorse_backend(video_backend: str | None) -> bool:
-    return _seedance2_model_from_backend(video_backend) == "happyhorse-1.0"
+    model = _seedance2_model_from_backend(video_backend)
+    return model in {"happyhorse-1.0", "happyhorse-1.1"}
 
 
 def _is_grok_video_backend(video_backend: str | None) -> bool:
@@ -1478,7 +1479,14 @@ def _api_video_backend_options() -> list[VideoBackendOption]:
         newapi_video_backend_options,
         parse_newapi_video_backend,
     )
+    from novelvideo.generators.huimengi import (
+        huimeng_video_backend_options,
+        parse_huimeng_video_backend,
+    )
 
+    # ── HuiMeng 直连选项 ──
+    huimeng_options = huimeng_video_backend_options()
+    # ── NewAPI 网关选项 ──
     options = newapi_video_backend_options(include_seedance2_variants=True)
     options.setdefault("newapi_happyhorse-1.0", "HappyHorse 1.0")
     duration_bounds = NewApiVideoGenerator._parse_duration_bounds_config(
@@ -1486,6 +1494,32 @@ def _api_video_backend_options() -> list[VideoBackendOption]:
     )
     default_backend = VideoGenerateRequest().video_backend
     backend_options: list[VideoBackendOption] = []
+
+    # 先添加 HuiMeng 直连选项
+    for value, label in huimeng_options.items():
+        model = parse_huimeng_video_backend(value)
+        is_happyhorse = model == "happyhorse-1.1"
+        backend_options.append(
+            VideoBackendOption(
+                value=value,
+                label=label,
+                is_default=value == default_backend,
+                is_seedance2=model in {"seedance-2.0-fast", "seedance-2.0", "seedance-1.5-pro"} if model else False,
+                is_happyhorse=is_happyhorse,
+                is_grok_video=False,
+                dialogue_only=False,
+                min_duration=3 if is_happyhorse else (4 if model and model.startswith("seedance-2.0") else 2),
+                max_duration=15 if is_happyhorse else (15 if model and model.startswith("seedance-2.0") else 12),
+                resolution_options=list(HAPPYHORSE_RESOLUTION_OPTIONS) if is_happyhorse else None,
+                ratio_options=list(HAPPYHORSE_RATIO_OPTIONS) if is_happyhorse else None,
+                supported_modes=list(HAPPYHORSE_SUPPORTED_MODES) if is_happyhorse else None,
+                reference_image_max=9 if is_happyhorse else None,
+                reference_video_max=1 if is_happyhorse else None,
+                reference_audio_max=None,
+            )
+        )
+
+    # 再添加 NewAPI 网关选项
     for value, label in options.items():
         model = parse_newapi_video_backend(value)
         bounds = duration_bounds.get(model or "")
@@ -4100,6 +4134,7 @@ async def generate_single_video(
     beat = next((b for b in beats if b.get("beat_number") == beat_num), None)
     if not beat:
         return {"ok": False, "error": f"Beat {beat_num} not found"}
+    print(f"[DEBUG] video_backend from frontend: {body.video_backend!r}")
     backend_error = _validate_seedance_pro_dialogue_only([beat], body.video_backend)
     if backend_error:
         return {"ok": False, "error": backend_error}

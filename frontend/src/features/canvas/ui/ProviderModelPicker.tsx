@@ -83,69 +83,38 @@ export const VIDEO_PROVIDERS: ProviderOption[] = [
 
 export const VIDEO_MODELS: ModelOption[] = [
   {
-    id: 'newapi_seedance-2.0-fast',
-    providerId: 'seedance',
-    apiModel: 'newapi_seedance-2.0-fast',
+    id: 'huimeng_seedance-2.0-fast',
+    providerId: 'huimeng',
+    apiModel: 'huimeng_seedance-2.0-fast',
     label: 'Seedance2.0 Fast',
     resolutionOptions: ['480p', '720p'],
     minDuration: 4,
     maxDuration: 15,
   },
   {
-    id: 'newapi_seedance-2.0',
-    providerId: 'seedance',
-    apiModel: 'newapi_seedance-2.0',
-    label: 'Seedance2.0',
-    resolutionOptions: ['480p', '720p', '1080p'],
-    minDuration: 4,
-    maxDuration: 15,
-  },
-  {
-    id: 'newapi_seedance-2.0-value',
-    providerId: 'seedance',
-    apiModel: 'newapi_seedance-2.0-value',
-    label: 'Seedance2.0 Value',
+    id: 'huimeng_happyhorse-1.1',
+    providerId: 'huimeng',
+    apiModel: 'huimeng_happyhorse-1.1',
+    label: 'HappyHorse 1.1',
     resolutionOptions: ['720p', '1080p'],
-    minDuration: 4,
+    minDuration: 3,
     maxDuration: 15,
-    sceneOptimizeOptions: ['anime', 'realistic'],
-    defaultSceneOptimize: 'anime',
   },
   {
-    id: 'newapi_seedance-2.0-fast-value',
-    providerId: 'seedance',
-    apiModel: 'newapi_seedance-2.0-fast-value',
-    label: 'Seedance2.0 Fast Value',
-    resolutionOptions: ['720p', '1080p'],
-    minDuration: 4,
-    maxDuration: 15,
-    sceneOptimizeOptions: ['anime', 'realistic'],
-    defaultSceneOptimize: 'realistic',
-  },
-  {
-    id: 'newapi_seedance-1.5-pro',
-    providerId: 'seedance',
-    apiModel: 'newapi_seedance-1.5-pro',
+    id: 'huimeng_seedance-1.5-pro',
+    providerId: 'huimeng',
+    apiModel: 'huimeng_seedance-1.5-pro',
     label: 'Seedance1.5 Pro',
     minDuration: 4,
     maxDuration: 12,
   },
   {
-    id: 'newapi_seedance-1.0-pro-fast',
-    providerId: 'seedance',
-    apiModel: 'newapi_seedance-1.0-pro-fast',
+    id: 'huimeng_seedance-1.0-pro-fast',
+    providerId: 'huimeng',
+    apiModel: 'huimeng_seedance-1.0-pro-fast',
     label: 'Seedance1.0 Pro Fast',
     minDuration: 2,
     maxDuration: 12,
-  },
-  {
-    id: 'newapi_grok-video-channel',
-    providerId: 'huimeng',
-    apiModel: 'newapi_grok-video-channel',
-    label: 'Grok Video Channel',
-    resolutionOptions: ['720p', '480p'],
-    minDuration: 6,
-    maxDuration: 30,
   },
 ];
 
@@ -153,7 +122,7 @@ export const VIDEO_MODELS: ModelOption[] = [
 // hydrates the live list via /freezone/video/models, but this id is what the
 // canvas store uses on first node creation before that fetch resolves (and
 // when no previously-picked model has been remembered).
-export const DEFAULT_VIDEO_MODEL_ID = 'newapi_seedance-2.0';
+export const DEFAULT_VIDEO_MODEL_ID = 'huimeng_seedance-2.0-fast';
 
 export type ProviderModelDomain = 'image' | 'video';
 

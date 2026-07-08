@@ -9,7 +9,7 @@ import { useAppStore } from "@/stores/app-store";
 import type { ErrorResponse, OkResponse, TaskResponse } from "@/types/api";
 import type { Beat } from "@/types/episode";
 
-export const DEFAULT_VIDEO_BACKEND = "huimeng_seedance-1.0-pro-fast";
+export const DEFAULT_VIDEO_BACKEND = "huimeng_seedance-2.0-fast";
 
 function currentPromptLanguage(): "zh" | "en" {
   return useAppStore.getState().language?.startsWith("zh") ? "zh" : "en";

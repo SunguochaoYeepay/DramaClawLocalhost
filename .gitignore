@@ -49,3 +49,6 @@ docs/changes/
 docs/adr/
 docs/compliance/
 docs/superpowers/
+
+# Local state database
+frontend/state/

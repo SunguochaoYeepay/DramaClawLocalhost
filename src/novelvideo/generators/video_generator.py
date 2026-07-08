@@ -1358,10 +1358,12 @@ class HuimengVideoGenerator(VideoGeneratorBase):
             return 4, 15
         if self.model == "seedance-1.5-pro":
             return 4, 12
+        if self.model == "happyhorse-1.1":
+            return 3, 15
         return 2, 12
 
     def _supports_audio_param(self) -> bool:
-        return self.model in {"seedance-2.0", "seedance-2.0-fast", "seedance-1.5-pro"}
+        return self.model in {"seedance-2.0", "seedance-2.0-fast", "seedance-1.5-pro", "happyhorse-1.1"}
 
     def _is_seedance2_model(self) -> bool:
         return self.model.startswith("seedance-2.0")
@@ -1373,6 +1375,7 @@ class HuimengVideoGenerator(VideoGeneratorBase):
         label: str,
         log: Callable[[str], None],
         require_http_url: bool = False,
+        force_http_for_huimeng: bool = False,
     ) -> str | None:
         from novelvideo.generators.huimengi import local_file_to_data_url
 
@@ -1382,24 +1385,43 @@ class HuimengVideoGenerator(VideoGeneratorBase):
         if text.startswith(("http://", "https://")):
             return text
         if text.startswith("data:"):
-            if require_http_url:
-                raise ValueError(
-                    "human_review requires HTTP/HTTPS media URLs; "
-                    f"unsupported direct media reference for {label}: data:"
-                )
+            # For HuiMeng models, convert Base64 data URLs to HTTP URLs
+            if force_http_for_huimeng or require_http_url:
+                try:
+                    import base64
+                    import tempfile
+                    # Extract mime type and base64 data
+                    header, b64_data = text.split(",", 1)
+                    mime = header.split(";")[0].split(":")[1] if ":" in header else "image/png"
+                    ext = mime.split("/")[-1].replace("jpeg", "jpg")
+                    raw = base64.b64decode(b64_data)
+                    tmp = tempfile.NamedTemporaryFile(suffix=f".{ext}", delete=False)
+                    tmp.write(raw)
+                    tmp.close()
+                    from novelvideo.storage.media_relay import ensure_image_url
+                    http_url = ensure_image_url(tmp.name)
+                    log(f"{label}已从 Base64 上传到 Cloudinary")
+                    return http_url
+                except Exception as exc:
+                    raise ValueError(
+                        f"HuiMeng requires HTTP/HTTPS media URLs; "
+                        f"failed to convert data URL for {label}: {exc}"
+                    ) from exc
             return text
         if os.path.exists(text):
-            if require_http_url:
-                from novelvideo.utils.oss_client import presign_or_upload_output
+            # For HuiMeng models or when explicitly required, upload to Cloudinary
+            if force_http_for_huimeng or require_http_url:
+                try:
+                    from novelvideo.storage.media_relay import ensure_image_url
 
-                oss_url = presign_or_upload_output(text)
-                if not oss_url:
+                    http_url = ensure_image_url(text)
+                    log(f"{label}已上传到 Cloudinary")
+                    return http_url
+                except Exception as exc:
                     raise ValueError(
-                        "human_review requires OSS presigned HTTP media URLs. "
-                        f"Failed to upload or presign local file: {text}"
-                    )
-                log(f"{label}已上传/复用 OSS URL")
-                return oss_url
+                        f"HuiMeng requires HTTP media URLs. "
+                        f"Failed to upload local file: {text} ({exc})"
+                    ) from exc
             log(f"{label}已转换为 data URL")
             return local_file_to_data_url(text)
         raise FileNotFoundError(f"{label} not found: {text}")
@@ -1410,6 +1432,7 @@ class HuimengVideoGenerator(VideoGeneratorBase):
         *,
         log: Callable[[str], None],
         require_http_url: bool = False,
+        force_http_for_huimeng: bool = False,
     ) -> tuple[dict[str, list[str]], dict[str, int]]:
         params: dict[str, list[str]] = {}
         image_urls: list[str] = []
@@ -1428,6 +1451,7 @@ class HuimengVideoGenerator(VideoGeneratorBase):
                 label=label,
                 log=log,
                 require_http_url=require_http_url,
+                force_http_for_huimeng=force_http_for_huimeng,
             )
             if not data_url:
                 continue
@@ -1533,6 +1557,9 @@ class HuimengVideoGenerator(VideoGeneratorBase):
             if "human_review" in seedance2_config
             else bool(kwargs.get("human_review", False))
         )
+        
+        # HuiMeng API does NOT support Base64 for any model, always use HTTP URLs
+        force_http_for_huimeng = True
 
         try:
             first_frame = self._to_upload_url(
@@ -1540,17 +1567,20 @@ class HuimengVideoGenerator(VideoGeneratorBase):
                 label="首帧",
                 log=log,
                 require_http_url=require_http_media,
+                force_http_for_huimeng=force_http_for_huimeng,
             )
             last_frame = self._to_upload_url(
                 last_frame_path,
                 label="尾帧",
                 log=log,
                 require_http_url=require_http_media,
+                force_http_for_huimeng=force_http_for_huimeng,
             )
             reference_params, ref_counts = self._build_reference_params(
                 references,
                 log=log,
                 require_http_url=require_http_media,
+                force_http_for_huimeng=force_http_for_huimeng,
             )
         except (FileNotFoundError, ValueError) as exc:
             return VideoGenResult(
@@ -1614,6 +1644,9 @@ class HuimengVideoGenerator(VideoGeneratorBase):
                     error=str(exc),
                 )
         else:
+            # Check if this is HappyHorse model
+            is_happyhorse = self.model == "happyhorse-1.1"
+            
             params = {
                 "prompt": prompt,
                 "duration": duration,
@@ -1621,6 +1654,35 @@ class HuimengVideoGenerator(VideoGeneratorBase):
                 "ratio": ratio,
                 "return_last_frame": False,
             }
+
+            # HappyHorse specific handling
+            if is_happyhorse:
+                # Truncate prompt to 2500 chars for HappyHorse
+                if len(prompt) > 2500:
+                    params["prompt"] = prompt[:2500]
+                    log("提示词已截断到 HappyHorse 1.1 上限 2500 字符")
+                
+                # Normalize resolution for HappyHorse (720P or 1080P)
+                res_text = str(self.resolution or "").strip().lower()
+                if "720" in res_text:
+                    params["resolution"] = "720P"
+                else:
+                    params["resolution"] = "1080P"
+                
+                # Normalize ratio for HappyHorse
+                ratio_text = str(ratio or "").strip()
+                valid_ratios = {"16:9", "9:16", "1:1", "4:3", "3:4"}
+                if ratio_text not in valid_ratios:
+                    params["ratio"] = "16:9"
+                
+                # Audio setting for HappyHorse (auto/origin)
+                audio_setting = kwargs.get("audio_setting")
+                if audio_setting is not None:
+                    audio_text = str(audio_setting).strip().lower()
+                    if audio_text in {"auto", "origin"}:
+                        params["audio_setting"] = audio_text
+                    else:
+                        params["audio_setting"] = "auto"
 
             if last_frame:
                 if not first_frame:

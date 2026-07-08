@@ -3654,11 +3654,17 @@
       "statusNotConfigured": "未配置",
       "statusActive": "当前生效",
       "gatewayWarningIconLabel": "模型网关未配置",
-      "gatewayNotConfiguredImpact": "当前生效的模型网关未配置。文本、图片、视频、音频等模型调用会失败；请配置官方渠道或自定义 NewAPI 后再生成内容。",
-      "modes": {
-        "official": "官方渠道",
-        "custom": "自定义 NewAPI"
+      "gatewayNotConfiguredImpact": "当前生效的模型网关未配置。文本、图片、视频、音频等模型调用会失败；请在下方配置各模型的 API Key 后再生成内容。",
+
+      "localConfig": {
+        "description": "所有模型配置通过 .env 文件管理，无需 NewAPI 中间件。文本模型走阿里云千问，图片/视频走汇梦，TTS 走 CosyVoice。修改 .env 后重启服务即可生效。"
       },
+      "statusLabel": "状态",
+      "configured": "已配置",
+      "notConfigured": "未配置",
+      "effectiveBaseUrl": "网关地址",
+      "effectiveApiKey": "API Key",
+
       "fields": {
         "baseUrl": "New API 地址",
         "gatewayBaseUrl": "网关地址",
@@ -3667,19 +3673,11 @@
         "sqlitePath": "SQLite 路径",
         "adminUsername": "管理员用户名"
       },
-      "official": {
-        "description": "填入平台官方网关地址与 API Key 并保存，保存后自动切换为官方渠道；地址可填根域名或完整 /v1 地址。",
-        "save": "保存并启用",
-        "enable": "切换到官方",
-        "saved": "已保存并切换为官方渠道。",
-        "enabled": "已切换为官方渠道。",
-        "missingFields": "请填写网关地址与 API Key。",
-        "registerLink": "请前往 RelayClaw 进行注册"
-      },
+
       "custom": {
-        "description": "填入本地 NewAPI 地址和数据库信息后点初始化，后端会自动连库、建 token、写入配置并切换为自定义渠道。",
+        "description": "配置本地 NewAPI 服务地址和数据库信息，点击初始化后会自动连接、创建 token 并写入配置。",
         "init": "初始化配置",
-        "initialized": "初始化完成，已切换为自定义渠道。",
+        "initialized": "初始化完成。",
         "databaseTitle": "NewAPI 数据库",
         "databaseDescription": "用于查找管理员并补齐 access_token；SQLite 请填 sqlDsn=local 和已存在的 one-api.db 绝对路径。",
         "databaseConfigured": "数据库已配置",

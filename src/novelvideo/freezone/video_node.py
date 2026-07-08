@@ -103,8 +103,14 @@ LEGACY_FREEZONE_VIDEO_LABEL_ALIASES: dict[str, str] = {
     "seedance 1.5 无声": "newapi_seedance-1.5-pro",
 }
 
-FREEZONE_DEFAULT_VIDEO_BACKEND = "newapi_seedance-2.0-fast"
+FREEZONE_DEFAULT_VIDEO_BACKEND = "huimeng_seedance-2.0-fast"
 FREEZONE_NEWAPI_VIDEO_BACKENDS = {
+    # HuiMeng direct backends
+    "huimeng_seedance-2.0-fast",
+    "huimeng_seedance-1.5-pro",
+    "huimeng_seedance-1.0-pro-fast",
+    "huimeng_happyhorse-1.1",
+    # NewAPI gateway backends (legacy)
     "newapi_seedance-2.0",
     "newapi_seedance-2.0-fast",
     "newapi_seedance-2.0-value",
@@ -263,8 +269,37 @@ def _freezone_newapi_video_options() -> dict[str, str]:
 
 
 def get_freezone_video_model_options() -> list[dict[str, Any]]:
+    from novelvideo.generators.huimengi import huimeng_video_backend_options
+
     data: list[dict[str, Any]] = []
+    
+    # Add HuiMeng direct backends first
+    huimeng_opts = huimeng_video_backend_options()
+    for backend, label in huimeng_opts.items():
+        if backend not in FREEZONE_NEWAPI_VIDEO_BACKENDS:
+            continue
+        duration_bounds = freezone_video_duration_bounds(backend)
+        item = {
+            "id": backend,
+            "providerId": "huimeng",
+            "provider": "huimeng",
+            "apiModel": backend,
+            "api_model": backend,
+            "label": label,
+            "backend": backend,
+            "resolutionOptions": list(freezone_video_resolution_options(backend)),
+            "resolution_options": list(freezone_video_resolution_options(backend)),
+            "minDuration": duration_bounds[0],
+            "min_duration": duration_bounds[0],
+            "maxDuration": duration_bounds[1],
+            "max_duration": duration_bounds[1],
+        }
+        data.append(item)
+    
+    # Add NewAPI gateway backends (legacy)
     for backend, label in _freezone_newapi_video_options().items():
+        if backend.startswith("huimeng_"):
+            continue  # Skip huimeng backends already added above
         duration_bounds = freezone_video_duration_bounds(backend)
         item = {
             "id": backend,

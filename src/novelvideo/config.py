@@ -498,11 +498,15 @@ OSS_STATIC_PRESIGN_EXPIRES = int(os.environ.get("OSS_STATIC_PRESIGN_EXPIRES", "3
 
 
 # =============================================================================
-# IndexTTS2 配置
+# Beat 音频生成配置
 # =============================================================================
+# 支持三种 provider:
+#   newapi    — 通过 NewAPI 的 /audio/speech 端点（需要 NewAPI 服务）
+#   fal       — 通过 fal.ai 直连 IndexTTS2
+#   cosyvoice — 通过阿里云 DashScope CosyVoice 声音克隆
 
 INDEXTTS2_PROVIDER = os.environ.get("INDEXTTS2_PROVIDER", "newapi").strip().lower() or "newapi"
-if INDEXTTS2_PROVIDER not in {"newapi", "fal"}:
+if INDEXTTS2_PROVIDER not in {"newapi", "fal", "cosyvoice"}:
     INDEXTTS2_PROVIDER = "newapi"
 FAL_API_KEY = os.environ.get("FAL_API_KEY", "") or os.environ.get("FAL_KEY", "")
 INDEXTTS2_FAL_ENDPOINT = os.environ.get(
@@ -510,6 +514,12 @@ INDEXTTS2_FAL_ENDPOINT = os.environ.get(
     "https://fal.run/fal-ai/index-tts-2/text-to-speech",
 )
 INDEXTTS2_TIMEOUT_SECONDS = float(os.environ.get("INDEXTTS2_TIMEOUT_SECONDS", "1800"))
+
+# CosyVoice beat 音频配置（声音克隆）
+COSYVOICE_BEAT_MODEL = os.environ.get("COSYVOICE_BEAT_MODEL", "cosyvoice-v3-flash")
+COSYVOICE_BEAT_VOICE_ID = os.environ.get("COSYVOICE_BEAT_VOICE_ID", "").strip()
+COSYVOICE_BEAT_TARGET_MODEL = os.environ.get("COSYVOICE_BEAT_TARGET_MODEL", "cosyvoice-v3-flash")
+COSYVOICE_BEAT_LANGUAGE = os.environ.get("COSYVOICE_BEAT_LANGUAGE", "zh")
 
 NEWAPI_BASE_URL = os.environ.get("NEWAPI_BASE_URL", OFFICIAL_NEWAPI_BASE_URL)
 NEWAPI_API_KEY = os.environ.get("NEWAPI_API_KEY", "")
@@ -560,8 +570,15 @@ def get_newapi_runtime_credentials(
 
 
 INDEXTTS2_NEWAPI_MODEL = os.environ.get("INDEXTTS2_NEWAPI_MODEL", "index-tts-2")
-INDEXTTS2_RECORD_PROVIDER = "newapi" if INDEXTTS2_PROVIDER == "newapi" else "fal.ai"
-INDEXTTS2_RECORD_MODEL = INDEXTTS2_NEWAPI_MODEL if INDEXTTS2_PROVIDER == "newapi" else "IndexTTS2"
+if INDEXTTS2_PROVIDER == "cosyvoice":
+    INDEXTTS2_RECORD_PROVIDER = "cosyvoice"
+    INDEXTTS2_RECORD_MODEL = COSYVOICE_BEAT_MODEL
+elif INDEXTTS2_PROVIDER == "newapi":
+    INDEXTTS2_RECORD_PROVIDER = "newapi"
+    INDEXTTS2_RECORD_MODEL = INDEXTTS2_NEWAPI_MODEL
+else:
+    INDEXTTS2_RECORD_PROVIDER = "fal.ai"
+    INDEXTTS2_RECORD_MODEL = "IndexTTS2"
 NEWAPI_IMAGE_MODEL = os.environ.get("NEWAPI_IMAGE_MODEL", "gpt-image-2")
 NEWAPI_NANOBANANA2_MODEL = os.environ.get("NEWAPI_NANOBANANA2_MODEL", "nano-banana-2")
 SCENE_MASTER_IMAGE_PROVIDER = (
