@@ -53,6 +53,7 @@ async def run_freezone_gen(
 
     # Routing (v1.2):
     #   provider == "volcengine"  → Volcengine Seedream (text-only path; refs ignored)
+    #   provider == "comfyui"     → ComfyUIImageGenerator (local FLUX2 Klein)
     #   anything else (including None default) → nanobanana_grid:
     #     - with refs → generate_reference_edit_image
     #     - no refs   → generate_text_to_image  (NEW v1.2)
@@ -62,6 +63,17 @@ async def run_freezone_gen(
             prompt=prompt,
             aspect_ratio=aspect_ratio,
             image_size=image_size,
+        )
+
+    if (provider or "").lower() == "comfyui":
+        return await _run_comfyui_gen(
+            out=out,
+            prompt=prompt,
+            aspect_ratio=aspect_ratio,
+            image_size=image_size,
+            reference_paths=reference_paths,
+            model=model,
+            quality=quality,
         )
 
     from novelvideo.config import get_grid_generation_config
@@ -230,6 +242,74 @@ async def _run_volcengine_text_to_image(
         else:
             raise RuntimeError("Volcengine text→image produced no file or bytes")
     return out
+
+
+async def _run_comfyui_gen(
+    *,
+    out: Path,
+    prompt: str,
+    aspect_ratio: str,
+    image_size: str,
+    reference_paths: Optional[list[str]] = None,
+    model: Optional[str] = None,
+    quality: Optional[str] = None,
+) -> Path:
+    """ComfyUI FLUX2 Klein local text→image / img2img.
+
+    Uses ComfyUIImageGenerator with the configured local ComfyUI service.
+    Supports:
+    - 0 references → text2img workflow
+    - 1-3 references → img2img workflow (chain ReferenceLatent)
+    """
+    from novelvideo.generators.comfyui_image import ComfyUIImageGenerator
+
+    # Initialize ComfyUI generator
+    comfyui_gen = ComfyUIImageGenerator()
+
+    # Convert aspect ratio to dimensions
+    width, height = _aspect_to_dims(aspect_ratio, image_size)
+
+    try:
+        if reference_paths and len(reference_paths) > 0:
+            # Image-to-image with references
+            logger.info(f"ComfyUI img2img with {len(reference_paths)} reference(s)")
+            # Load reference images as PIL Images
+            ref_images = [Image.open(path) for path in reference_paths]
+            result = await comfyui_gen.generate_with_references(
+                prompt=prompt,
+                reference_images=ref_images,
+                output_path=str(out),
+                width=width,
+                height=height,
+            )
+        else:
+            # Text-to-image
+            logger.info("ComfyUI text2img")
+            result = await comfyui_gen.generate(
+                prompt=prompt,
+                output_path=str(out),
+                width=width,
+                height=height,
+            )
+
+        if not result or not result.success:
+            err = result.error if result else "unknown error"
+            raise RuntimeError(f"ComfyUI generation failed: {err}")
+
+        if not out.exists():
+            if result.image_base64:
+                import base64
+
+                out.write_bytes(base64.b64decode(result.image_base64))
+            else:
+                raise RuntimeError("ComfyUI generated no file or bytes")
+
+        logger.info(f"ComfyUI generation successful: {out}")
+        return out
+
+    except Exception as exc:
+        logger.error(f"ComfyUI generation error: {exc}", exc_info=True)
+        raise RuntimeError(f"ComfyUI generation failed: {exc}") from exc
 
 
 async def run_freezone_edit(

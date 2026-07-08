@@ -158,11 +158,18 @@ class NanoBananaCharacterGenerator:
         config = config or get_grid_generation_config(selection_override=selection)
         self.provider = config.get(
             "provider", "google"
-        )  # google / openrouter / openai / huimeng / newapi
+        )  # google / openrouter / openai / huimeng / newapi / comfyui
         self.api_key = api_key or config["api_key"]
         self.model = config["model"]
         self.base_url = config.get("base_url", "")
         self.openai_image_quality = config.get("openai_image_quality", "medium")
+
+        # ComfyUI 应通过 ComfyUIImageGenerator 路由，不经过 NanoBanana
+        if self.provider == "comfyui":
+            raise ValueError(
+                "ComfyUI provider should use ComfyUIImageGenerator, not NanoBananaCharacterGenerator. "
+                "请检查 IMAGE_GENERATION_SELECTIONS 配置和调用入口。"
+            )
 
         if not self.api_key:
             if self.provider == "openrouter":

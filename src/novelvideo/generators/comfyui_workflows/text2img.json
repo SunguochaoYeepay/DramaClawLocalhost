@@ -1,0 +1,83 @@
+{
+  "104": {
+    "inputs": {
+      "samples": ["146", 0],
+      "vae": ["110", 0]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {"title": "VAE解码"}
+  },
+  "107": {
+    "inputs": {
+      "clip_name": "",
+      "type": "flux2",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {"title": "加载CLIP"}
+  },
+  "108": {
+    "inputs": {
+      "text": "",
+      "clip": ["107", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "CLIP Text Encode (Positive Prompt)"}
+  },
+  "109": {
+    "inputs": {
+      "text": "",
+      "clip": ["107", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "CLIP Text Encode (Negative Prompt)"}
+  },
+  "110": {
+    "inputs": {
+      "vae_name": ""
+    },
+    "class_type": "VAELoader",
+    "_meta": {"title": "加载VAE"}
+  },
+  "128": {
+    "inputs": {
+      "width": 1280,
+      "height": 720,
+      "batch_size": 1
+    },
+    "class_type": "EmptyFlux2LatentImage",
+    "_meta": {"title": "空Latent图像（Flux2）"}
+  },
+  "146": {
+    "inputs": {
+      "seed": 0,
+      "steps": 6,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": ["197", 0],
+      "positive": ["108", 0],
+      "negative": ["109", 0],
+      "latent_image": ["128", 0]
+    },
+    "class_type": "KSampler",
+    "_meta": {"title": "K采样器"}
+  },
+  "195": {
+    "inputs": {
+      "filename_prefix": "ComfyUI",
+      "images": ["104", 0]
+    },
+    "class_type": "SaveImage",
+    "_meta": {"title": "保存图像"}
+  },
+  "197": {
+    "inputs": {
+      "unet_name": "",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {"title": "UNet加载器"}
+  }
+}

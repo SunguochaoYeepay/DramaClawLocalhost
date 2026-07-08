@@ -5,6 +5,7 @@
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
@@ -866,6 +867,23 @@ COMFYUI_WORKFLOW = os.environ.get("COMFYUI_WORKFLOW", "gguf")
 # ComfyUI 是否使用 SSL（HTTPS/WSS），云服务器通常需要开启
 COMFYUI_USE_SSL = os.environ.get("COMFYUI_USE_SSL", "false").lower() in ("true", "1", "yes")
 
+# ComfyUI 本地图像生成服务（FLUX2 Klein）
+COMFYUI_IMAGE_URL = os.environ.get("COMFYUI_IMAGE_URL", "http://localhost:8188")
+COMFYUI_IMAGE_WORKFLOW_DIR = os.environ.get(
+    "COMFYUI_IMAGE_WORKFLOW_DIR",
+    str(Path(__file__).parent / "generators" / "comfyui_workflows"),
+)
+
+# FLUX2 Klein 模型文件名（可在 .env 中覆盖）
+COMFYUI_FLUX2_CLIP = os.environ.get("COMFYUI_FLUX2_CLIP", "qwen_3_8b_fp8mixed.safetensors")
+COMFYUI_FLUX2_VAE = os.environ.get("COMFYUI_FLUX2_VAE", "flux2-vae.safetensors")
+COMFYUI_FLUX2_UNET = os.environ.get("COMFYUI_FLUX2_UNET", "flux-2-klein-9b-fp8.safetensors")
+COMFYUI_FLUX2_STEPS = int(os.environ.get("COMFYUI_FLUX2_STEPS", "6"))
+COMFYUI_FLUX2_CFG = float(os.environ.get("COMFYUI_FLUX2_CFG", "1"))
+COMFYUI_FLUX2_SAMPLER = os.environ.get("COMFYUI_FLUX2_SAMPLER", "euler")
+COMFYUI_FLUX2_SCHEDULER = os.environ.get("COMFYUI_FLUX2_SCHEDULER", "simple")
+COMFYUI_FLUX2_DENOISE = float(os.environ.get("COMFYUI_FLUX2_DENOISE", "1"))
+
 # 默认视频分辨率（竖屏）
 VIDEO_RESOLUTION = os.environ.get("VIDEO_RESOLUTION", "720x1280")
 
@@ -1004,6 +1022,11 @@ IMAGE_GENERATION_SELECTIONS: dict[str, dict[str, str]] = {
         "provider": "newapi",
         "model": NEWAPI_NANOBANANA2_MODEL,
     },
+    "comfyui_flux2": {
+        "label": "ComfyUI FLUX2 (Local)",
+        "provider": "comfyui",
+        "model": "flux2-klein",
+    },
 }
 
 VISIBLE_IMAGE_GENERATION_SELECTION_KEYS = (
@@ -1011,6 +1034,7 @@ VISIBLE_IMAGE_GENERATION_SELECTION_KEYS = (
     "huimeng_image2_official",
     "newapi_gpt_image2",
     "newapi_nanobanana2",
+    "comfyui_flux2",
 )
 
 LEGACY_IMAGE_GENERATION_SELECTION_ALIASES = {
@@ -1210,6 +1234,12 @@ def _image_provider_config(
             "api_key": gateway.api_key,
             "model": model or NEWAPI_IMAGE_MODEL,
             "base_url": gateway.base_url,
+        }
+    if provider == "comfyui":
+        return {
+            "provider": "comfyui",
+            "api_key": "",  # ComfyUI 本地服务无需 API key
+            "model": model or "flux2-klein",
         }
 
     return {"provider": "google", "api_key": GOOGLE_AI_API_KEY, "model": model or NANOBANANA_MODEL}

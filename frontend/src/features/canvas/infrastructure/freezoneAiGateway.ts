@@ -54,6 +54,7 @@ const SUPPORTED_PROVIDERS = new Set<FreezoneProvider>([
   "huimeng",
   "openai",
   "openrouter",
+  "comfyui",
 ]);
 
 function splitProviderModel(input: string | undefined | null): ProviderModel {

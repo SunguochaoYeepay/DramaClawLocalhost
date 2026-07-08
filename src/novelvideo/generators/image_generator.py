@@ -24,6 +24,12 @@ from novelvideo.config import (
     get_style_preset,
     normalize_character_image_selection,
 )
+
+
+def _is_comfyui_selection(selection_key: str) -> bool:
+    """检查 selection key 是否对应 ComfyUI provider。"""
+    entry = IMAGE_GENERATION_SELECTIONS.get(selection_key)
+    return bool(entry and entry.get("provider") == "comfyui")
 from novelvideo.ports import get_usage_meter
 from novelvideo.shared.billing_errors import is_insufficient_credits_error
 
@@ -1076,6 +1082,10 @@ class MockImageGenerator:
 def create_image_generator(use_mock: bool = False):
     """创建图像生成器。
 
+    根据默认图像生成选择配置自动路由：
+    - comfyui provider → ComfyUIImageGenerator
+    - 其他 → VolcengineImageGenerator
+
     Args:
         use_mock: 是否使用模拟生成器
 
@@ -1084,6 +1094,23 @@ def create_image_generator(use_mock: bool = False):
     """
     if use_mock:
         return MockImageGenerator()
+
+    # 检查默认图像生成选择是否为 ComfyUI
+    from novelvideo.config import (
+        DEFAULT_RENDER_IMAGE_SELECTION,
+        _default_image_generation_selection,
+    )
+
+    try:
+        default_sel = _default_image_generation_selection()
+    except ValueError:
+        default_sel = DEFAULT_RENDER_IMAGE_SELECTION
+
+    if _is_comfyui_selection(default_sel):
+        from novelvideo.generators.comfyui_image import ComfyUIImageGenerator
+
+        print(f"[create_image_generator] Using ComfyUI backend (selection={default_sel})")
+        return ComfyUIImageGenerator()
 
     try:
         return VolcengineImageGenerator()
@@ -1182,6 +1209,34 @@ async def generate_character_reference_unified(
             return []
 
     if model in IMAGE_GENERATION_SELECTIONS:
+        # ComfyUI provider: 使用本地 ComfyUI FLUX2 生成器
+        if _is_comfyui_selection(model):
+            try:
+                from novelvideo.generators.comfyui_image import ComfyUIImageGenerator
+
+                generator = ComfyUIImageGenerator()
+                paths = await generator.generate_character_reference(
+                    character_name=character_name,
+                    appearance_prompt=appearance_prompt,
+                    output_dir=output_dir,
+                    count=count,
+                    style=style,
+                    project_dir=project_dir,
+                )
+                if not paths and raise_on_error:
+                    raise RuntimeError("ComfyUI 角色参考图生成失败")
+                return paths
+            except ImportError as e:
+                print(f"[Character] 无法导入 ComfyUI 生成器: {e}")
+                return []
+            except RuntimeError:
+                raise
+            except Exception as e:
+                print(f"[Character] ComfyUI 生成失败: {e}")
+                if raise_on_error:
+                    raise
+                return []
+
         try:
             from novelvideo.generators.nanobanana_character import NanoBananaCharacterGenerator
 
@@ -1333,6 +1388,58 @@ async def generate_identity_image_unified(
             return False
 
     if model in IMAGE_GENERATION_SELECTIONS:
+        # ComfyUI provider: 使用本地 ComfyUI FLUX2 生成器
+        if _is_comfyui_selection(model):
+            try:
+                from novelvideo.generators.comfyui_image import ComfyUIImageGenerator
+
+                generator = ComfyUIImageGenerator()
+
+                if dry_run:
+                    return {
+                        "success": True,
+                        "prompt": identity_prompt,
+                        "prompt_file": None,
+                    }
+
+                # 收集参考图: portrait + 可选 costume
+                ref_images = []
+                if reference_image_path and os.path.exists(reference_image_path):
+                    ref_images.append(reference_image_path)
+                if costume_image_path and os.path.exists(costume_image_path):
+                    ref_images.append(costume_image_path)
+
+                if ref_images:
+                    result = await generator.generate_with_references(
+                        prompt=identity_prompt,
+                        reference_images=ref_images,
+                        output_path=output_path,
+                        width=768,
+                        height=1024,
+                    )
+                else:
+                    result = await generator.generate(
+                        prompt=identity_prompt,
+                        output_path=output_path,
+                        width=768,
+                        height=1024,
+                    )
+
+                if not result.success:
+                    if raise_on_error:
+                        raise RuntimeError(result.error or "ComfyUI 身份图生成失败")
+                return result.success
+            except ImportError as e:
+                print(f"[Identity] 无法导入 ComfyUI 生成器: {e}")
+                return False
+            except RuntimeError:
+                raise
+            except Exception as e:
+                print(f"[Identity] ComfyUI 生成失败: {e}")
+                if raise_on_error:
+                    raise
+                return False
+
         try:
             from novelvideo.generators.nanobanana_character import NanoBananaCharacterGenerator
 

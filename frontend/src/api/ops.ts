@@ -72,7 +72,8 @@ export async function fetchNodeGenerationHistory(
 export type FreezoneProvider =
   | "openrouter"
   | "huimeng"
-  | "openai";
+  | "openai"
+  | "comfyui";
 
 export interface FreezoneGenCamera {
   /** id from /freezone/image/camera-options.camera_bodies */
