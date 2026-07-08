@@ -120,7 +120,8 @@ class CloudinaryRelay:
         payload = {"folder": self._folder} if self._folder else {}
         url = f"https://api.cloudinary.com/v1_1/{self._cloud_name}/image/upload"
         try:
-            with httpx.Client(timeout=60.0) as client:
+            # Use 180s timeout for large images (e.g., 360° panoramas)
+            with httpx.Client(timeout=180.0) as client:
                 response = client.post(
                     url,
                     data=payload,

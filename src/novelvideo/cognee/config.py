@@ -44,6 +44,18 @@ load_dotenv(project_root / ".env", override=False)
 load_dotenv(override=False)
 
 COGNEE_EMBEDDING_TIMEOUT_SECONDS = float(os.getenv("COGNEE_EMBEDDING_TIMEOUT", "600"))
+
+# 注册非 OpenAI 模型到 tiktoken，避免 "Could not automatically map" 错误
+# DashScope text-embedding-v3 等模型映射到 cl100k_base 编码器
+try:
+    import tiktoken.model
+    # 为已知的非 OpenAI embedding 模型注册映射
+    for _model_name in ("text-embedding-v3", "text-embedding-v2"):
+        if _model_name not in tiktoken.model.MODEL_TO_ENCODING:
+            tiktoken.model.MODEL_TO_ENCODING[_model_name] = "cl100k_base"
+except Exception:
+    pass  # tiktoken 注册失败不阻塞启动
+
 _embedding_gateway_patch_installed = False
 _litellm_embedding_header_patch_installed = False
 _embedding_headers_capture: contextvars.ContextVar[dict[str, str] | None] = (

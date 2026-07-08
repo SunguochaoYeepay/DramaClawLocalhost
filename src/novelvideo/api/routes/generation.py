@@ -1566,6 +1566,28 @@ def _api_video_backend_options() -> list[VideoBackendOption]:
                 reference_audio_max=0 if is_grok_video or is_happyhorse else None,
             )
         )
+
+    # ── 本地 ComfyUI 选项 ──
+    local_options = [
+        VideoBackendOption(
+            value="comfyui",
+            label="Wan2.2 (本地 ComfyUI)",
+            is_default="comfyui" == default_backend,
+            dialogue_only=False,
+            min_duration=2,
+            max_duration=10,
+        ),
+        VideoBackendOption(
+            value="ltx23",
+            label="LTX 2.3 22B (本地 ComfyUI)",
+            is_default="ltx23" == default_backend,
+            dialogue_only=False,
+            min_duration=3,
+            max_duration=10,
+        ),
+    ]
+    backend_options.extend(local_options)
+
     return backend_options
 
 

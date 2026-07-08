@@ -1480,7 +1480,6 @@ async def generate_identity_image_unified(
 
     # Seedream 或其他模型：回退到原来的逻辑（不支持 Identity Locking）
     print(f"[Identity] {model} 不支持 Identity Locking，使用独立生成")
-    import os
     output_dir = os.path.dirname(output_path)
     paths = await generate_character_reference_unified(
         character_name=character_name,

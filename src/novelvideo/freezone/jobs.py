@@ -273,11 +273,10 @@ async def _run_comfyui_gen(
         if reference_paths and len(reference_paths) > 0:
             # Image-to-image with references
             logger.info(f"ComfyUI img2img with {len(reference_paths)} reference(s)")
-            # Load reference images as PIL Images
-            ref_images = [Image.open(path) for path in reference_paths]
+            # Pass file paths directly (not PIL Images)
             result = await comfyui_gen.generate_with_references(
                 prompt=prompt,
-                reference_images=ref_images,
+                reference_images=reference_paths,  # list of file path strings
                 output_path=str(out),
                 width=width,
                 height=height,
