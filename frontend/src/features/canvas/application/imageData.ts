@@ -45,6 +45,9 @@ export const IMAGE_GENERATION_ASPECT_RATIOS = [
   '2:3',
   '4:5',
   '5:4',
+  // 后端 FREEZONE_PRESET_IMAGE_ASPECT_RATIOS 支持 21:9，节点下拉也提供该选项；
+  // 若这里缺失，提交时 snap 会把用户选的 21:9 错吸附成最接近的 16:9（issue #52）。
+  '21:9',
 ] as const;
 
 export const VIDEO_GENERATION_ASPECT_RATIOS = [
@@ -163,19 +166,40 @@ export function resolveImageDisplayUrl(imageUrl: string): string {
   return imageUrl;
 }
 
-// Cross-origin CDN media (absolute http(s)/asset: URL) must be fetched with CORS
-// so the decoded pixels can be drawn to a <canvas> and exported (toBlob /
-// toDataURL) without tainting it. Same-origin / relative `/static/*` paths (the
-// dev vite proxy) deliberately skip it: that origin doesn't echo
-// Access-Control-Allow-Origin, and a same-origin draw is never tainted anyway.
+// 判断字符串是否是可作为 <img src> 渲染的真实图片来源（协议 URL 或本地图片路径）。
+// 脚本表格的「角色图/参考」是后端占位字符串字段，模型常填入 `无` 之类的非 URL 文本，
+// 直接塞进 <img> 会 404 变成裂图；渲染前用它过滤。
+export function isRenderableImageSrc(value: string): boolean {
+  if (!value) {
+    return false;
+  }
+  const lower = value.toLowerCase();
+  if (
+    lower.startsWith('data:') ||
+    lower.startsWith('http://') ||
+    lower.startsWith('https://') ||
+    lower.startsWith('blob:') ||
+    lower.startsWith('asset:') ||
+    lower.startsWith('file://')
+  ) {
+    return true;
+  }
+  return isLikelyLocalImagePath(value);
+}
+
+// Media drawn to a <canvas> that gets exported (toBlob / toDataURL) must be
+// fetched with CORS, otherwise the canvas taints and export throws. This
+// includes relative `/projects/.../media/*` paths: in production the backend
+// 302-redirects them to a presigned OSS URL (see _serve_or_redirect_to_oss),
+// so a no-cors load ends up cross-origin and taints anyway — that only
+// surfaced online, never against the dev vite proxy which streams the bytes
+// same-origin. CORS mode is harmless for true same-origin responses (no
+// Access-Control-Allow-Origin required) and the OSS bucket allows the site
+// origin. Only data:/blob: skip it — they can never taint a canvas.
 // Shared by the <img> loader and the offscreen <video> frame-capture paths.
 export function mediaNeedsCrossOrigin(url: string): boolean {
   const lower = url.toLowerCase();
-  return (
-    lower.startsWith('http://') ||
-    lower.startsWith('https://') ||
-    lower.startsWith('asset:')
-  );
+  return !lower.startsWith('data:') && !lower.startsWith('blob:');
 }
 
 // Cache-busting convention:

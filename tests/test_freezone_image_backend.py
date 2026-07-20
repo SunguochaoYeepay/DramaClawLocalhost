@@ -25,6 +25,7 @@ from novelvideo.api.routes.freezone import (
 )
 from novelvideo.api.schemas import CanvasPayload, PresetCanvasRequest, PushRequest
 from novelvideo.config import NEWAPI_IMAGE_MODEL, OPENAI_IMAGE_MODEL
+from novelvideo.freezone import image_node
 from novelvideo.freezone.presets import (
     build_canvas_payload_from_context,
     canvas_id_for_preset,
@@ -287,6 +288,27 @@ async def test_freezone_reverse_prompt_limit_exception_bubbles_to_global_handler
 
 
 @pytest.mark.asyncio
+async def test_freezone_video_omni_gen_rejects_happyhorse_model(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    _patch_freezone_project(monkeypatch, tmp_path)
+
+    with pytest.raises(HTTPException) as exc:
+        await freezone_routes.freezone_video_omni_gen(
+            project="58",
+            body=freezone_routes.FreezoneVideoOmniGenRequest(
+                prompt="雨夜街头，人物缓慢回头。",
+                model="newapi_happyhorse-1.0",
+            ),
+            user={"username": "admin"},
+        )
+
+    assert exc.value.status_code == 400
+    assert "HappyHorse video does not support omni reference mode" in str(exc.value.detail)
+
+
+@pytest.mark.asyncio
 async def test_freezone_video_start_runtime_error_is_logged(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -353,12 +375,16 @@ def test_freezone_ai_staging_prop_endpoint_returns_ai_prop(monkeypatch, tmp_path
             "scene_id": "面馆",
             "user_hint": "让男青年骑一匹马",
             "crosshair_target": {"position": [1, 0, 2]},
+            "api_key": "must-not-reach-runtime",
+            "base_url": "https://bypass.example/v1",
         },
     )
 
     assert response.status_code == 200
     assert response.json()["data"]["prop"]["shape_hint"] == "quadruped_mount"
     assert captured["user_hint"] == "让男青年骑一匹马"
+    assert "api_key" not in captured
+    assert "base_url" not in captured
 
 
 def test_episode_preset_key_uses_episode_scope() -> None:
@@ -5723,7 +5749,7 @@ async def test_freezone_image_models_returns_selection_keys(
             "provider": "newapi",
             "apiModel": "newapi_gpt_image2",
             "api_model": "newapi_gpt_image2",
-            "label": "DC-Image-2",
+            "label": "LingShan-G2",
         },
         {
             "id": "newapi_nanobanana2",
@@ -5731,7 +5757,7 @@ async def test_freezone_image_models_returns_selection_keys(
             "provider": "newapi",
             "apiModel": "newapi_nanobanana2",
             "api_model": "newapi_nanobanana2",
-            "label": "DC-Banana-2",
+            "label": "LingShan-NB-2",
         },
     ]
 
@@ -6964,3 +6990,27 @@ def test_merge_preserves_pre_release_scene_source_nodes_without_explicit_flag() 
     assert "ref_scene_director_pano_360_1" in node_ids
     assert "ref_scene_3gs_pano_ply_1" in node_ids
     assert "edge_old_scene_to_user" in edge_ids
+
+
+@pytest.mark.asyncio
+async def test_reverse_prompt_uses_shared_freezone_vision_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    image_path = tmp_path / "source.png"
+    Image.new("RGB", (16, 16), color="white").save(image_path)
+    captured: dict[str, object] = {}
+
+    async def fake_call_freezone_vision_model(**kwargs):
+        captured.update(kwargs)
+        return "DC-freezone-vision-LLM", "白色方形主体，极简构图"
+
+    monkeypatch.setattr(
+        image_node,
+        "call_freezone_vision_model",
+        fake_call_freezone_vision_model,
+    )
+
+    prompt = await image_node.reverse_prompt_from_image(image_path=image_path)
+
+    assert prompt == "白色方形主体，极简构图"
+    assert len(captured["images"]) == 1

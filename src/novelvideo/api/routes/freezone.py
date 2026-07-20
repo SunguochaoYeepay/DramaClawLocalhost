@@ -17,7 +17,7 @@ import re
 import shutil
 import uuid
 from pathlib import Path
-from typing import Annotated, Awaitable, Callable, Literal, Optional
+from typing import Annotated, Any, Awaitable, Callable, Literal, Optional
 from urllib.parse import quote, unquote, urlencode, urlsplit
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, UploadFile
@@ -65,6 +65,7 @@ from novelvideo.api.schemas import (
     FreezoneUpscaleRequest,
     FreezoneVideoCharacterLibraryItemRequest,
     FreezoneVideoComposeRequest,
+    FreezoneVideoEditRequest,
     FreezoneVideoEraseRequest,
     FreezoneVideoGenRequest,
     FreezoneVideoOmniGenRequest,
@@ -96,6 +97,7 @@ from novelvideo.freezone.canvas_static_urls import (
 from novelvideo.freezone.history import (
     append_generation_history,
     build_node_history_record,
+    read_canvas_generation_history,
     read_generation_history,
 )
 from novelvideo.freezone.image_node import (
@@ -226,6 +228,7 @@ from novelvideo.freezone.video_node import (
     is_freezone_happyhorse_backend,
     is_freezone_seedance2_backend,
     load_video_character_library,
+    sync_mainline_assets_into_library,
     normalize_freezone_seedance2_scene_optimize,
     normalize_video_aspect_ratio,
     normalize_video_duration_for_backend,
@@ -321,13 +324,18 @@ async def _start_or_enqueue_freezone_video_gen(
     scene_optimize: str | None,
     backend: str,
     last_frame_path: str | None = None,
+    audio_setting: str | None = None,
     canvas_id: str | None = None,
     node_id: str | None = None,
+    model_id: str | None = None,
+    gen_mode: str | None = None,
 ) -> dict:
     payload = {
         "job_id": job_id,
         "canvas_id": canvas_id or "",
         "node_id": node_id or "",
+        "model_id": model_id or "",
+        "gen_mode": gen_mode or "",
         "prompt": prompt,
         "reference_items": reference_items,
         "aspect_ratio": aspect_ratio,
@@ -338,6 +346,7 @@ async def _start_or_enqueue_freezone_video_gen(
         "scene_optimize": normalize_freezone_seedance2_scene_optimize(backend, scene_optimize),
         "backend": backend,
         "last_frame_path": last_frame_path,
+        "audio_setting": audio_setting or "",
         "project_dir": str(project_dir),
     }
     if ctx is not None:
@@ -384,7 +393,7 @@ async def _start_or_enqueue_freezone_image_to_3gs(
     payload = {
         "job_id": job_id,
         "scene_id": scene_id,
-        "source_path": str(source_path),
+        "source_path": source_path.as_posix(),
         "source_kind": source_kind,
         "params": params,
         "project_dir": str(project_dir),
@@ -428,6 +437,8 @@ async def _start_or_enqueue_freezone_gen_job(
     quality: str | None,
     canvas_id: str | None = None,
     node_id: str | None = None,
+    model_id: str | None = None,
+    gen_mode: str | None = None,
     task_display: dict[str, str] | None = None,
 ) -> dict:
     reference_paths = _resolve_url_list(project_dir, reference_urls)
@@ -463,6 +474,8 @@ async def _start_or_enqueue_freezone_gen_job(
                 "quality": quality,
                 "canvas_id": canvas_id or "",
                 "node_id": node_id or "",
+                "model_id": model_id or "",
+                "gen_mode": gen_mode or "",
                 **display_payload,
             },
         )
@@ -1605,7 +1618,7 @@ async def _start_or_enqueue_mainline_director_control_sketch_job(
             "beat_num": int(beat),
             "project_dir": str(project_dir),
             "state_dir": str(ctx.state_dir),
-            "control_frame_path": str(source_path),
+            "control_frame_path": source_path.as_posix(),
             "mode_key": _mainline_mode_key_for_aspect(aspect_ratio, is_sketch=True),
             "aspect_ratio": _normalize_mainline_skill_aspect_ratio(aspect_ratio),
             "canvas_id": canvas_id or "",
@@ -1819,6 +1832,8 @@ async def _start_or_enqueue_freezone_edit_job(
     quality: str | None,
     canvas_id: str | None = None,
     node_id: str | None = None,
+    model_id: str | None = None,
+    gen_mode: str | None = None,
     task_display: dict[str, str] | None = None,
 ) -> dict:
     base_paths = _resolve_url_list(project_dir, [base_url])
@@ -1866,6 +1881,8 @@ async def _start_or_enqueue_freezone_edit_job(
                 "quality": quality,
                 "canvas_id": canvas_id or "",
                 "node_id": node_id or "",
+                "model_id": model_id or "",
+                "gen_mode": gen_mode or "",
                 **display_payload,
             },
         )
@@ -1950,7 +1967,7 @@ async def _start_or_enqueue_freezone_edit_path(
                 "job_id": job_id,
                 "project_dir": str(project_dir),
                 "prompt": prompt,
-                "base_path": str(base_path),
+                "base_path": base_path.as_posix(),
                 "extra_reference_paths": extra_reference_paths,
                 "aspect_ratio": aspect_ratio,
                 "image_size": image_size,
@@ -1999,8 +2016,8 @@ async def _start_or_enqueue_freezone_mask_edit_path(
             payload={
                 "job_id": job_id,
                 "project_dir": str(project_dir),
-                "base_path": str(base_path),
-                "mask_path": str(mask_path),
+                "base_path": base_path.as_posix(),
+                "mask_path": mask_path.as_posix(),
                 "prompt": prompt,
                 "aspect_ratio": aspect_ratio,
                 "image_size": image_size,
@@ -3233,7 +3250,7 @@ def _copy_director_control_bundle_to_mainline(
         if source_path.resolve() != target_path.resolve():
             shutil.copyfile(source_path, target_path)
         rel = target_path.relative_to(project_dir).as_posix()
-        paths[kind] = str(target_path)
+        paths[kind] = target_path.as_posix()
         next_rel_paths[kind] = rel
         urls[kind] = make_static_url_for_context(ctx, rel, local_path=target_path)
 
@@ -3760,7 +3777,7 @@ async def _finalize_skill_run_outputs(
                 item["pushable"] = False
                 item["committed"] = True
                 item["committed_slot_url"] = target_url
-                item["target_path"] = str(target_path)
+                item["target_path"] = target_path.as_posix()
                 item["backup"] = str(backup) if backup else None
                 item["image_adaptation"] = image_adaptation
                 changed = True
@@ -3999,6 +4016,8 @@ async def freezone_gen(
         quality=body.quality,
         canvas_id=body.canvas_id or None,
         node_id=body.node_id or None,
+        model_id=body.model_id or None,
+        gen_mode=body.gen_mode or None,
     )
 
 
@@ -4194,6 +4213,12 @@ async def freezone_ai_staging_prop(
     user: dict = Depends(get_api_user),
 ):
     await _resolve_freezone_project(project, user, required_role="editor")
+    # Product requests always use the edition's effective NewAPI gateway.
+    # Keep low-level overrides available to offline helpers, but never accept
+    # credentials or an endpoint from an HTTP payload.
+    request = dict(request)
+    request.pop("api_key", None)
+    request.pop("base_url", None)
     try:
         result = await _run_ai_staging_prop(request)
     except RuntimeError as exc:
@@ -4776,7 +4801,7 @@ async def freezone_image_to_3gs(
     job_id = _new_job_id()
     if source_kind == "pano":
         params = {
-            "pano_path": str(source_path),
+            "pano_path": source_path.as_posix(),
             "depth_source": "da2",
             "depth_device": "auto",
             "device": "auto",
@@ -4788,7 +4813,7 @@ async def freezone_image_to_3gs(
         }
     else:
         params = {
-            "image_path": str(source_path),
+            "image_path": source_path.as_posix(),
             "source_kind": source_kind,
             "face_name": "front",
             "depth_meters": 8.0,
@@ -5075,7 +5100,7 @@ async def freezone_extract_frames(
         task_type="freezone_extract",
         job_id=job_id,
         payload={
-            "video_path": str(video_path),
+            "video_path": video_path.as_posix(),
             "max_frames": body.max_frames,
             "scene_threshold": body.scene_threshold,
         },
@@ -5117,8 +5142,6 @@ async def freezone_analyze_shots(
         job_id=job_id,
         payload={
             "frame_paths": frame_paths,
-            "provider": body.provider,
-            "model": body.model,
             "analysis_mode": body.analysis_mode,
             "duration_sec": body.duration_sec,
         },
@@ -5153,7 +5176,7 @@ async def freezone_analyze_video_story(
         task_type="freezone_video_story",
         job_id=job_id,
         payload={
-            "video_path": str(video_path),
+            "video_path": video_path.as_posix(),
             "max_frames": body.max_frames,
             "scene_threshold": body.scene_threshold,
             "duration_sec": body.duration_sec,
@@ -6404,7 +6427,7 @@ def _start_freezone_image_reverse_prompt_task(
         "job_id": job_id,
         "canvas_id": canvas_id or "",
         "node_id": node_id or "",
-        "source_path": str(source_path),
+        "source_path": source_path.as_posix(),
     }
     task_manager.create_task(
         task_type,
@@ -6629,7 +6652,7 @@ async def freezone_image_reverse_prompt(
                 task_type="freezone_image_reverse_prompt",
                 job_id=job_id,
                 payload={
-                    "source_path": str(source_path),
+                    "source_path": source_path.as_posix(),
                     "canvas_id": body.canvas_id or "",
                     "node_id": body.node_id or "",
                 },
@@ -6673,30 +6696,146 @@ async def freezone_add_video_character_library_item(
     body: FreezoneVideoCharacterLibraryItemRequest,
     user: dict = Depends(get_api_user),
 ):
-    """视频处理：把上传好的角色参考图登记到视频角色库。"""
+    """视频处理：把上传好的素材登记到资产库（图片/视频/音频）。"""
     ctx, _username, _project_name, project_dir, _output_dir = await _resolve_freezone_project(
         project, user
     )
 
     if not body.name.strip():
         raise HTTPException(400, "name is required")
-    if not body.image_urls:
-        raise HTTPException(400, "image_urls is required (non-empty)")
 
-    for url in body.image_urls:
+    def _require_local(url: str, label: str) -> None:
         try:
             path = resolve_static_url_to_path(url, project_dir)
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from exc
         if not path.exists():
-            raise HTTPException(404, f"character image not found: {path}")
+            raise HTTPException(404, f"{label} not found: {path}")
+
+    if body.media == "video":
+        if not body.video_url:
+            raise HTTPException(400, "video_url is required when media=video")
+        _require_local(body.video_url, "video")
+    elif body.media == "audio":
+        if not body.audio_url:
+            raise HTTPException(400, "audio_url is required when media=audio")
+        _require_local(body.audio_url, "audio")
+    else:
+        if not body.image_urls:
+            raise HTTPException(400, "image_urls is required (non-empty)")
+        for url in body.image_urls:
+            _require_local(url, "image")
 
     item = add_video_character_library_item(
         project_dir,
         name=body.name,
+        media=body.media,
         image_urls=body.image_urls,
+        video_url=body.video_url,
+        audio_url=body.audio_url,
     )
     return {"ok": True, "data": item}
+
+
+@router.post(
+    "/projects/{project}/freezone/video/asset-library/sync-from-mainline",
+    tags=[TAG_FREEZONE_VIDEO],
+)
+async def freezone_sync_asset_library_from_mainline(
+    project: str,
+    user: dict = Depends(get_api_user),
+):
+    """视频处理：把主线的人物/场景/道具参考图与人物语音幂等同步进资产库。
+
+    走稳定合成 id（``mainline:<kind>:<name>``），重复同步只更新 URL、不产生重复。
+    """
+    ctx, _username, _project_name, project_dir, _output_dir = await _resolve_freezone_project(
+        project, user
+    )
+    store = await make_sqlite_store_for_context(ctx)
+
+    def _static_url(abs_path: Path) -> str:
+        if not abs_path.exists():
+            return ""
+        try:
+            rel = abs_path.relative_to(project_dir).as_posix()
+        except ValueError:
+            return ""
+        return make_static_url_for_context(ctx, rel, local_path=abs_path)
+
+    assets: list[dict[str, Any]] = []
+
+    # 人物：肖像 → 图片；参考语音 → 音频
+    for character in store.get_all_characters():
+        name = getattr(character, "name", "") or ""
+        if not name:
+            continue
+        portrait_url = _static_url(canonical_portrait_path(project_dir, name))
+        if portrait_url:
+            assets.append(
+                {
+                    "id": f"mainline:character:{name}",
+                    "name": name,
+                    "media": "image",
+                    "source": "character",
+                    "url": portrait_url,
+                }
+            )
+        # 走全站统一的三级声线级联（身份覆盖 → 年龄段预设 → 角色默认），并让
+        # resolve_character_voice 负责把项目相对/绝对路径解析成真实存在的绝对路径，
+        # 避免这里手拼 project_dir / rel 时对绝对路径拼错、静默丢音。
+        voice = resolve_character_voice(project_dir=project_dir, character=character)
+        if voice.audio_path is not None:
+            voice_url = _static_url(voice.audio_path)
+            if voice_url:
+                assets.append(
+                    {
+                        "id": f"mainline:voice:{name}",
+                        "name": name,
+                        "media": "audio",
+                        "source": "character",
+                        "url": voice_url,
+                    }
+                )
+
+    # 场景：master → 图片
+    scenes = await store.list_scenes()
+    for scene in scenes:
+        name = getattr(scene, "name", "") or ""
+        if not name:
+            continue
+        master_url = _static_url(canonical_scene_master_path(project_dir, name))
+        if master_url:
+            assets.append(
+                {
+                    "id": f"mainline:scene:{name}",
+                    "name": name,
+                    "media": "image",
+                    "source": "scene",
+                    "url": master_url,
+                }
+            )
+
+    # 道具：reference → 图片
+    props = await store.list_props()
+    for prop in props:
+        name = getattr(prop, "name", "") or ""
+        if not name:
+            continue
+        ref_url = _static_url(canonical_prop_reference_path(project_dir, name))
+        if ref_url:
+            assets.append(
+                {
+                    "id": f"mainline:prop:{name}",
+                    "name": name,
+                    "media": "image",
+                    "source": "prop",
+                    "url": ref_url,
+                }
+            )
+
+    library = sync_mainline_assets_into_library(project_dir, assets=assets)
+    return {"ok": True, "data": library, "synced": len(assets)}
 
 
 @router.delete(
@@ -6782,6 +6921,8 @@ async def freezone_video_gen(
             backend=backend,
             canvas_id=body.canvas_id or None,
             node_id=body.node_id or None,
+            model_id=body.model,
+            gen_mode=body.gen_mode,
         )
     except RuntimeError as exc:
         _handle_task_start_runtime_error("failed to start freezone video gen task", exc)
@@ -6831,9 +6972,18 @@ async def freezone_video_i2v(
             "multiple image references currently only support Seedance 2.0 or HappyHorse models",
         )
 
+    # HappyHorse 的「图片参考」(r2v) 与「图生视频」(首帧 i2v) 是两种上游模式，
+    # 唯一能区分单图走哪条的信号就是 gen_mode。参考模式下所有图（含第 1 张）都当
+    # reference_images，绝不打「首帧」——否则单张参考图会被误当 image_url 走 i2v。
+    happyhorse_reference_mode = (
+        is_freezone_happyhorse_backend(backend) and body.gen_mode == "imageReference"
+    )
     reference_items = []
     for idx, path in enumerate(source_paths):
-        role = "首帧" if idx == 0 else "图片参考"
+        if happyhorse_reference_mode:
+            role = "图片参考"
+        else:
+            role = "首帧" if idx == 0 else "图片参考"
         reference_items.append({"type": "image", "path": path, "role": role})
     final_prompt = build_freezone_image_to_video_prompt(
         user_prompt=body.prompt,
@@ -6862,6 +7012,8 @@ async def freezone_video_i2v(
             backend=backend,
             canvas_id=body.canvas_id or None,
             node_id=body.node_id or None,
+            model_id=body.model,
+            gen_mode=body.gen_mode,
         )
     except RuntimeError as exc:
         _handle_task_start_runtime_error("failed to start freezone image-to-video task", exc)
@@ -6937,6 +7089,8 @@ async def freezone_video_keyframes(
             last_frame_path=last_path or None,
             canvas_id=body.canvas_id or None,
             node_id=body.node_id or None,
+            model_id=body.model,
+            gen_mode=body.gen_mode,
         )
     except RuntimeError as exc:
         _handle_task_start_runtime_error("failed to start freezone keyframe video task", exc)
@@ -6966,9 +7120,11 @@ async def freezone_video_omni_gen(
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     is_happyhorse = is_freezone_happyhorse_backend(backend)
-    if not is_freezone_seedance2_backend(backend) and not is_happyhorse:
+    if is_happyhorse:
+        raise HTTPException(400, "HappyHorse video does not support omni reference mode")
+    if not is_freezone_seedance2_backend(backend):
         raise HTTPException(
-            400, "omni video currently only supports Seedance 2.0 or HappyHorse models"
+            400, "omni video currently only supports Seedance 2.0 models"
         )
 
     raw_reference_items = [item.model_dump() for item in body.references]
@@ -6976,17 +7132,6 @@ async def freezone_video_omni_gen(
         validate_omni_reference_limits(raw_reference_items)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
-    if is_happyhorse:
-        image_count = sum(1 for item in raw_reference_items if item.get("type") == "image")
-        video_count = sum(1 for item in raw_reference_items if item.get("type") == "video")
-        audio_count = sum(1 for item in raw_reference_items if item.get("type") == "audio")
-        if audio_count:
-            raise HTTPException(400, "HappyHorse video does not support audio references")
-        if video_count > 1:
-            raise HTTPException(400, "HappyHorse video edit supports at most one video reference")
-        if video_count and image_count > 5:
-            raise HTTPException(400, "HappyHorse video edit supports at most 5 reference images")
-
     reference_items: list[dict[str, str]] = []
     for item in raw_reference_items:
         path_list = _resolve_url_list(project_dir, [str(item.get("url") or "")])
@@ -7027,6 +7172,8 @@ async def freezone_video_omni_gen(
             backend=backend,
             canvas_id=body.canvas_id or None,
             node_id=body.node_id or None,
+            model_id=body.model,
+            gen_mode=body.gen_mode,
         )
     except RuntimeError as exc:
         _handle_task_start_runtime_error("failed to start freezone omni video gen task", exc)
@@ -7037,6 +7184,83 @@ async def freezone_video_omni_gen(
         **response,
         "meta": counts,
     }
+
+
+@router.post("/projects/{project}/freezone/video/video-edit", tags=[TAG_FREEZONE_VIDEO])
+async def freezone_video_edit(
+    project: str,
+    body: FreezoneVideoEditRequest,
+    user: dict = Depends(get_api_user),
+):
+    """视频处理：视频编辑（HappyHorse 视频编辑功能）。
+
+    输入 1 个源视频 + 0-5 张参考图，走上游 video_url + reference_images。
+    """
+    ctx, username, project_name, project_dir, output_dir = await _resolve_freezone_project(
+        project, user
+    )
+
+    if body.camera_template_id and not get_video_camera_template(body.camera_template_id):
+        raise HTTPException(400, f"unknown camera_template_id: {body.camera_template_id}")
+    try:
+        backend = resolve_freezone_video_backend(body.model)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if not is_freezone_happyhorse_backend(backend):
+        raise HTTPException(400, "video edit currently only supports HappyHorse models")
+
+    if not body.video_url.strip():
+        raise HTTPException(400, "video_url is required")
+    video_paths = _resolve_url_list(project_dir, [body.video_url])
+    if not video_paths:
+        raise HTTPException(400, "video_url could not be resolved")
+
+    image_paths = _resolve_url_list(project_dir, list(body.image_urls))
+    if len(image_paths) != len(body.image_urls):
+        raise HTTPException(400, "some image_urls could not be resolved")
+    if len(image_paths) > 5:
+        raise HTTPException(400, "image_urls count must be <= 5")
+
+    reference_items: list[dict[str, str]] = [
+        {"type": "video", "path": video_paths[0], "role": "视频编辑源"}
+    ]
+    for path in image_paths:
+        reference_items.append({"type": "image", "path": path, "role": "图片参考"})
+
+    final_prompt = build_freezone_image_to_video_prompt(
+        user_prompt=body.prompt,
+        camera_template_id=body.camera_template_id,
+        marks=[item.model_dump() for item in body.marks],
+        reference_image_count=len(image_paths),
+    )
+    job_id = _new_job_id()
+
+    try:
+        return await _start_or_enqueue_freezone_video_gen(
+            ctx=ctx,
+            username=username,
+            project=project_name,
+            project_dir=project_dir,
+            output_dir=output_dir,
+            job_id=job_id,
+            prompt=final_prompt,
+            reference_items=reference_items,
+            aspect_ratio=normalize_video_aspect_ratio(body.aspect_ratio),
+            resolution=normalize_video_resolution_for_backend(backend, body.resolution),
+            duration_seconds=normalize_video_duration_for_backend(backend, body.duration_seconds),
+            generate_audio=body.generate_audio,
+            human_review=body.human_review,
+            scene_optimize=None,
+            backend=backend,
+            audio_setting=body.audio_setting,
+            canvas_id=body.canvas_id or None,
+            node_id=body.node_id or None,
+            model_id=body.model,
+            gen_mode=body.gen_mode,
+        )
+    except RuntimeError as exc:
+        _handle_task_start_runtime_error("failed to start freezone video edit task", exc)
+        raise HTTPException(503, f"failed to start freezone video edit task: {exc}") from exc
 
 
 @router.post(
@@ -7079,7 +7303,7 @@ async def freezone_video_erase(
                 task_type="freezone_video_erase",
                 job_id=job_id,
                 payload={
-                    "source_path": str(source_path),
+                    "source_path": source_path.as_posix(),
                     "mode": body.mode,
                     "box_x": body.box_x,
                     "box_y": body.box_y,
@@ -7146,7 +7370,7 @@ async def freezone_video_upscale(
                 task_type="freezone_video_upscale",
                 job_id=job_id,
                 payload={
-                    "source_path": str(source_path),
+                    "source_path": source_path.as_posix(),
                     "resolution": body.resolution,
                     "frame_interpolation": body.frame_interpolation,
                     "denoise_strength": body.denoise_strength,
@@ -7214,7 +7438,7 @@ async def freezone_audio_separate(
                 task_type="freezone_audio_separate",
                 job_id=job_id,
                 payload={
-                    "source_path": str(source_path),
+                    "source_path": source_path.as_posix(),
                     "target_episode": body.target_episode,
                     "target_beat": body.target_beat,
                 },
@@ -7491,6 +7715,8 @@ async def freezone_edit(
         quality=body.quality,
         canvas_id=body.canvas_id or None,
         node_id=body.node_id or None,
+        model_id=body.model_id or None,
+        gen_mode=body.gen_mode or None,
     )
 
 
@@ -9959,6 +10185,56 @@ async def get_node_generation_history(
             project_dir=project_dir,
             canvas_id=canvas_id,
             node_id=node_id,
+            limit=limit,
+        )
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    records = [
+        sanitize_project_local_paths_in_memory(
+            migrate_canvas_static_urls_in_memory(
+                record,
+                project_id=ctx.project_id,
+                owner_username=ctx.owner_username,
+                project_name=ctx.project_name,
+                project_dir=project_dir,
+            )
+            or record,
+            project_id=ctx.project_id,
+            project_dir=project_dir,
+        )
+        or record
+        for record in records
+    ]
+    return {"ok": True, "data": {"records": records}}
+
+
+@router.get(
+    "/projects/{project}/freezone/canvases/{canvas_id}/generation-history",
+    tags=[TAG_FREEZONE_CANVAS],
+)
+async def get_canvas_generation_history(
+    project: str,
+    canvas_id: str,
+    limit: int = Query(500, ge=1, le=2000),
+    user: dict = Depends(get_api_user),
+):
+    """Return every node's recorded generation attempts for a whole canvas.
+
+    Aggregates across all nodes (newest first), including nodes that were deleted
+    from the canvas — their history files persist, so their past attempts stay
+    recoverable in the history browser.
+    """
+    if not CANVAS_ID_RE.match(canvas_id):
+        raise HTTPException(400, "invalid canvas_id")
+    ctx, _username, _project_name, project_dir, _output_dir = await _resolve_freezone_project(
+        project,
+        user,
+        required_role="viewer",
+    )
+    try:
+        records = read_canvas_generation_history(
+            project_dir=project_dir,
+            canvas_id=canvas_id,
             limit=limit,
         )
     except ValueError as exc:

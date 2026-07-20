@@ -147,6 +147,8 @@
         "asgardHorns": "For the realm",
         "garySnail": "Little snail pal",
         "captainShield": "Guard you well",
+        "lubanCompass": "Luban Compass",
+        "lubanTalisman": "Mechanism Talisman",
         "redCape": "Guardian cape",
         "ufoPet": "Interstellar Voyage",
         "ghostPet": "Lulu"
@@ -181,6 +183,8 @@
         "asgardHorns": "For the realm!",
         "garySnail": "Slow wins!",
         "captainShield": "I guard you!",
+        "lubanCompass": "Compass active!",
+        "lubanTalisman": "Mechanism sealed!",
         "redCape": "Pick me!",
         "ufoPet": "Bilu kala wugulu!",
         "ghostPet": "Hello there"
@@ -310,27 +314,14 @@
     "waiting": "Waiting for chat service...",
     "waitingResponse": "Waiting for Xia Director",
     "waitingResponses": [
-      "Xia Director is checking the storyboard",
-      "Xia Director is tracing the plot",
-      "Xia Director is tuning the rhythm",
-      "Xia Director is aligning the setup",
-      "Xia Director is sorting the ideas",
-      "Xia Director is reviewing the task",
-      "Xia Director is shaping the shot",
-      "Xia Director is reading character motives",
-      "Xia Director is filling the context",
-      "Xia Director is finding the key clue",
-      "Xia Director is cutting the noise",
-      "Xia Director is calibrating the direction",
-      "Xia Director is breaking down the request",
-      "Xia Director is composing the reply",
-      "Xia Director is checking project state",
-      "Xia Director is handling the creative room",
-      "Xia Director is turning ideas into steps",
-      "Xia Director is blocking the scene",
-      "Xia Director is picking the essentials",
-      "Xia Director is catching the spark"
+      "Understanding what you want to move forward",
+      "Reviewing the current conversation context",
+      "Identifying the key points in your request",
+      "Organizing the relevant information",
+      "Structuring a clearer response"
     ],
+    "waitingLongResponse": "This is taking longer than usual, but it is still in progress",
+    "waitingVeryLongResponse": "Still waiting for a response. You can keep waiting or stop",
     "send": "Send",
     "queueMessage": "Queue message",
     "queuedCount": "{{count}} queued",
@@ -512,11 +503,12 @@
     "switchProject": "Switch Project",
     "allProjects": "All Projects",
     "collapse": "Collapse",
-    "collapseSidebar": "Collapse sidebar",
-    "expandSidebar": "Expand sidebar",
     "creation": "Creation",
     "production": "Production",
     "tools": "Tools",
+    "creationMode": "Creation Mode",
+    "xiaji": "Series",
+    "xiajiMenu": "Series Menu",
     "ingest": "Story Source",
     "assets": "Asset Library",
     "characters": "Characters",
@@ -867,7 +859,8 @@
       "open": "View business WeChat QR code",
       "qrAlt": "Business WeChat QR code",
       "title": "Add Business WeChat",
-      "subtitle": "Account access / User guide"
+      "subtitle": "Account access / User guide",
+      "note": "For partnerships, please add a note — we'll prioritize your request"
     },
     "stage": {
       "eyebrow": "Drama creation platform",
@@ -942,6 +935,14 @@
       "unmute": "Unmute",
       "fullscreen": "Fullscreen",
       "exitFullscreen": "Exit fullscreen"
+    },
+    "download": {
+      "label": "Desktop",
+      "primary": {
+        "mac": "macOS",
+        "windows": "Windows"
+      },
+      "aria": "Download the desktop app"
     }
   },
   "project": {
@@ -958,6 +959,7 @@
     "nameExistsDeleted": "A project with this name is in Trash. Restore or permanently delete it before creating a new one.",
     "noProjects": "No projects yet. Click to create one.",
     "dashboardTitle": "Project Management Center",
+    "dashboardReturn": "Back to Project Management",
     "dashboardSubtitle": "Manage your drama productions and scripts.",
     "emptyTitle": "Start your first story",
     "emptyDescription": "Create a project to begin scripting, generating sketches, and producing episodes.",
@@ -1267,6 +1269,7 @@
     "stop": "Stop",
     "reupload": "Re-upload",
     "regenerate": "Regenerate",
+    "generateNew": "Generate new",
     "regenerateSelected": "Regenerate Selected",
     "preview": "Preview",
     "cutToPool": "Cut to Pool",
@@ -1280,6 +1283,7 @@
     "use": "Use",
     "confirmExecute": "Confirm",
     "refresh": "Refresh",
+    "refreshDone": "Done",
     "preparing": "Preparing...",
     "removed": "(removed)",
     "new": "NEW",
@@ -1299,6 +1303,8 @@
     "subtitle": "Upload a script and start your creative journey.",
     "dropzoneHint": "Click or drop your novel file here",
     "supportedFormats": "Supports .txt / .md / .docx · up to 10MB",
+    "uploadingTitle": "Uploading novel…",
+    "uploadingHint": "Please stay on this page until the upload finishes. It may take a moment on a slow connection.",
     "inputMode": {
       "upload": "Upload Novel",
       "paste": "Paste Text"
@@ -1340,6 +1346,8 @@
     "restoredFilename": "Imported novel",
     "statFilename": "Filename",
     "statTotalChars": "Total chars",
+    "statBillableChars": "Billable chars",
+    "creditPerChars": "{{credits}} per {{chars}} chars",
     "statChaptersDetected": "Chapters detected",
     "statEpisodesEstimated": "Estimated episodes",
     "episodesUnit": "eps",
@@ -1347,17 +1355,23 @@
     "tableTitle": "Title",
     "tableCharCount": "Words",
     "moreChapters": "… and {{count}} more chapter(s)",
-    "reimportWarning": "Re-importing will clear the existing graph and rebuild.",
     "reuploadConfirm": {
       "title": "Confirm re-import",
       "description": "Re-importing will rebuild the graph and may affect downstream pipeline results such as characters, episodes, scripts, and videos. Are you sure you want to re-import the novel/script?",
       "confirm": "Confirm re-import"
     },
     "logsPanel": "Import log",
+    "logCompleted": "Import complete",
     "fileDeleted": "File removed",
     "buildHint": "Build the semantic graph, then construct characters and episodes on their respective pages.",
     "emptyPreview": "No content to preview yet. Upload a file to see the structure.",
     "chapterTitleFallback": "Chapter {{n}}",
+    "novelFormat": {
+      "button": "Novel format",
+      "title": "Premium drama format",
+      "specLabel": "Standard format",
+      "exampleLabel": "Example excerpt"
+    },
     "projectType": "Project type",
     "projectTypeLocked": "Project type is locked after import. Re-import to switch.",
     "projectTypes": {
@@ -1464,7 +1478,8 @@
       "single_video": "Single video",
       "global_optimize_video": "Global optimize video",
       "selected_regen": "Selected regen",
-      "compose_episode": "Video compose"
+      "compose_episode": "Video compose",
+      "freezone_image_reverse_prompt": "Image reverse prompt"
     }
   },
   "taskCenter": {
@@ -1852,7 +1867,8 @@
         "identitiesNotPlanned": "Episode identities not planned. Go to Script page to configure.",
         "propsNotPlanned": "Episode props not planned. Go to Script page to configure.",
         "more": "More",
-        "saveFailed": "Save failed"
+        "saveFailed": "Save failed",
+        "noSceneVariant": "No variant"
       },
       "insertManual": {
         "titleBeforeFirst": "Insert manual shot before first beat",
@@ -1886,7 +1902,12 @@
         "identitiesPlaceholder": "Comma-separated (e.g. {{example}}); leave blank to auto-detect from visual description",
         "identitiesPlaceholderEmpty": "Comma-separated identity IDs; leave blank to auto-detect",
         "submit": "Insert",
-        "success": "Manual shot inserted"
+        "success": "Manual shot inserted",
+        "sceneVariant": "Variant",
+        "noSceneVariant": "No variant",
+        "props": "Props",
+        "propsPlaceholder": "Comma-separated (e.g. {{example}}); leave blank to auto-detect from visual description",
+        "propsPlaceholderEmpty": "Comma-separated prop IDs; leave blank to auto-detect"
       },
       "audio": {
         "narrationEmpty": "Narration is empty — this beat cannot generate audio. Fill in text first.",
@@ -2010,6 +2031,7 @@
         },
         "seedance2GeneratePrompt": "AI optimize",
         "seedance2PromptGenerated": "Seedance2 prompt optimized",
+        "seedance2PromptGeneratedOtherBeat": "Subject prompt optimized and saved back to beat #{{n}}",
         "seedance2PromptGenerateFailed": "Seedance2 prompt generation failed",
         "videoPrompt": "Video prompt",
         "keyframePrompt": "Single-beat video prompt",
@@ -2167,6 +2189,7 @@
         "cutFailed": "Grid cut failed"
       },
       "render": {
+        "generateNew": "Generate new",
         "switched": "Render switched",
         "switchFailed": "Switch failed",
         "forcedUse": "Force-applied this render",
@@ -2200,7 +2223,8 @@
         "backgroundUploaded": "Render background reference uploaded",
         "backgroundUploadFailed": "Failed to upload render background reference",
         "backgroundSaved": "Render background reference switched",
-        "backgroundSaveFailed": "Failed to save render background reference"
+        "backgroundSaveFailed": "Failed to save render background reference",
+        "backgroundCropSave": "Save crop"
       },
       "renderGrid": {
         "title": "Render Grid",
@@ -2353,6 +2377,12 @@
         "faceScore": "Face {{score}}",
         "clothingScore": "Clothing {{score}}",
         "jumpBeat": "Jump to beat {{n}}"
+      },
+      "actionPanel": {
+        "episodeFreezone": "Episode canvas",
+        "episodeFreezoneTooltip": "Open this episode's assets in the canvas",
+        "episodeFreezoneOpened": "Episode canvas opened",
+        "episodeFreezoneOpenFailed": "Failed to open the episode canvas"
       }
     },
     "state": {
@@ -2521,8 +2551,11 @@
     "projectDefault": "Project default",
     "preset": "Preset",
     "custom": "Custom",
-    "customPreviewUnavailable": "Server preview not yet available for custom styles",
-    "customPreviewHint": "Pending backend: POST /styles/{id}/preview/generate",
+    "customPreviewEmpty": "No uploaded reference image",
+    "uploadedPreview": "Uploaded reference preview",
+    "analyzingPreview": "Analyzing reference image…",
+    "styleIdRequiredBeforeUpload": "Enter a style ID before uploading a reference image",
+    "unsupportedPreviewType": "Use a PNG, JPEG, WebP, or GIF image.",
     "jsonFormatError": "Invalid JSON",
     "jsonChangesApplied": "JSON changes applied",
     "styleSaved": "Style saved",
@@ -2563,7 +2596,8 @@
     "noStylesAvailable": "No styles available. Click top-right to create.",
     "paramsExtracted": "Style params extracted",
     "idNameRequired": "Enter ID and name",
-    "styleCreated": "Style created"
+    "styleCreated": "Style created",
+    "renameTitle": "Rename Style"
   },
   "identityPicker": {
     "title": "Select Character Identities",
@@ -2681,7 +2715,9 @@
       "lock": "Lock Canvas",
       "unlock": "Unlock Canvas",
       "organize": "Organize / Locate Canvas",
-      "organizeShortcut": "⌥⇧F"
+      "organizeShortcut": "⌥⇧F",
+      "hideEdges": "Hide connections",
+      "showEdges": "Show connections"
     },
     "quickbar": {
       "addNode": "Add Node",
@@ -2716,7 +2752,12 @@
       "pause": "Pause",
       "use": "Use",
       "delete": "Delete",
-      "promptTitle": "Prompt"
+      "promptTitle": "Prompt",
+      "batchDownload": "Download",
+      "batchUse": "Use",
+      "selectAll": "Select all",
+      "deselectAll": "Deselect all",
+      "downloading": "Downloading…"
     },
     "shortcuts": {
       "title": "Shortcuts",
@@ -3246,8 +3287,10 @@
         "textToVideo": "Text to Video",
         "allReference": "All Reference",
         "imageToVideo": "Image to Video",
+        "firstFrame": "First Frame",
         "firstLastFrame": "First/Last Frame",
-        "imageReference": "Image Reference"
+        "imageReference": "Image Reference",
+        "videoEdit": "Video Edit"
       },
       "placeholder": "Describe the video to generate.",
       "submit": "Submit",
@@ -3297,6 +3340,12 @@
           "redo": "Redo",
           "reset": "Reset"
         }
+      },
+      "player": {
+        "play": "Play",
+        "pause": "Pause",
+        "mute": "Mute",
+        "unmute": "Unmute"
       }
     }
   },
@@ -3622,7 +3671,8 @@
         "actor": "Actor",
         "prop": "Prop",
         "staging": "Staging"
-      }
+      },
+      "actorColor": "Actor color"
     }
   },
   "split": {
@@ -3643,10 +3693,19 @@
   "settings": {
     "title": "Settings",
     "close": "Close",
+    "navigationLabel": "Settings categories",
+    "statusConfigured": "{{page}} is configured",
+    "statusNotConfigured": "{{page}} is not configured",
+    "secretSavedBadge": "Saved",
+    "secretSavedPlaceholder": "Saved · {{preview}} (enter a new value to replace)",
+    "pages": {
+      "models": "Models & Channels",
+      "storage": "Media Storage"
+    },
     "modelConfig": {
       "title": "Model Config",
       "description": "Choose a model gateway channel: the platform official gateway, or your own local NewAPI.",
-      "baseUrlHint": "The server can also pin this value via the NEWAPI_BASE_URL environment variable.",
+      "baseUrlHint": "The CE runtime configures the Local NewAPI URL automatically.",
       "effectiveBadge": "Active: {{channel}}",
       "loading": "Loading…",
       "requestFailed": "Request failed, please retry.",
@@ -3654,10 +3713,10 @@
       "statusNotConfigured": "Not configured",
       "statusActive": "Active",
       "gatewayWarningIconLabel": "Model gateway is not configured",
-      "gatewayNotConfiguredImpact": "The active model gateway is not configured. Text, image, video, and audio model calls will fail; configure the official channel or custom NewAPI before generating content.",
+      "gatewayNotConfiguredImpact": "The active model gateway is not configured. Text, image, video, and audio model calls will fail; configure the official channel or initialize Local NewAPI before generating content.",
       "modes": {
         "official": "Official",
-        "custom": "Custom NewAPI"
+        "custom": "Local NewAPI"
       },
       "fields": {
         "baseUrl": "New API URL",
@@ -3668,30 +3727,36 @@
         "adminUsername": "Admin Username"
       },
       "official": {
-        "description": "Enter the platform official gateway URL and API Key, then save. You may enter the root domain or the full /v1 URL.",
+        "description": "Enter the platform official channel API Key, then save.",
         "save": "Save & Enable",
         "enable": "Switch to Official",
         "saved": "Saved and switched to the official channel.",
         "enabled": "Switched to the official channel.",
-        "missingFields": "Please fill in the gateway URL and API Key.",
+        "missingFields": "Please fill in the API Key.",
         "registerLink": "Register at RelayClaw"
       },
       "custom": {
-        "description": "Enter your local NewAPI URL and database settings, then initialize. The backend connects the DB, creates a token, writes the config, and switches to the custom channel.",
-        "init": "Initialize",
-        "initialized": "Initialized and switched to the custom channel.",
+        "description": "CE uses a local SQLite-backed NewAPI. DramaClaw connects the database, creates a runtime token, and enables the local channel automatically.",
+        "init": "Initialize Local NewAPI",
+        "repair": "Check & Repair",
+        "initialized": "Local NewAPI is ready.",
+        "localStatusTitle": "Local NewAPI",
+        "localReady": "Runtime token configured",
+        "localNeedsInit": "Initialization required",
+        "sqliteReady": "The SQLite database is ready; no database path configuration is required.",
+        "sqliteWaiting": "Waiting for the local NewAPI service to create its SQLite database.",
         "databaseTitle": "NewAPI Database",
         "databaseDescription": "Used to find the admin user and fill access_token; for SQLite use sqlDsn=local plus an existing one-api.db absolute path.",
         "databaseConfigured": "Database configured",
         "databaseNotConfigured": "Database not configured",
         "setupAdminTitle": "First-time Admin Setup",
-        "setupAdminDescription": "Leave this empty if your NewAPI instance is already initialized. If it is fresh, enter an admin password and the backend will call your NewAPI /api/setup endpoint to create the admin user.",
+        "setupAdminDescription": "If Local NewAPI is new, set a password for the root administrator. If it is already initialized, leave this empty and run the check.",
         "setupPassword": "Setup Password",
         "setupConfirmPassword": "Confirm Password",
         "setupPasswordPlaceholder": "At least 8 characters",
         "setupConfirmPasswordPlaceholder": "Enter it again",
         "setupPasswordOnlyOnce": "This username and password are sent to your NewAPI instance only when creating the first admin on a fresh NewAPI install. If NewAPI is already initialized, entering a password here will not change the existing admin password. DramaClaw does not save the password or use it for later operations; keep it for logging into the NewAPI admin console after first-time setup.",
-        "setupRequired": "This NewAPI instance has not been initialized yet. Enter the admin username, setup password, and confirmation here, then initialize again.",
+        "setupRequired": "Local NewAPI has not been initialized yet. Enter the setup password and confirmation, then try again.",
         "setupAlreadyInitializedPasswordIgnored": "Your NewAPI instance is already initialized. This run did not call the NewAPI setup endpoint and did not change the existing admin password; the password you entered was ignored and cleared.",
         "setupPasswordMissingUsername": "Enter the admin username.",
         "setupPasswordIncomplete": "Enter both the setup password and confirmation.",
@@ -3699,8 +3764,8 @@
         "setupPasswordMismatch": "The setup passwords do not match."
       },
       "featureModels": {
-        "title": "Text Model Mapping",
-        "description": "Assign upstream models to text / LLM features; falls back to the backend default when unset.",
+        "title": "Business Model Mapping",
+        "description": "Assign upstream models to text understanding, content generation, and vision understanding features. Unset features use backend defaults.",
         "channelsTitle": "Provider Channels",
         "channelsDescription": "Add only the providers you need, then configure the upstream key and optional Base URL override. Each provider can be added once.",
         "addChannel": "Add Channel",
@@ -3736,50 +3801,47 @@
         "noMappings": "Fill in an upstream model name for at least one feature first.",
         "missingBaseUrl": "Fill in the New API URL first.",
         "missingKeys": "Missing upstream key for: {{providers}}",
-        "textModelsTitle": "Text-only Models",
-        "multimodalModelsTitle": "Multimodal Models",
+        "textModelsTitle": "Text Understanding & Generation",
+        "multimodalModelsTitle": "Vision Understanding Models",
         "visionRequiredHint": "This feature sends images to the upstream model. Choose a multimodal model that supports image input / vision understanding; text-only models may fail at runtime.",
+        "multimodalRequiredBadge": "Multimodal required",
+        "cogneeDescription": "Novel import and knowledge retrieval require both an understanding model and an embedding model; together they form the Cognee novel knowledge base.",
         "groups": {
-          "chat": "Chat / Hermes",
-          "shot": "Shot Page",
-          "sketch": "Sketch",
-          "episode": "Episode Detail",
-          "sceneLibrary": "Scene Library",
-          "freezone": "Freezone",
-          "style": "Style Page",
-          "contentRewrite": "Content Rewrite",
-          "screenplay": "Screenplay Normalize",
-          "assetCompile": "2.0 Asset Compile",
-          "directorWorld": "DirectorWorld",
-          "novelImport": "Novel Import"
+          "xiahua": "XiaHua",
+          "xialiao": "XiaLiao",
+          "xiatan": "XiaTang",
+          "xiajing": "XiaJing",
+          "xiadao": "XiaDao",
+          "xiage": "XiaGe",
+          "novelImport": "XiaLiao · Novel Knowledge Base (Cognee)"
         },
         "features": {
-          "HERMES": "Hermes chat model",
-          "GLOBAL_VIDEO_OPTIMIZER": "AI prompt optimization",
-          "SEEDANCE2_PROMPT_COMPOSER": "Seedance 2.0 panel / AI optimize",
-          "GLOBAL_VIDEO_IDENTITY_DETECTOR": "AI identity & prop color detection",
-          "IDENTITY_PLANNER_CAST": "AI plan identities / cast selection",
-          "IDENTITY_PLANNER_ANALYSIS": "AI plan identities / default & other analysis",
-          "IDENTITY_PLANNER_APPEARANCE": "AI plan identities / new costume description",
-          "LITERAL_BEAT_META": "Line-by-line generation",
-          "EPISODE_SCENE_PLANNER": "Plan scenes",
-          "EPISODE_PROP_PLANNER": "Plan props",
-          "SCENE_BUILD": "Build from graph / scene parse & environment_prompt",
+          "HERMES": "AI Director chat model",
+          "GLOBAL_VIDEO_OPTIMIZER": "Optimize video prompts from visuals",
+          "SEEDANCE2_PROMPT_COMPOSER": "Compose video generation prompts",
+          "GLOBAL_VIDEO_IDENTITY_DETECTOR": "Detect character and prop markers in sketches",
+          "IDENTITY_PLANNER_CAST": "Plan the episode cast",
+          "IDENTITY_PLANNER_ANALYSIS": "Analyze character identities",
+          "IDENTITY_PLANNER_APPEARANCE": "Generate identity-specific character looks",
+          "LITERAL_BEAT_META": "Split and annotate shots line by line",
+          "EPISODE_SCENE_PLANNER": "Plan episode scenes",
+          "EPISODE_PROP_PLANNER": "Plan episode props",
+          "SCENE_BUILD": "Analyze and enrich scene descriptions",
           "FREEZONE_TRANSLATION": "Prompt zh/en translation",
           "FREEZONE_STORY_SCRIPT": "Story script generation",
-          "STYLE_ANALYZER": "Create custom style from reference image",
-          "CONTENT_REWRITER": "Rewrite text into short-video voiceover lines",
-          "SCREENPLAY_NORMALIZER": "Screenplay normalization",
-          "EPISODE_SCENE_RECONCILE": "Base scene asset reconcile",
-          "NARRATED_SCENE_ASSET": "Narrated drama scene asset planning",
-          "STAGING_PROP": "Freezone AI staging prop planning",
-          "COGNEE": "LLM for cognify / memify"
+          "FREEZONE_VISION": "Image and video content analysis",
+          "STYLE_ANALYZER": "Analyze a custom style from reference images",
+          "CONTENT_REWRITER": "Rewrite source text as short-video voiceover",
+          "SCREENPLAY_NORMALIZER": "Parse scene structure during screenplay import",
+          "EPISODE_SCENE_RECONCILE": "Reconcile and complete base scene assets",
+          "NARRATED_SCENE_ASSET": "Plan narrated-drama scene assets",
+          "STAGING_PROP": "Plan temporary Director World props",
+          "COGNEE": "① Content Understanding & Knowledge Extraction (LLM)"
         }
       },
       "embeddingModel": {
-        "title": "Embedding Model",
-        "description": "Embedding model used by novel import / Cognee vector search. The internal model name is fixed as DC-cognee-embedding; choose a channel, enter the upstream model, vector dimension, and optional batch size.",
-        "colInternalModel": "Internal Model",
+        "title": "② Vectorization & Semantic Search (Embedding)",
+        "description": "Vectorizes text for semantic knowledge-base search. Choose a channel and upstream Embedding model; the dimension must match the actual upstream output.",
         "colProvider": "Configured Channel",
         "colUpstreamModel": "Upstream Model",
         "colDimension": "Dimension",
@@ -3799,7 +3861,7 @@
         "invalidBatchSize": "Enter a valid embedding batch size."
       },
       "mediaModels": {
-        "title": "Image / Video / Audio Models",
+        "title": "Image / Video / Audio Generation Models",
         "description": "These models are already adapted by the backend. Fixed model names cannot be changed; choose a channel and optionally fill the upstream model used as the NewAPI model_mapping value. Empty values default to the fixed model name. Models ending in -value are official-channel only.",
         "colType": "Type",
         "colModel": "Fixed Model",

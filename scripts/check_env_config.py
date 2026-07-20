@@ -112,14 +112,20 @@ COMMON_REVERSE_ENV_ALLOWLIST: tuple[tuple[re.Pattern[str], str], ...] = (
         ),
         "Local runtime/dev override with code default; not required in committed templates.",
     ),
-    (
-        re.compile(r"^MODEL_GATEWAY_RUNTIME_VERSION$"),
-        "Internal process-memory marker written by refresh_model_gateway_runtime() "
-        "(src/novelvideo/model_gateway_runtime.py) to coordinate credential refresh; "
-        "never operator-set, so absent from templates by design.",
-    ),
 )
 CE_REVERSE_ENV_ALLOWLIST: tuple[tuple[re.Pattern[str], str], ...] = (
+    (
+        re.compile(r"^NEWAPI_(?:API_KEY|BASE_URL)$"),
+        "EE deployment credentials read by shared CE/EE gateway code; CE dynamic "
+        "credentials live in settings.db and intentionally omit these variables.",
+    ),
+    (
+        re.compile(
+            r"^NEWAPI_(?:SQL_DSN|SQLITE_PATH|ADMIN_USERNAME)$"
+        ),
+        "Advanced NewAPI provisioner overrides; CE launchers and the self-hosted compose "
+        "supply managed SQLite values, so these are intentionally absent from the public template.",
+    ),
     (
         re.compile(
             r"^(?:ST_CONTROL_PLANE_DSN|ST_REDIS_URL|ST_TASK_BACKEND|ST_COOKIE_SECURE|ST_WORKER_.*)$"

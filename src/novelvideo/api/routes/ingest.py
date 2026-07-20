@@ -6,7 +6,11 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, UploadFile
 
 from novelvideo.api.auth import get_api_user, require_scope
-from novelvideo.api.chapter_preview import build_chapter_preview, load_novel_text
+from novelvideo.api.chapter_preview import (
+    build_chapter_preview,
+    count_billable_novel_chars,
+    load_novel_text,
+)
 from novelvideo.api.deps import resolve_project_scope
 from novelvideo.api.schemas import IngestStart
 from novelvideo.project_config import (
@@ -88,7 +92,11 @@ async def upload_novel(
         return {"ok": False, "error": "解析章节失败"}
 
     has_chapters = bool(preview.get("chapters"))
-    format_check = build_import_format_check(content, has_chapters=has_chapters)
+    format_check = build_import_format_check(
+        content,
+        has_chapters=has_chapters,
+        chapters=preview.get("chapters"),
+    )
     if not has_chapters:
         return {
             "ok": False,
@@ -123,6 +131,24 @@ async def start_ingest(
     if not novel_path.exists():
         return {"ok": False, "error": f"File '{body.filename}' not found in uploads/"}
 
+    try:
+        billable_chars = count_billable_novel_chars(load_novel_text(novel_path))
+    except DocumentParseError as exc:
+        return {
+            "ok": False,
+            "error": f"解析章节失败: {exc}",
+            "error_type": "parse",
+            "format": exc.source_format,
+            "detail": str(exc),
+        }
+    except Exception:
+        logger.warning(
+            "[%s] failed to parse uploaded novel for billing",
+            project,
+            exc_info=True,
+        )
+        return {"ok": False, "error": "解析章节失败"}
+
     config = {"rebuild": body.rebuild}
     if body.spine_template is not None:
         if not body.rebuild:
@@ -141,7 +167,14 @@ async def start_ingest(
             task_type="ingest_fast",
             queue_kind="default",
             episode=0,
-            payload={"novel_path": str(novel_path), "config": config},
+            payload={
+                "novel_path": str(novel_path),
+                "config": config,
+                "billing": {
+                    "billable_chars": billable_chars,
+                    "billing_quantity": billable_chars,
+                },
+            },
         )
         return {
             "ok": True,

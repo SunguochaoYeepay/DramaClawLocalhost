@@ -106,6 +106,7 @@ import {
 } from "@/lib/character-main-copy";
 import type { FreezonePresetCanvasRequest } from "@/api/canvas";
 import { Button } from "@/components/ui/button";
+import { SUBTLE_HEADER_ACTION_BUTTON_CLASS } from "@/components/ui/header-action-styles";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -589,7 +590,7 @@ function CharactersPageHeader({
               variant="outline"
               size="sm"
               onClick={onAdd}
-              className="h-8 gap-1.5 rounded-[8px] border-white/10 bg-transparent px-3 text-xs font-normal shadow-none hover:bg-white/[0.04] dark:bg-transparent"
+              className={SUBTLE_HEADER_ACTION_BUTTON_CLASS}
             >
               <Plus className="size-3.5" />
               {t("characters.addCharacter")}
@@ -598,11 +599,15 @@ function CharactersPageHeader({
               size="sm"
               onClick={onRebuild}
               disabled={rebuildDisabled}
-              className="h-8 gap-1.5 rounded-[8px] px-3 text-xs font-normal shadow-none hover:bg-primary/85"
+              className="h-8 gap-1.5 rounded-[8px] bg-primary px-3 text-xs font-normal text-primary-foreground shadow-none hover:bg-primary/85 active:bg-primary/75"
             >
               <RefreshCw className="size-3.5" />
               {t("characters.autoExtract")}
-              <CreditCostInline display={buildCharactersCostDisplay} />
+              <CreditCostInline
+                display={buildCharactersCostDisplay}
+                className="text-primary-foreground"
+                iconClassName="text-primary-foreground drop-shadow-none [&_path]:fill-current"
+              />
             </Button>
           </>
         )}
@@ -977,7 +982,9 @@ function PortraitBlock({
           ) : (
             <Sparkles className="size-3" />
           )}
-          {t("characters.summary.generateNew")}
+          {character.portrait_url
+            ? t("characters.portrait.regenerate")
+            : t("characters.summary.generateNew")}
           <CreditCostInline display={portraitCost} />
         </Button>
         <Button
@@ -3044,7 +3051,7 @@ function CharactersSplit({
 
   return (
     <div className="min-h-0 flex-1 flex overflow-hidden bg-background">
-      <div className="flex flex-col w-72 shrink-0 overflow-hidden border-r border-border/30 bg-background">
+      <div className="flex w-80 shrink-0 flex-col overflow-hidden border-r border-border/30 bg-background">
         {listPane}
       </div>
       <div className="min-w-0 flex-1 overflow-hidden bg-background">

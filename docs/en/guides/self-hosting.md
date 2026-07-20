@@ -34,24 +34,16 @@ Key points in `docker-compose.yml` (already set for you, no changes needed):
 
 > ⚠️ **Secret-type defaults (such as `PROMPT_EXPORT_PASSWORD=change_me`) must be changed.** For the model gateway, see [Model Configuration](#model-configuration).
 
-Groups (each item is commented inline in `.env.example`): gateway (NEWAPI_*), reference-media OSS relay (OSS_RELAY_*), Cognee knowledge graph, the text/image/video/audio models, image and video base parameters, UI, and output directories.
+Groups (each item is commented inline in `.env.example`): local NewAPI provisioner, reference-media OSS relay (OSS_RELAY_*), Cognee knowledge graph, text/image/video/audio models, image and video base parameters, UI, and output directories. Channel selection, gateway address, and token are saved from the web UI to `settings.db`.
 
 ### Model Configuration
 
 Recommended and alternative options (see [Configuring Model Providers](../getting-started/configuring-models.md) for details):
 
 - **A. DC official key (recommended)**: the default compose already uses the official gateway. After bringing the stack up, open `http://localhost:8080` → Settings → Model Configuration → Official Channel → paste your DC key and save to start using it, **no model mapping required**. Get a key at <https://relayclaw.cdnfg.com>.
-- **B. Bring your own gateway (BYO)**: enter your own gateway in the official-channel panel or in `.env`:
+- **B. Local NewAPI**: switch to `docker compose -f docker-compose.selfhosted.yml up`, then initialize it and configure upstream channels and model mappings from the Local NewAPI page.
 
-```bash
-NEWAPI_BASE_URL=https://your-gateway/v1
-NEWAPI_API_KEY=...
-PROMPT_EXPORT_PASSWORD=...        # defaults to change_me; always override for deployment
-```
-
-- **C. Fully local, bundled newapi**: switch to `docker compose -f docker-compose.selfhosted.yml up`, then configure the upstream at `:3000`.
-
-B/C require configuring all ~30 `*_MODEL` logical names in the gateway backend or renaming them individually. The reference-image feature needs `OSS_RELAY_AK/SK` (you can skip it for a text-only workflow).
+Local NewAPI must map DramaClaw's logical models to real upstream models. The reference-image feature needs `OSS_RELAY_AK/SK` (you can skip it for a text-only workflow).
 
 ## 4. Start / Stop
 
@@ -62,7 +54,7 @@ docker compose logs -f api       # logs
 docker compose down              # stop (keeps the data volume)
 ```
 
-## 5. Where the data lives / Backups
+## 5. Where the data lives / Backup, restore & migrate
 
 - Project data lives in the named volume `ce-data` (`/data` inside the container); output is in `NOVELVIDEO_OUTPUT_DIR` (default `output`).
 - Back up the data volume:
@@ -73,6 +65,15 @@ docker run --rm -v dramaclaw-ce_ce-data:/data -v "$PWD":/backup alpine \
 ```
 
 (The volume name is prefixed with the compose project name; run `docker volume ls` to confirm the actual name.)
+
+- Restore, or move to a new machine — copy `ce-data-backup.tar.gz` to the target host, then unpack it back into the data volume (the `-v` mount creates the volume if it does not exist yet):
+
+```bash
+docker run --rm -v dramaclaw-ce_ce-data:/data -v "$PWD":/backup alpine \
+  tar xzf /backup/ce-data-backup.tar.gz -C /data
+```
+
+Then bring the stack up as usual (`docker compose -f docker-compose.selfhosted.yml up -d`). Copy the `output` directory (`NOVELVIDEO_OUTPUT_DIR`) and your `.env` across too if you want generated media and settings to carry over.
 
 ## 6. Upgrades
 

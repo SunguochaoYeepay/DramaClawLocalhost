@@ -17,6 +17,7 @@ import {
   Download,
   Image as ImageIcon,
   Languages,
+  Library,
   Loader2,
   Palette,
   Upload,
@@ -110,6 +111,10 @@ import { extractRequestId } from '@/features/canvas/application/generationErrorR
 import { useFreezoneImageModels } from '@/features/canvas/hooks/useFreezoneImageModels';
 import { useNodeGenerationHistory } from '@/features/canvas/hooks/useNodeGenerationHistory';
 import { ReferenceTextChip } from '@/features/canvas/nodes/shared/ReferenceTextChip';
+import {
+  AssetLibraryModal,
+  type AssetLibrarySelection,
+} from '@/features/canvas/ui/AssetLibraryModal';
 import {
   NodeGenerationHistory,
   hasCompletedHistoryRecords,
@@ -232,7 +237,7 @@ const IMAGE_PARAM_ROW_CLASS = 'mb-4 flex gap-2';
 const NODE_COUNT_OPTION_BASE_CLASS =
   'flex w-full items-center justify-center rounded-[6px] px-3 py-1.5 text-xs transition-colors';
 
-// 「画质」选项只对 image2 系模型（DC-Image-2 / gpt-image-2 等）生效，
+// 「画质」选项只对 image2 系模型（LingShan-G2 / gpt-image-2 等）生效，
 // 后端也只在 gpt-image-2 上识别该字段。其余模型隐藏该选择器。
 function isImage2Model(apiModel: string | null | undefined): boolean {
   return /image[-_]?2/i.test(apiModel ?? '');
@@ -377,7 +382,7 @@ export const ImageGenNode = memo(({ id, data, selected, width, height }: ImageGe
   // `DEFAULT_SHARED_MODEL_ID` (`huimeng/gpt-image-2`), which is normally NOT in
   // the live `/freezone/image/models` list. Trusting it blindly is the bug:
   // ProviderModelPicker silently falls back to showing `availableModels[0]`
-  // (e.g. DC-Image-2) when the id isn't found, while submit resolves the stale
+  // (e.g. LingShan-G2) when the id isn't found, while submit resolves the stale
   // id through SHARED_MODELS to `huimeng_gpt_image2` — display ≠ value sent.
   // Reconciling here keeps them in lockstep: an unknown persisted id falls back
   // to the first live model (exactly what the picker shows).
@@ -469,6 +474,11 @@ export const ImageGenNode = memo(({ id, data, selected, width, height }: ImageGe
     () => collectCandidateBindingsForNode(connectedEdges, id).map((binding) => binding.role),
     [connectedEdges, id],
   );
+  // 节点被连线（存在入边）后：隐藏「试试」CTA，只在节点中间显示一个图标（对齐 libtv）。
+  const isConnected = useMemo(
+    () => connectedEdges.some((edge) => edge.target === id),
+    [connectedEdges, id],
+  );
 
   // 候选按 orderedReferenceUrls 编号（自身参考图在场时就是图片1），保证 @ 出来的
   // 缩略图与后端解析到的 图片N 是同一张。key 优先用上游 nodeId；自身参考图没有
@@ -526,6 +536,48 @@ export const ImageGenNode = memo(({ id, data, selected, width, height }: ImageGe
         .forEach((edge) => deleteEdge(edge.id));
     },
     [id, deleteEdge],
+  );
+
+  const [isAssetLibraryOpen, setIsAssetLibraryOpen] = useState(false);
+
+  // Spawn upload reference nodes from selected asset-library images — one per
+  // selection, stacked to the left of this node, then wired as upstream refs so
+  // they feed the multi-reference generation. Image-only here (the modal is
+  // opened with allowedMedia=['image']), but we still guard on media.
+  const spawnAssetLibraryReferences = useCallback(
+    (selections: ReadonlyArray<AssetLibrarySelection>) => {
+      const imageSelections = selections.filter((sel) => sel.media === 'image');
+      if (imageSelections.length === 0) return;
+      const state = useCanvasStore.getState();
+      const self = state.nodes.find((n) => n.id === id);
+      if (!self) return;
+      const UPLOAD_WIDTH = 320;
+      const UPLOAD_HEIGHT = 240;
+      const GAP_X = 40;
+      const GAP_Y = 24;
+      const baseX = self.position.x - UPLOAD_WIDTH - GAP_X;
+      const totalH =
+        UPLOAD_HEIGHT * imageSelections.length + GAP_Y * (imageSelections.length - 1);
+      const startY =
+        self.position.y + ((self.height ?? DEFAULT_HEIGHT) - totalH) / 2;
+      const newIds: string[] = [];
+      imageSelections.forEach((sel, idx) => {
+        const y = startY + idx * (UPLOAD_HEIGHT + GAP_Y);
+        const newId = addNodeAction(
+          CANVAS_NODE_TYPES.upload,
+          { x: baseX, y },
+          {
+            imageUrl: sel.url,
+            previewImageUrl: sel.url,
+            displayName: sel.name || undefined,
+          },
+        );
+        addEdgeAction(newId, id);
+        newIds.push(newId);
+      });
+      state.autoGroupSpawn(id, newIds, { label: '资产参考组' });
+    },
+    [addEdgeAction, addNodeAction, id],
   );
 
   // Hover preview state for the upstream image thumbnails in the OpsPanel
@@ -832,6 +884,7 @@ export const ImageGenNode = memo(({ id, data, selected, width, height }: ImageGe
       quality: isImage2 ? quality : null,
       referenceUrls,
       model: apiModel,
+      modelId,
       camera: hasCamera
         ? {
             cameraBodyId: cameraSelection?.cameraBodyId ?? null,
@@ -1366,6 +1419,11 @@ export const ImageGenNode = memo(({ id, data, selected, width, height }: ImageGe
                 <Loader2 className="h-7 w-7 animate-spin opacity-70" />
                 <span className="text-[12px] leading-6">上传中…</span>
               </div>
+            ) : isConnected ? (
+              // 已连线：不再显示文字 CTA，只在节点中间放一个图标（对齐 libtv）。
+              <div className="flex w-full items-center justify-center">
+                <ImageIcon className="h-9 w-9 text-text-muted/46" aria-hidden />
+              </div>
             ) : (
               <>
                 <div className="flex min-h-0 flex-col justify-center gap-2 py-4">
@@ -1416,7 +1474,7 @@ export const ImageGenNode = memo(({ id, data, selected, width, height }: ImageGe
           <div className="nodrag absolute inset-x-5 top-1/2 z-10 flex -translate-y-1/2 flex-col items-center text-center">
             <div className="inline-flex items-center gap-1.5 text-[12px] font-semibold text-red-200">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-red-300/90" />
-              <span>{t("canvas.imageNode.generationFailed")}</span>
+              <span>{t("node.imageNode.generationFailed")}</span>
             </div>
             <div
               className="mt-1 max-h-12 max-w-full overflow-y-auto break-words text-[11px] leading-4 text-red-100/76 [overflow-wrap:anywhere]"
@@ -1426,13 +1484,13 @@ export const ImageGenNode = memo(({ id, data, selected, width, height }: ImageGe
             </div>
             {generationErrorRequestId && (
               <div className="mt-1 flex max-w-full items-center justify-center gap-1.5 text-[10px] text-text-muted/58">
-                <span className="shrink-0">{t("canvas.imageNode.requestId")}</span>
+                <span className="shrink-0">{t("node.imageNode.requestId")}</span>
                 <code className="min-w-0 max-w-[160px] truncate font-mono" title={generationErrorRequestId}>
                   {generationErrorRequestId}
                 </code>
                 <button
                   type="button"
-                  title={requestIdCopied ? t("canvas.imageNode.requestIdCopied") : t("canvas.imageNode.copyRequestId")}
+                  title={requestIdCopied ? t("node.imageNode.requestIdCopied") : t("node.imageNode.copyRequestId")}
                   onClick={(event) => {
                     event.stopPropagation();
                     void handleCopyRequestId();
@@ -1639,6 +1697,18 @@ export const ImageGenNode = memo(({ id, data, selected, width, height }: ImageGe
               nodeId={id}
               onInsert={insertContextPaletteEntry}
             />
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation();
+                setIsAssetLibraryOpen(true);
+              }}
+              className={`${NODE_TEXT_CONTROL_TRIGGER_CLASS} group/asset px-1.5`}
+              title="从资产库选择参考图（人物 / 场景 / 道具）"
+            >
+              <Library className={`${NODE_TEXT_CONTROL_ICON_CLASS} group-hover/asset:text-text-dark`} />
+              <span>资产库</span>
+            </button>
             {upstreamTextContents.map((content) => (
               <ReferenceTextChip
                 key={content.nodeId}
@@ -1880,6 +1950,13 @@ export const ImageGenNode = memo(({ id, data, selected, width, height }: ImageGe
           onSubmitDirectorCombined={handleDirectorCaptureCombined}
         />
       )}
+      <AssetLibraryModal
+        open={isAssetLibraryOpen}
+        project={readUrl().project ?? null}
+        allowedMedia={['image']}
+        onClose={() => setIsAssetLibraryOpen(false)}
+        onConfirm={(selections) => spawnAssetLibraryReferences(selections)}
+      />
     </div>
   );
 });

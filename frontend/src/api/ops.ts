@@ -46,6 +46,10 @@ export interface FreezoneGenerationHistoryRecord {
   media_type: string;
   /** Raw task result payload; shape varies by task_type. */
   result: Record<string, unknown>;
+  /** 注册表模型 id（还原时回填 data.model）。旧记录无此字段。 */
+  model?: string;
+  /** 生成模式（视频 genMode / 图片 generationMode）。旧记录无此字段。 */
+  gen_mode?: string;
 }
 
 /**
@@ -63,6 +67,26 @@ export async function fetchNodeGenerationHistory(
     `projects/${encodeURIComponent(project)}/freezone/canvases/${encodeURIComponent(
       canvasId,
     )}/nodes/${encodeURIComponent(nodeId)}/generation-history?limit=${limit}`,
+  );
+  return data?.records ?? [];
+}
+
+/**
+ * Read the whole canvas's generation history in one request (most recent
+ * first). Unlike {@link fetchNodeGenerationHistory} this is not scoped to a
+ * single node, and the backend aggregates across every node that ever recorded
+ * history on this canvas — including nodes since deleted from the canvas — so
+ * their past attempts stay visible in the history browser.
+ */
+export async function fetchCanvasGenerationHistory(
+  project: string,
+  canvasId: string,
+  limit = 500,
+): Promise<FreezoneGenerationHistoryRecord[]> {
+  const data = await apiCall<{ records?: FreezoneGenerationHistoryRecord[] }>(
+    `projects/${encodeURIComponent(project)}/freezone/canvases/${encodeURIComponent(
+      canvasId,
+    )}/generation-history?limit=${limit}`,
   );
   return data?.records ?? [];
 }
@@ -101,6 +125,10 @@ export interface FreezoneGenPayload extends FreezoneNodeContext {
   provider?: FreezoneProvider | null;
   /** Override the provider's default model (e.g. "gpt-image-2"). */
   model?: string | null;
+  /** 注册表模型 id（还原用；与 provider 拆分后的 model 串不同）。 */
+  modelId?: string | null;
+  /** 生成模式（还原用）：text_to_image / image_to_image / all_reference / image_reference。 */
+  genMode?: string | null;
   /** Only honored by openai gpt-image-2 (low / medium / high / auto). */
   quality?: string | null;
 }
@@ -173,6 +201,8 @@ export interface FreezoneVideoGenPayload extends FreezoneNodeContext {
   generateAudio?: boolean;
   /** Backend model id, e.g. huimeng_seedance20_fast / seedance_pro. */
   model?: string;
+  /** 生成模式（还原用）：textToVideo / imageToVideo / firstLastFrame / imageReference / allReference。 */
+  genMode?: string;
   /**
    * Real-person material review. Set `true` when the input contains real
    * human faces so the backend routes the job through the human-review path
@@ -209,7 +239,8 @@ export async function submitFreezoneVideoGen(
         resolution: payload.resolution ?? "720p",
         duration_seconds: Math.max(payload.durationSeconds ?? 5, 1),
         generate_audio: payload.generateAudio ?? false,
-        ...(payload.model ? { model: payload.model } : {}),
+        ...(payload.model ? { model: payload.model, model_id: payload.model } : {}),
+        ...(payload.genMode ? { gen_mode: payload.genMode } : {}),
         human_review: payload.humanReview ?? false,
         scene_optimize: payload.sceneOptimize ?? null,
         ...nodeContextBody(payload),
@@ -266,6 +297,8 @@ export interface FreezoneVideoKeyframesPayload extends FreezoneNodeContext {
   durationSeconds?: number;
   generateAudio?: boolean;
   model?: string;
+  /** 生成模式（还原用）：textToVideo / imageToVideo / firstLastFrame / imageReference / allReference。 */
+  genMode?: string;
   /** See {@link FreezoneVideoGenPayload.humanReview}. */
   humanReview?: boolean;
   sceneOptimize?: "anime" | "realistic" | null;
@@ -299,7 +332,8 @@ export async function submitFreezoneVideoKeyframes(
         resolution: payload.resolution ?? "720p",
         duration_seconds: Math.max(payload.durationSeconds ?? 5, 1),
         generate_audio: payload.generateAudio ?? false,
-        ...(payload.model ? { model: payload.model } : {}),
+        ...(payload.model ? { model: payload.model, model_id: payload.model } : {}),
+        ...(payload.genMode ? { gen_mode: payload.genMode } : {}),
         human_review: payload.humanReview ?? false,
         scene_optimize: payload.sceneOptimize ?? null,
         ...nodeContextBody(payload),
@@ -326,6 +360,8 @@ export interface FreezoneVideoI2vPayload extends FreezoneNodeContext {
   generateAudio?: boolean;
   /** default huimeng_seedance10_fast (matches keyframes); multi-image prefers seedance 2.0. */
   model?: string;
+  /** 生成模式（还原用）：textToVideo / imageToVideo / firstLastFrame / imageReference / allReference。 */
+  genMode?: string;
   /** See {@link FreezoneVideoGenPayload.humanReview}. */
   humanReview?: boolean;
   sceneOptimize?: "anime" | "realistic" | null;
@@ -358,9 +394,73 @@ export async function submitFreezoneVideoI2v(
         resolution: payload.resolution ?? "720p",
         duration_seconds: Math.max(payload.durationSeconds ?? 5, 1),
         generate_audio: payload.generateAudio ?? false,
-        ...(payload.model ? { model: payload.model } : {}),
+        ...(payload.model ? { model: payload.model, model_id: payload.model } : {}),
+        ...(payload.genMode ? { gen_mode: payload.genMode } : {}),
         human_review: payload.humanReview ?? false,
         scene_optimize: payload.sceneOptimize ?? null,
+        ...nodeContextBody(payload),
+      },
+    },
+  );
+}
+
+// /freezone/video/video-edit ---------------------------------------------- //
+//
+// HappyHorse 视频编辑：1 个源视频 + 0-5 张参考图 → 上游 video_url + reference_images。
+
+export interface FreezoneVideoEditPayload extends FreezoneNodeContext {
+  /** 源视频静态地址，必填。 */
+  videoUrl: string;
+  /** 0-5 张参考图静态地址。 */
+  imageUrls?: string[];
+  prompt?: string;
+  cameraTemplateId?: string | null;
+  marks?: FreezoneVideoMark[];
+  aspectRatio?: FreezoneVideoAspectRatio;
+  resolution?: FreezoneVideoResolution;
+  durationSeconds?: number;
+  /** 视频编辑音频策略：auto 自动 / origin 保留原声。 */
+  audioSetting?: "auto" | "origin";
+  generateAudio?: boolean;
+  /** default newapi_happyhorse-1.0. */
+  model?: string;
+  /** 生成模式（还原用）：videoEdit。 */
+  genMode?: string;
+  humanReview?: boolean;
+}
+
+export async function submitFreezoneVideoEdit(
+  project: string,
+  payload: FreezoneVideoEditPayload,
+): Promise<FreezoneJobRef> {
+  return await apiCall<FreezoneJobRef>(
+    `projects/${encodeURIComponent(project)}/freezone/video/video-edit`,
+    {
+      method: "POST",
+      json: {
+        video_url: payload.videoUrl,
+        image_urls: (payload.imageUrls ?? []).slice(0, 5),
+        prompt: payload.prompt ?? "",
+        camera_template_id: payload.cameraTemplateId ?? null,
+        marks: (payload.marks ?? []).map((m) => ({
+          label: m.label,
+          source_url: m.sourceUrl ?? "",
+          point_x: m.pointX ?? null,
+          point_y: m.pointY ?? null,
+          box_x: m.boxX ?? null,
+          box_y: m.boxY ?? null,
+          box_width: m.boxWidth ?? null,
+          box_height: m.boxHeight ?? null,
+          note: m.note ?? "",
+        })),
+        aspect_ratio: payload.aspectRatio ?? "16:9",
+        resolution: payload.resolution ?? "720p",
+        duration_seconds: Math.max(payload.durationSeconds ?? 5, 1),
+        audio_setting: payload.audioSetting ?? "auto",
+        generate_audio: payload.generateAudio ?? false,
+        ...(payload.model ? { model: payload.model, model_id: payload.model } : {}),
+        ...(payload.genMode ? { gen_mode: payload.genMode } : {}),
+        human_review: payload.humanReview ?? false,
         ...nodeContextBody(payload),
       },
     },
@@ -391,6 +491,8 @@ export interface FreezoneVideoOmniGenPayload extends FreezoneNodeContext {
   generateAudio?: boolean;
   /** default huimeng_seedance20_fast per backend default. */
   model?: string;
+  /** 生成模式（还原用）：textToVideo / imageToVideo / firstLastFrame / imageReference / allReference。 */
+  genMode?: string;
   /** See {@link FreezoneVideoGenPayload.humanReview}. */
   humanReview?: boolean;
   sceneOptimize?: "anime" | "realistic" | null;
@@ -429,7 +531,8 @@ export async function submitFreezoneVideoOmniGen(
         resolution: payload.resolution ?? "720p",
         duration_seconds: Math.max(payload.durationSeconds ?? 5, 1),
         generate_audio: payload.generateAudio ?? false,
-        ...(payload.model ? { model: payload.model } : {}),
+        ...(payload.model ? { model: payload.model, model_id: payload.model } : {}),
+        ...(payload.genMode ? { gen_mode: payload.genMode } : {}),
         human_review: payload.humanReview ?? false,
         scene_optimize: payload.sceneOptimize ?? null,
         ...nodeContextBody(payload),
@@ -473,6 +576,8 @@ export async function submitFreezoneGen(
         style,
         provider: payload.provider ?? null,
         model: payload.model ?? null,
+        ...(payload.modelId ? { model_id: payload.modelId } : {}),
+        ...(payload.genMode ? { gen_mode: payload.genMode } : {}),
         quality: payload.quality ?? null,
         ...nodeContextBody(payload),
       },
@@ -1097,6 +1202,10 @@ export interface FreezoneEditPayload extends FreezoneNodeContext {
   imageSize?: string;
   provider?: FreezoneProvider | null;
   model?: string | null;
+  /** 注册表模型 id（还原用；与 provider 拆分后的 model 串不同）。 */
+  modelId?: string | null;
+  /** 生成模式（还原用）：text_to_image / image_to_image / all_reference / image_reference。 */
+  genMode?: string | null;
   quality?: string | null;
 }
 
@@ -1122,6 +1231,8 @@ export async function submitFreezoneEdit(
         image_size: payload.imageSize ?? "2K",
         provider: payload.provider ?? null,
         model: payload.model ?? null,
+        ...(payload.modelId ? { model_id: payload.modelId } : {}),
+        ...(payload.genMode ? { gen_mode: payload.genMode } : {}),
         quality: payload.quality ?? null,
         ...nodeContextBody(payload),
       },
@@ -1852,7 +1963,7 @@ export async function submitFreezoneAudioSpeech(
 
 /**
  * 文本生成音乐请求。除 input 外全部可选，不传走后端默认。
- * model / response_format / output_format 不需要前端传（走后端默认 eleven-music / mp3 /
+ * model / response_format / output_format 不需要前端传（走后端默认 LingShan-MU-11 / mp3 /
  * mp3_44100_128），故不在此暴露。
  */
 export interface FreezoneAudioMusicPayload {
@@ -1870,7 +1981,7 @@ export interface FreezoneAudioMusicPayload {
 }
 
 /**
- * 文本生成音乐（eleven-music）。返回异步任务句柄，结果用
+ * 文本生成音乐。返回异步任务句柄，结果用
  * fetchFreezoneJobResult('freezone_audio_eleven_music') 取。
  */
 export async function submitFreezoneAudioMusic(
@@ -2222,8 +2333,6 @@ export async function submitFreezoneExtractFrames(
 
 export interface FreezoneAnalyzeShotsPayload {
   frameUrls: string[];
-  provider?: string;
-  model?: string;
 }
 
 export async function submitFreezoneAnalyzeShots(
@@ -2236,8 +2345,6 @@ export async function submitFreezoneAnalyzeShots(
       method: "POST",
       json: {
         frame_urls: payload.frameUrls,
-        provider: payload.provider ?? null,
-        model: payload.model ?? null,
       },
     },
   );
@@ -2274,10 +2381,22 @@ export async function submitFreezoneAnalyzeVideoStory(
 
 // /freezone/video/character-library -------------------------------------- //
 
+export type FreezoneAssetLibraryMedia = "image" | "video" | "audio";
+export type FreezoneAssetLibrarySource =
+  | "upload"
+  | "character"
+  | "scene"
+  | "prop";
+
 export interface FreezoneVideoCharacterLibraryItem {
   id?: string;
   name: string;
+  media?: FreezoneAssetLibraryMedia;
+  source?: FreezoneAssetLibrarySource;
   image_urls?: string[];
+  video_url?: string | null;
+  audio_url?: string | null;
+  cover_url?: string | null;
   created_at?: string;
   updated_at?: string;
   [key: string]: unknown;
@@ -2285,7 +2404,10 @@ export interface FreezoneVideoCharacterLibraryItem {
 
 export interface FreezoneAddVideoCharacterLibraryItemPayload {
   name: string;
+  media?: FreezoneAssetLibraryMedia;
   imageUrls?: string[];
+  videoUrl?: string;
+  audioUrl?: string;
 }
 
 export async function fetchFreezoneVideoCharacterLibrary(
@@ -2300,13 +2422,31 @@ export async function submitFreezoneAddVideoCharacterLibraryItem(
   project: string,
   payload: FreezoneAddVideoCharacterLibraryItemPayload,
 ): Promise<unknown> {
-  const body: Record<string, unknown> = { name: payload.name };
+  const body: Record<string, unknown> = {
+    name: payload.name,
+    media: payload.media ?? "image",
+  };
   if (payload.imageUrls && payload.imageUrls.length > 0) {
     body.image_urls = payload.imageUrls;
   }
+  if (payload.videoUrl) body.video_url = payload.videoUrl;
+  if (payload.audioUrl) body.audio_url = payload.audioUrl;
   return await apiCall<unknown>(
     `projects/${encodeURIComponent(project)}/freezone/video/character-library`,
     { method: "POST", json: body },
+  );
+}
+
+/**
+ * 把主线的人物/场景/道具参考图与人物语音幂等同步进资产库。后端按稳定合成 id
+ * upsert,重复同步只更新不重复。返回同步后的完整库(apiCall 会解包 data)。
+ */
+export async function syncFreezoneAssetLibraryFromMainline(
+  project: string,
+): Promise<FreezoneVideoCharacterLibraryItem[]> {
+  return await apiCall<FreezoneVideoCharacterLibraryItem[]>(
+    `projects/${encodeURIComponent(project)}/freezone/video/asset-library/sync-from-mainline`,
+    { method: "POST" },
   );
 }
 

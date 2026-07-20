@@ -1355,6 +1355,8 @@ class HuimengVideoGenerator(VideoGeneratorBase):
         self.client = client or HuimengiTaskClient(api_key=api_key, base_url=endpoint)
 
     def _duration_bounds(self) -> tuple[int, int]:
+        if self._is_happyhorse_model():
+            return 3, 15
         if self.model.startswith("seedance-2.0"):
             return 4, 15
         if self.model == "seedance-1.5-pro":
@@ -1368,6 +1370,9 @@ class HuimengVideoGenerator(VideoGeneratorBase):
 
     def _is_seedance2_model(self) -> bool:
         return self.model.startswith("seedance-2.0")
+
+    def _is_happyhorse_model(self) -> bool:
+        return self.model.strip().lower() == "happyhorse-1.0"
 
     def _to_upload_url(
         self,
@@ -1768,7 +1773,7 @@ class HuimengVideoGenerator(VideoGeneratorBase):
                         last_frame_url,
                         str(last_frame_output_path),
                     )
-                    last_frame_path = str(last_frame_output_path)
+                    last_frame_path = last_frame_output_path.as_posix()
                     log("已保存 HuiMeng 返回尾帧")
             progress(1.0)
             update_request_status(task_id, "completed")
@@ -2308,10 +2313,31 @@ class NewApiVideoGenerator(VideoGeneratorBase):
                 else:
                     reference_image_paths.append(path)
 
-            if not first_frame_path and image_path:
+            # image_path 是 run_freezone_video_gen 无条件传进来的「首张图」。仅当它
+            # 还没作为参考图存在时，才把它被动提升为首帧——否则参考模式(所有图都在
+            # reference_image_paths 里)会把首张图重复算一次（首帧位 + 参考位）。
+            if not first_frame_path and image_path and image_path not in reference_image_paths:
                 first_frame_path = image_path
+
+            # HappyHorse 没有尾帧能力，且把尾帧混进 reference_images 会误触发 r2v，
+            # 与首帧的 image_url 冲突（上游 INVALID_PARAMS）。这里直接忽略尾帧。
             if last_frame_path:
-                reference_image_paths.append(str(last_frame_path))
+                log("HappyHorse 不支持尾帧，已忽略尾帧输入")
+
+            # HappyHorse 的 image_url(i2v) 与 reference_images(r2v/视频编辑) 互斥，
+            # 不能出现在同一次请求里。策略：参考优先——只要带了参考图或参考视频，就走
+            # r2v/视频编辑。此时首帧不能再走 image_url，但它的画面仍是有效参考，
+            # 应降级为 reference_images 的首位（保持身份优先），而不是整张丢弃，
+            # 否则「2 张图」会只发出去 1 张。纯首帧（无其它参考）才走 i2v。
+            if (video_reference_paths or reference_image_paths) and first_frame_path:
+                log("HappyHorse 参考/视频编辑模式不支持首帧，已将首帧降级为参考图")
+                reference_image_paths.insert(0, first_frame_path)
+                first_frame_path = ""
+
+            # 文档：ratio 仅 t2v/r2v 生效。首帧(i2v, image_url)与视频编辑(video_url)
+            # 的画幅由输入媒体决定，不接受 ratio，误带会触发上游 INVALID_PARAMS。
+            if first_frame_path or video_reference_paths:
+                metadata.pop("ratio", None)
 
             try:
                 if video_reference_paths:
@@ -2589,7 +2615,7 @@ class NewApiVideoGenerator(VideoGeneratorBase):
                                 last_frame_url,
                                 str(last_frame_output_path),
                             )
-                            last_frame_path = str(last_frame_output_path)
+                            last_frame_path = last_frame_output_path.as_posix()
                             log("已保存 DramaClawAPI 返回尾帧")
                     progress(1.0)
                     update_request_status(task_id, "completed")
@@ -3825,6 +3851,7 @@ NEWAPI_MAINLINE_SEEDANCE2_MODELS = (
     "seedance-2.0-value",
     "seedance-2.0-fast-value",
 )
+NEWAPI_DISABLED_VIDEO_MODELS = {"grok-video-channel"}
 
 
 def parse_newapi_video_backend(backend: str | None) -> str | None:
@@ -3842,7 +3869,7 @@ def parse_newapi_video_backend(backend: str | None) -> str | None:
 def newapi_video_backend_options(*, include_seedance2_variants: bool = False) -> dict[str, str]:
     from novelvideo.config import NEWAPI_VIDEO_MODELS
 
-    models = list(NEWAPI_VIDEO_MODELS)
+    models = [model for model in NEWAPI_VIDEO_MODELS if model not in NEWAPI_DISABLED_VIDEO_MODELS]
     if include_seedance2_variants:
         for model in NEWAPI_MAINLINE_SEEDANCE2_MODELS:
             if model not in models:

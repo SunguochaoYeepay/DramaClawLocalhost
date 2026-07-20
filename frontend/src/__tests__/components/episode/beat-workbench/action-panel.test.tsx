@@ -124,7 +124,7 @@ function makeBeat(beatNumber: number): Beat {
 }
 
 describe("ActionPanel", () => {
-  it("starts with detail sections collapsed", () => {
+  it("defaults to the 文案 section expanded with other sections collapsed (#21)", () => {
     const states: BeatStates = {
       1: {
         script: "missing",
@@ -148,7 +148,9 @@ describe("ActionPanel", () => {
       </I18nextProvider>,
     );
 
-    expect(screen.queryByText("TextPane")).not.toBeInTheDocument();
+    // 文案默认展开，用户无需点击即可看到文案内容；其它区块仍折叠。
+    expect(screen.getByText("TextPane")).toBeInTheDocument();
+    expect(screen.queryByText("SketchSection")).not.toBeInTheDocument();
   });
 
   it("keeps section open state after the panel remounts for the same episode", async () => {
@@ -176,10 +178,11 @@ describe("ActionPanel", () => {
       </I18nextProvider>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /文案/ }));
+    // 用一个非默认展开的区块（草图）验证展开状态跨 remount 持久化。
+    fireEvent.click(screen.getByRole("button", { name: /草图/ }));
 
     await waitFor(() => {
-      expect(screen.getByText("TextPane")).toBeInTheDocument();
+      expect(screen.getByText("SketchSection")).toBeInTheDocument();
     });
 
     unmount();
@@ -190,7 +193,7 @@ describe("ActionPanel", () => {
       </I18nextProvider>,
     );
 
-    expect(screen.getByText("TextPane")).toBeInTheDocument();
+    expect(screen.getByText("SketchSection")).toBeInTheDocument();
   });
 
   it("keeps section open state when switching between beats", () => {
@@ -223,8 +226,9 @@ describe("ActionPanel", () => {
       </I18nextProvider>,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /文案/ }));
-    expect(screen.getByText("TextPane")).toBeInTheDocument();
+    // 用一个非默认展开的区块（草图）验证切换 beat 时展开状态保留。
+    fireEvent.click(screen.getByRole("button", { name: /草图/ }));
+    expect(screen.getByText("SketchSection")).toBeInTheDocument();
 
     rerender(
       <I18nextProvider i18n={i18n}>
@@ -240,7 +244,7 @@ describe("ActionPanel", () => {
       </I18nextProvider>,
     );
 
-    expect(screen.getByText("TextPane")).toBeInTheDocument();
+    expect(screen.getByText("SketchSection")).toBeInTheDocument();
   });
 
   it("opens the target section from a deep link", () => {

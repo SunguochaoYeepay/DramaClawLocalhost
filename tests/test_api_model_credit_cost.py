@@ -189,7 +189,7 @@ async def test_generation_credit_cost_route_resolves_freezone_audio_music(monkey
         monkeypatch,
         model_credits,
         expected_kind="audio",
-        expected_model="eleven-music",
+        expected_model="LingShan-MU-11",
         expected_params={},
         expected_quantity=30,
         cost=90,
@@ -229,12 +229,12 @@ async def test_generation_credit_cost_route_resolves_freezone_story_script(monke
 async def test_generation_credit_cost_route_resolves_freezone_image_reverse_prompt(monkeypatch):
     from novelvideo.api.routes import model_credits
 
-    monkeypatch.setenv("FREEZONE_IMAGE_REVERSE_PROMPT_MODEL", "reverse-prompt-model")
+    monkeypatch.setenv("FREEZONE_VISION_MODEL", "freezone-vision-model")
     patch_quote_expect(
         monkeypatch,
         model_credits,
         expected_kind="text",
-        expected_model="reverse-prompt-model",
+        expected_model="freezone-vision-model",
         expected_params={},
         expected_quantity=1,
         cost=6,

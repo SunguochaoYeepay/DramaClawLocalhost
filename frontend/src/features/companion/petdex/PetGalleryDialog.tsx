@@ -46,6 +46,8 @@ const ACCESSORY_PREVIEW_WIDTH = 76;
 const ACCESSORY_PREVIEW_HEIGHT = 76;
 const ACCESSORY_PREVIEW_GAP = 8;
 const EMPTY_ACCESSORY_PREVIEW_SRC = "/piko/accessories/emperor-new-clothes-preview.png";
+const PRIMARY_ACTION_BUTTON_CLASS =
+  "rounded-[9px] bg-primary text-primary-foreground shadow-none hover:bg-primary/90 active:bg-primary/80 disabled:bg-primary disabled:text-primary-foreground";
 
 function getAccessoryPreviewSrc(accessory: PikoAccessoryDisplayId) {
   if (accessory === "none") return EMPTY_ACCESSORY_PREVIEW_SRC;
@@ -82,6 +84,8 @@ const PIKO_ACCESSORY_FEEDBACK_KEYS: Record<PikoAccessoryDisplayId, string> = {
   "piko-accessory-asgard-horns": "myBuddy.debug.accessoryFeedback.asgardHorns",
   "piko-accessory-gary-snail": "myBuddy.debug.accessoryFeedback.garySnail",
   "piko-accessory-captain-shield": "myBuddy.debug.accessoryFeedback.captainShield",
+  "piko-accessory-luban-compass": "myBuddy.debug.accessoryFeedback.lubanCompass",
+  "piko-accessory-luban-talisman": "myBuddy.debug.accessoryFeedback.lubanTalisman",
   "piko-accessory-red-cape": "myBuddy.debug.accessoryFeedback.redCape",
   "piko-accessory-ufo-pet": "myBuddy.debug.accessoryFeedback.ufoPet",
   "piko-accessory-ghost-pet": "myBuddy.debug.accessoryFeedback.ghostPet",
@@ -126,6 +130,8 @@ const PIKO_ACCESSORY_MENU_GROUPS = [
     "piko-accessory-asgard-horns",
     "piko-accessory-gary-snail",
     "piko-accessory-captain-shield",
+    "piko-accessory-luban-compass",
+    "piko-accessory-luban-talisman",
     "piko-accessory-red-cape",
   ],
 ] as const satisfies readonly (readonly PikoAccessoryDisplayId[])[];
@@ -256,7 +262,7 @@ function CompanionCard({
         }
       }}
       className={cn(
-        "group relative flex h-[132px] min-w-0 cursor-pointer flex-col rounded-[8px] border bg-white/[0.045] p-3 text-left transition-colors",
+        "group relative flex h-[132px] min-w-0 cursor-pointer flex-col overflow-hidden rounded-[8px] border bg-white/[0.045] p-3 text-left transition-colors",
         selected
           ? "border-[#d7ae5f]/70 bg-[#d7ae5f]/[0.055]"
           : "border-white/[0.1] hover:border-white/[0.18] hover:bg-white/[0.06]",
@@ -837,7 +843,11 @@ export function PetGalleryDialog({
               >
                 {t("common.cancel")}
               </Button>
-              <Button disabled={!spriteFile || importBusy} onClick={handleImport}>
+              <Button
+                className={PRIMARY_ACTION_BUTTON_CLASS}
+                disabled={!spriteFile || importBusy}
+                onClick={handleImport}
+              >
                 {t("myBuddy.import.confirm")}
               </Button>
             </>
@@ -847,6 +857,7 @@ export function PetGalleryDialog({
                 {t("common.cancel")}
               </Button>
               <Button
+                className={PRIMARY_ACTION_BUTTON_CLASS}
                 onClick={() => {
                   onConfirm(draftSelection, draftAccessory);
                   onOpenChange(false);

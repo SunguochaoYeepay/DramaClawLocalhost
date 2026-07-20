@@ -34,6 +34,7 @@ type SplitTextProps = {
   threshold?: number;
   rootMargin?: string;
   textAlign?: CSSProperties["textAlign"];
+  initiallyHidden?: boolean;
   onLetterAnimationComplete?: () => void;
 };
 
@@ -53,6 +54,7 @@ export default function SplitText({
   threshold = 0.1,
   rootMargin = "-100px",
   textAlign = "center",
+  initiallyHidden = false,
   tag = "p",
   onLetterAnimationComplete,
 }: SplitTextProps) {
@@ -120,6 +122,9 @@ export default function SplitText({
         reduceWhiteSpace: false,
         onSplit: (self) => {
           assignTargets(self);
+          if (initiallyHidden) {
+            el.style.visibility = "visible";
+          }
           const tween = gsap.fromTo(
             targets ?? [],
             { ...from },
@@ -137,6 +142,10 @@ export default function SplitText({
               },
               onComplete: () => {
                 animationCompletedRef.current = true;
+                // 动画结束后清除 will-change，让父元素与每个字从 GPU 合成层降回
+                // 普通渲染路径。否则在 Edge 上，background-clip:text 的元素长期处于
+                // 合成层会漏掉文字遮罩、画出图层后备纹理的垃圾（标题左侧花屏）。
+                gsap.set([el, ...(targets ?? [])], { willChange: "auto" });
                 onCompleteRef.current?.();
               },
               willChange: "transform, opacity",
@@ -173,6 +182,7 @@ export default function SplitText({
         threshold,
         rootMargin,
         fontsLoaded,
+        initiallyHidden,
       ],
       scope: ref,
     },
@@ -182,9 +192,12 @@ export default function SplitText({
     textAlign,
     overflow: "hidden",
     display: "inline-block",
+    visibility: initiallyHidden ? "hidden" : undefined,
     whiteSpace: "normal",
     wordWrap: "break-word",
-    willChange: "transform, opacity",
+    // 不在父元素上常驻 will-change：父元素本身不参与动画，常驻合成层反而会让
+    // background-clip:text 在 Edge 上花屏。字级的 will-change 由 tween 负责，
+    // 并在 onComplete 中清除。
   };
   const classes = `split-parent ${className}`;
   return createElement(tag, { ref, style, className: classes }, text);

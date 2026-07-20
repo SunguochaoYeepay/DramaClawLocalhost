@@ -25,6 +25,10 @@ vi.mock("@/lib/queries/model-gateway", () => ({
 
 vi.mock("@tanstack/react-router", () => ({
   Link: ({ children, ...props }: React.ComponentProps<"a">) => <a {...props}>{children}</a>,
+  useNavigate: () => vi.fn(),
+  useParams: () => ({}),
+  useRouterState: ({ select }: { select: (state: { location: { pathname: string } }) => string }) =>
+    select({ location: { pathname: "/" } }),
 }));
 
 vi.mock("react-i18next", () => ({
@@ -83,6 +87,8 @@ vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenuTrigger: ({ children }: React.PropsWithChildren) => <>{children}</>,
   DropdownMenuContent: ({ children }: React.PropsWithChildren) => <>{children}</>,
   DropdownMenuGroup: ({ children }: React.PropsWithChildren) => <>{children}</>,
+  DropdownMenuLabel: ({ children }: React.PropsWithChildren) => <div>{children}</div>,
+  DropdownMenuSeparator: () => <hr />,
   DropdownMenuItem: ({ children, ...props }: React.ComponentProps<"button">) => (
     <button type="button" {...props}>
       {children}

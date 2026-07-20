@@ -23,8 +23,8 @@ describe("episodes workbench integration", () => {
     expect(routeSource).toContain("usePlanEpisodeScenes");
     expect(routeSource).toContain("usePlanEpisodeProps");
     expect(routeSource).toContain('taskType: "identity_planner"');
-    expect(routeSource).toContain("onPlanScenes");
-    expect(routeSource).toContain("onPlanProps");
+    expect(routeSource).toContain("onClick={handlePlanScenes}");
+    expect(routeSource).toContain("onClick={handlePlanProps}");
     expect(routeSource).toContain("episode.list.planIdentities");
     expect(routeSource).toContain("episode.list.planScenes");
     expect(routeSource).toContain("episode.list.planProps");
@@ -39,13 +39,42 @@ describe("episodes workbench integration", () => {
     expect(routeSource).toContain("<CreditCostInline display={costDisplay} />");
   });
 
-  it("scopes list-card planning spinners to the clicked episode", () => {
+  it("shows feature credit cost on list-card scene and prop planning actions", () => {
+    expect(routeSource).toContain(
+      'useGenerationCreditCost("feature", "episode_scene_planner")',
+    );
+    expect(routeSource).toContain(
+      'useGenerationCreditCost("feature", "episode_prop_planner")',
+    );
+    expect(routeSource).toContain(
+      "planScenesCost.error instanceof BillingRuleNotConfiguredError",
+    );
+    expect(routeSource).toContain(
+      "planPropsCost.error instanceof BillingRuleNotConfiguredError",
+    );
+    expect(routeSource).toContain("sceneCostDisplay={planScenesCostDisplay}");
+    expect(routeSource).toContain("propCostDisplay={planPropsCostDisplay}");
+    expect(routeSource).toContain("costDisplay={sceneCostDisplay}");
+    expect(routeSource).toContain("costDisplay={propCostDisplay}");
+    expect(routeSource).toMatch(
+      /const handlePlanScenes[\s\S]*toast\.error\(backendErrorToastMessage\(res\.error, t\)\)[\s\S]*catch \(err\)[\s\S]*toast\.error\(backendErrorToastMessage\(err, t\)\)/,
+    );
+    expect(routeSource).toMatch(
+      /const handlePlanProps[\s\S]*toast\.error\(backendErrorToastMessage\(res\.error, t\)\)[\s\S]*catch \(err\)[\s\S]*toast\.error\(backendErrorToastMessage\(err, t\)\)/,
+    );
+  });
+
+  // 每张卡片自己持有规划 mutation + 任务控制器，转圈天然只作用于被点的那一集；
+  // 场景/道具在 EE 下是异步任务，转圈必须跟着任务流走到任务结束。
+  it("keeps list-card planning spinners running until the async task finishes", () => {
     expect(routeSource).toContain("planIdentities.isPending || identityTask.started");
     expect(routeSource).toContain('taskType: "identity_planner"');
-    expect(routeSource).toContain("planScenes.variables === ep.number");
-    expect(routeSource).toContain("planProps.variables === ep.number");
-    expect(routeSource).toContain("sceneDisabled={planScenes.isPending}");
-    expect(routeSource).toContain("propDisabled={planProps.isPending}");
+    expect(routeSource).toContain("planScenes.isPending || sceneTask.started");
+    expect(routeSource).toContain("planProps.isPending || propTask.started");
+    expect(routeSource).toContain("TASK_TYPES.EPISODE_SCENE_PLANNER");
+    expect(routeSource).toContain("TASK_TYPES.EPISODE_PROP_PLANNER");
+    expect(routeSource).toContain("sceneTask.start({ scope: res.scope })");
+    expect(routeSource).toContain("propTask.start({ scope: res.scope })");
   });
 
   it("shows only one episode planning action for the list state", () => {
@@ -57,8 +86,8 @@ describe("episodes workbench integration", () => {
     expect(routeSource).toContain('useGenerationCreditCost("feature", "build_episodes")');
     expect(routeSource).toContain("planEpisodesCost.error instanceof BillingRuleNotConfiguredError");
     expect(routeSource).toContain("planCostDisplay={planEpisodesCostDisplay}");
-    expect(routeSource).toContain("<CreditCostInline display={planCostDisplay} />");
-    expect(routeSource).toContain("<CreditCostInline display={planEpisodesCostDisplay} />");
+    expect(routeSource).toMatch(/<CreditCostInline\s+display=\{planCostDisplay\}/);
+    expect(routeSource).toMatch(/<CreditCostInline\s+display=\{planEpisodesCostDisplay\}/);
   });
 
   it("uses localized copy for the episode detail back action", () => {

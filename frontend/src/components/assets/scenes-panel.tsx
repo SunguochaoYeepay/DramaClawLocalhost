@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Elastic-2.0
 // Copyright (c) 2026 ClaymoreLab
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Loader2, Map, Plus, RefreshCw, Sparkles } from "lucide-react";
+import { Loader2, Map, Plus, Sparkles } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { AssetHeaderActions } from "@/components/assets/asset-header-actions-slot";
+import { CharacterImageSourceSelect } from "@/components/assets/character-image-source-select";
 import { SceneAssetCard } from "@/components/assets/scene-asset-card";
 import { AssetBeatReferences } from "@/components/assets/asset-beat-references";
 import {
@@ -32,6 +33,7 @@ import {
   type SceneCoOccurrence,
 } from "@/lib/queries/asset-references";
 import { useGenerationCreditCost } from "@/lib/queries/generation-credit-cost";
+import { useAssetImageSourceSelection } from "@/lib/queries/character-image-selection";
 import { useAssetFocus } from "@/hooks/use-asset-focus";
 import { useNavigateToAsset } from "@/hooks/use-assets-deep-link";
 import {
@@ -40,6 +42,8 @@ import {
 } from "@/lib/api-errors";
 import { CreditCostInline } from "@/components/credit-cost-inline";
 import { Button } from "@/components/ui/button";
+import { SUBTLE_HEADER_ACTION_BUTTON_CLASS } from "@/components/ui/header-action-styles";
+import { HeaderRefreshButton } from "@/components/ui/header-refresh-button";
 import { EMPTY_STATE_ACTION_BUTTON_CLASS } from "@/components/ui/empty-state-styles";
 import {
   Dialog,
@@ -65,6 +69,10 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useTaskController } from "@/hooks/use-task-controller";
+import {
+  sceneReferenceAssetScope,
+  stageAssetScope,
+} from "@/lib/task-scope";
 import { openPresetProjectionInMyCanvas } from "@/features/freezone/openPresetProjection";
 import { sceneTypeLabel, sceneTypeOptions } from "@/lib/scene-type";
 import { timeOfDayLabel, timeOfDayOptions } from "@/lib/time-of-day";
@@ -559,12 +567,14 @@ function CoOccurrenceRow({
 function SceneAssetCardController({
   project,
   scene,
+  imageSourceSelection,
   referenceCount,
   onEdit,
   onDelete,
 }: {
   project: string;
   scene: SceneAsset;
+  imageSourceSelection: string;
   referenceCount: number;
   onEdit: () => void;
   onDelete: () => void;
@@ -611,12 +621,20 @@ function SceneAssetCardController({
   const generateStagePly = useGenerateScene3gsPlyAsync(project, scene.name);
   const saveDirectorWorld = useSaveSceneDirectorWorld(project, scene.name);
   const clearDirectorWorld = useClearSceneDirectorWorld(project, scene.name);
+  // Reconcile keys must reproduce the BE-hashed task scope exactly (see
+  // task-scope.ts) — a human-readable placeholder never matches the row stored
+  // on `/tasks`, so loading state is silently dropped after a refresh.
+  // Pano runs are keyed by source: when a master exists the BE step is
+  // `pano_from_master`, otherwise `pano_from_text` (mirrors the card's
+  // `panoSource = hasMaster ? "master" : "text"`).
+  const hasMaster = Boolean(resolveMediaUrl(scene.master_url));
+  const panoStep = hasMaster ? "pano_from_master" : "pano_from_text";
   const masterTask = useTaskController({
     key: {
       taskType: "scene_reference_asset",
       project,
       episode: 0,
-      scope: `scene:${scene.name}:master`,
+      scope: sceneReferenceAssetScope(scene.name, "master"),
     },
     invalidateKeys: [queryKeys.scenes(project)],
   });
@@ -625,7 +643,7 @@ function SceneAssetCardController({
       taskType: "stage_asset",
       project,
       episode: 0,
-      scope: `scene:${scene.name}:pano`,
+      scope: stageAssetScope(scene.name, panoStep),
     },
     invalidateKeys: [queryKeys.scenes(project)],
   });
@@ -634,7 +652,7 @@ function SceneAssetCardController({
       taskType: "scene_reference_asset",
       project,
       episode: 0,
-      scope: `scene:${scene.name}:reverse`,
+      scope: sceneReferenceAssetScope(scene.name, "reverse_master"),
     },
     invalidateKeys: [queryKeys.scenes(project)],
   });
@@ -643,7 +661,7 @@ function SceneAssetCardController({
       taskType: "stage_asset",
       project,
       episode: 0,
-      scope: `scene:${scene.name}:single_face_sharp`,
+      scope: stageAssetScope(scene.name, "single_face_sharp"),
     },
     invalidateKeys: [queryKeys.scenes(project)],
     onComplete: () => setStagePlySource(null),
@@ -654,7 +672,7 @@ function SceneAssetCardController({
       taskType: "stage_asset",
       project,
       episode: 0,
-      scope: `scene:${scene.name}:pano_sharp`,
+      scope: stageAssetScope(scene.name, "pano_sharp"),
     },
     invalidateKeys: [queryKeys.scenes(project)],
     onComplete: () => setStagePlySource(null),
@@ -693,7 +711,7 @@ function SceneAssetCardController({
 
   async function handleGenerateMaster() {
     try {
-      const res = await generateMaster.mutateAsync();
+      const res = await generateMaster.mutateAsync({ model: imageSourceSelection });
       if (isErrorResponse(res)) {
         toast.error(res.error);
         return;
@@ -721,7 +739,7 @@ function SceneAssetCardController({
 
   async function handleGenerateReverse() {
     try {
-      const res = await generateReverse.mutateAsync();
+      const res = await generateReverse.mutateAsync({ model: imageSourceSelection });
       if (isErrorResponse(res)) {
         toast.error(res.error);
         return;
@@ -1108,6 +1126,8 @@ export function ScenesPanel({
   const updateScene = useUpdateScene(project, editing?.name ?? "");
   const deleteScene = useDeleteScene(project);
   const buildScenes = useBuildScenes(project);
+  const imageSourceQuery = useAssetImageSourceSelection(project, "scene");
+  const imageSourceSelection = imageSourceQuery.data?.data.image_source_selection ?? "";
   const buildScenesCost = useGenerationCreditCost("feature", "build_scenes");
   const buildScenesCostDisplay =
     buildScenesCost.data?.data.display ??
@@ -1250,19 +1270,20 @@ export function ScenesPanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <AssetHeaderActions>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={async () => {
-            await scenes.refetch();
-            toast.success(t("common.refreshed"));
+        <CharacterImageSourceSelect project={project} kind="scene" />
+        <HeaderRefreshButton
+          label={t("common.refresh")}
+          onRefresh={async () => {
+            const result = await scenes.refetch();
+            if (result.isError) {
+              toast.error(t("common.error"));
+              return false;
+            }
+            return true;
           }}
+          refreshing={scenes.isRefetching}
           data-scenes-refresh
-          className="h-8 gap-1.5 rounded-[8px] border-white/10 bg-transparent px-3 text-xs font-normal shadow-none transition-transform hover:bg-white/[0.04] active:scale-95 dark:bg-transparent"
-        >
-          <RefreshCw className="size-3.5" />
-          {t("common.refresh")}
-        </Button>
+        />
         <Button
           variant="outline"
           size="sm"
@@ -1271,7 +1292,7 @@ export function ScenesPanel({
             setDraftSeed(null);
             setDialogOpen(true);
           }}
-          className="h-8 gap-1.5 rounded-[8px] border-white/10 bg-transparent px-3 text-xs font-normal shadow-none hover:bg-white/[0.04] dark:bg-transparent"
+          className={SUBTLE_HEADER_ACTION_BUTTON_CLASS}
         >
           <Plus className="size-3.5" />
           {t("assets.scenes.newScene")}
@@ -1280,7 +1301,7 @@ export function ScenesPanel({
           size="sm"
           onClick={handleBuildScenes}
           disabled={buildScenes.isPending}
-          className="h-8 gap-1.5 rounded-[8px] px-3 text-xs font-normal shadow-none hover:bg-primary/85"
+          className="h-8 gap-1.5 rounded-[8px] bg-primary px-3 text-xs font-normal text-primary-foreground shadow-none hover:bg-primary/85 active:bg-primary/75"
         >
           {buildScenes.isPending ? (
             <Loader2 className="size-3.5 animate-spin" />
@@ -1288,7 +1309,11 @@ export function ScenesPanel({
             <Sparkles className="size-3.5" />
           )}
           {t("assets.scenes.build")}
-          <CreditCostInline display={buildScenesCostDisplay} />
+          <CreditCostInline
+            display={buildScenesCostDisplay}
+            className="text-black"
+            iconClassName="text-black drop-shadow-none [&_path]:fill-current"
+          />
         </Button>
       </AssetHeaderActions>
       {scenes.isLoading ? (
@@ -1433,6 +1458,7 @@ export function ScenesPanel({
                       <SceneAssetCardController
                         project={project}
                         scene={scene}
+                        imageSourceSelection={imageSourceSelection}
                         referenceCount={refIndex.countFor("scene", scene.name)}
                         onEdit={() => {
                           setEditing(scene);

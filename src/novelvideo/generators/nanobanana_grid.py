@@ -32,7 +32,6 @@ from pydantic import BaseModel, Field
 
 from novelvideo.config import (
     IMAGE_DEFAULT_STYLE,
-    NEWAPI_BASE_URL,
     get_grid_generation_config,
     get_style_preset,
 )
@@ -335,7 +334,12 @@ def _newapi_resolution_from_image_size(image_size: str | None) -> str:
 
 def _newapi_image_model_supports_quality(model: str | None) -> bool:
     model_name = str(model or "").strip().lower()
-    return model_name in {"gpt-image-2", "image-2", "image-2-official"} or "gpt-image" in model_name
+    return model_name in {
+        "lingshan-g2",
+        "gpt-image-2",
+        "image-2",
+        "image-2-official",
+    } or "gpt-image" in model_name
 
 
 def _image_credit_billing_params(
@@ -3328,7 +3332,7 @@ async def _call_newapi_image_api(
     else:
         from novelvideo.config import get_effective_newapi_gateway_config
 
-        endpoint = (get_effective_newapi_gateway_config().base_url or NEWAPI_BASE_URL).rstrip("/")
+        endpoint = get_effective_newapi_gateway_config().base_url.rstrip("/")
     request_context = _newapi_safe_request_context(
         endpoint=endpoint,
         model=model,

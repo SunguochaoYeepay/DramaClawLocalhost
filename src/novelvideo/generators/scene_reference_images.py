@@ -10,8 +10,6 @@ from typing import Literal
 from novelvideo.config import (
     HUIMENGI_API_KEY,
     HUIMENG_IMAGE_MODEL,
-    NEWAPI_API_KEY,
-    NEWAPI_BASE_URL,
     NEWAPI_IMAGE_MODEL,
     NEWAPI_NANOBANANA2_MODEL,
     OPENAI_API_KEY,
@@ -45,7 +43,7 @@ def _archive_existing(path: Path) -> None:
     if not path.exists():
         return
     ts = int(time.time())
-    path.rename(path.with_name(f"{path.stem}_{ts}{path.suffix}"))
+    path.replace(path.with_name(f"{path.stem}_{ts}{path.suffix}"))
 
 
 def _scene_context(scene: NovelScene, base_scene: NovelScene | None = None) -> str:
@@ -590,7 +588,12 @@ def _scene_image_config(model: str) -> dict[str, str]:
         "image_size": "1K",
         "output_format": "png",
     }
-    if str(model or "").strip().lower() in {"gpt-image-2", "image-2", "image-2-official"}:
+    if str(model or "").strip().lower() in {
+        "lingshan-g2",
+        "gpt-image-2",
+        "image-2",
+        "image-2-official",
+    }:
         image_config["quality"] = "low"
     return image_config
 
@@ -667,7 +670,8 @@ async def generate_scene_reference_image(
         from novelvideo.config import get_effective_newapi_gateway_config
 
         gateway = get_effective_newapi_gateway_config()
-        api_key = gateway.api_key or ""
+        api_key = gateway.api_key
+        base_url = gateway.base_url
         selected_model = _scene_image_model(kind, provider, model)
         image_bytes, _text, error = await _call_newapi_image_api(
             api_key=api_key,
@@ -675,7 +679,7 @@ async def generate_scene_reference_image(
             prompt=prompt,
             reference_images=references or None,
             image_config=_scene_image_config(selected_model),
-            base_url=gateway.base_url,
+            base_url=base_url,
         )
     elif provider in {"huimeng", "huimengi"}:
         api_key = HUIMENGI_API_KEY or ""

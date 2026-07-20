@@ -6,6 +6,8 @@ import {
   ArrowDownUp,
   Box as BoxIcon,
   Check,
+  Download,
+  Loader2,
   Minus,
   Pause,
   Play,
@@ -16,6 +18,7 @@ import {
 } from 'lucide-react';
 
 import { useCanvasStore } from '@/stores/canvasStore';
+import { downloadUrlAsFile } from '@/lib/browserDownload';
 import {
   extractCanvasAssets,
   groupAssetsByDate,
@@ -44,9 +47,10 @@ import { ThreeDDirectorDialog } from '@/features/viewer-kit/three-d/ThreeDDirect
 import { ImageViewerModal } from './ImageViewerModal';
 import { VideoViewerModal } from './VideoViewerModal';
 
-// Node types that record backend generation history — used only to scope the
-// per-node fan-out fallback (the aggregate endpoint ignores this list). Pure
-// reference / annotation / layout nodes never have history, so we skip them.
+// Node types that record backend generation history. Used only to scope the
+// per-node fallback fan-out (see useCanvasGenerationHistory); the canvas-level
+// aggregate endpoint ignores this list. Pure reference / annotation / layout
+// nodes never have history, so we skip them.
 const GENERATIVE_HISTORY_NODE_TYPES = new Set<string>([
   CANVAS_NODE_TYPES.imageGen,
   CANVAS_NODE_TYPES.imageEdit,
@@ -61,17 +65,14 @@ const GENERATIVE_HISTORY_NODE_TYPES = new Set<string>([
   CANVAS_NODE_TYPES.threeDWorld,
 ]);
 
-// Cap how many recent records each tab shows. Records arrive newest-first
-// (aggregatePerNode sorts by recorded_at desc), so slicing keeps the latest.
-const HISTORY_DISPLAY_CAP = 20;
-
 /**
  * Map backend generation-history records into the asset-card shape the modal
  * already renders. Only completed records that carry a usable output url for an
  * image/video/audio surface; `recorded_at` drives date grouping (fixing the
  * old "未知日期" bucketing that the live-canvas scrape produced). Deduped by
- * (kind,url) so a restored/duplicated output shows once, then each kind is
- * capped to the {@link HISTORY_DISPLAY_CAP} most recent.
+ * (kind,url) so a restored/duplicated output shows once. No per-tab display cap
+ * — every record the backend returns (up to its own fetch limit) is shown, so
+ * the history browser never silently hides older assets.
  */
 /**
  * 可选的「节点元信息」解析器:用一条记录的 `node_id` 回到 live 画布,取该(世界)节点
@@ -130,7 +131,8 @@ export function recordsToAssetBuckets(
     // always matches the video. Legacy records that never stored a prompt show
     // nothing (no node-prompt fallback — it misattributed the node's current
     // prompt to old versions). 世界记录例外:无提示词时回退到上游源图节点的名字。
-    const label = historyRecordPrompt(record) ?? nodeMeta?.name ?? null;
+    const prompt = historyRecordPrompt(record);
+    const label = prompt ?? nodeMeta?.name ?? null;
     buckets[kind].push({
       id: record.id,
       kind,
@@ -140,15 +142,16 @@ export function recordsToAssetBuckets(
       ),
       nodeId: record.node_id,
       label,
+      // 用「使用」建节点时把这条记录原始提示词灌进新节点的提示词框；label 对世界
+      // 记录可能回退成节点名,所以这里单独存 prompt（仅后端存过提示词时才有值）。
+      prompt: prompt ?? null,
+      // 原始生成的注册表模型 id / 生成模式，透传给「使用」还原节点（旧记录为 undefined）。
+      model: record.model,
+      genMode: record.gen_mode,
       timestamp: Number.isNaN(ts) ? null : ts,
     });
   }
-  return {
-    image: buckets.image.slice(0, HISTORY_DISPLAY_CAP),
-    video: buckets.video.slice(0, HISTORY_DISPLAY_CAP),
-    audio: buckets.audio.slice(0, HISTORY_DISPLAY_CAP),
-    model: buckets.model.slice(0, HISTORY_DISPLAY_CAP),
-  };
+  return buckets;
 }
 
 const TAB_ORDER: CanvasAssetKind[] = ['image', 'video', 'audio', 'model'];
@@ -166,8 +169,11 @@ const THUMB_BASE_PX = 256;
 
 interface CanvasHistoryAssetsModalProps {
   onClose: () => void;
-  /** 「使用」：把该资产作为一个新节点加入画布（落在视口中心）。 */
-  onUseAsset: (asset: CanvasAsset) => void;
+  /**
+   * 「使用」：把该资产作为一个新节点加入画布（落在视口中心）。批量使用时传 placement，
+   * 由外层把多个节点在视口中心附近铺成网格。
+   */
+  onUseAsset: (asset: CanvasAsset, placement?: { index: number; total: number }) => void;
   /** 「删除」：从画布移除该资产对应的源节点。 */
   onDeleteNode: (nodeId: string) => void;
   /** 仅展示图片 tab（用于分镜组只接受图片的取图场景）。 */
@@ -193,15 +199,17 @@ export function CanvasHistoryAssetsModal({
   const nodes = useCanvasStore((state) => state.nodes);
   const useHistory = assetSource === 'generation-history';
 
-  // Scope the per-node fallback fan-out to nodes that can actually have history.
-  const historyNodeIds = useMemo(
+  // Live-node ids feed the per-node fallback fan-out for backends that don't yet
+  // expose the canvas-level aggregate endpoint. When the aggregate route is
+  // present it ignores these and returns history for deleted nodes too.
+  const fallbackNodeIds = useMemo(
     () =>
       nodes
         .filter((node) => GENERATIVE_HISTORY_NODE_TYPES.has(node.type))
         .map((node) => node.id),
     [nodes],
   );
-  const { records, isLoading } = useCanvasGenerationHistory(historyNodeIds, {
+  const { records, isLoading } = useCanvasGenerationHistory(fallbackNodeIds, {
     enabled: useHistory,
   });
 
@@ -319,6 +327,49 @@ export function CanvasHistoryAssetsModal({
     onClose();
   };
 
+  // 批量操作：当前 tab 里被选中的资产（保持展示顺序）。切 tab 会清空 selectedIds，
+  // 所以只需在 activeAssets 里过滤即可，不会跨类型串味。
+  const selectedAssets = useMemo(
+    () => activeAssets.filter((asset) => selectedIds.has(asset.id)),
+    [activeAssets, selectedIds],
+  );
+  const allSelected =
+    activeAssets.length > 0 && selectedAssets.length === activeAssets.length;
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleToggleSelectAll = () => {
+    setSelectedIds((current) =>
+      current.size === activeAssets.length
+        ? new Set()
+        : new Set(activeAssets.map((asset) => asset.id)),
+    );
+  };
+
+  // 批量下载：逐个触发浏览器下载，之间留一点间隔，避免浏览器把并发下载判为弹窗滥用而拦截。
+  const handleBatchDownload = async () => {
+    if (isDownloading || selectedAssets.length === 0) return;
+    setIsDownloading(true);
+    try {
+      for (const asset of selectedAssets) {
+        // 不用 label 当文件名：图片/视频的 label 是整段提示词，做文件名很糟；
+        // 交给 downloadUrlAsFile 从 url 推断更合适。
+        await downloadUrlAsFile(asset.url);
+        await new Promise((resolve) => setTimeout(resolve, 300));
+      }
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  // 批量使用：把选中的资产逐个作为新节点加入画布（网格铺开），完成后关闭弹窗。
+  const handleBatchUse = () => {
+    if (selectedAssets.length === 0) return;
+    selectedAssets.forEach((asset, index) => {
+      onUseAsset(asset, { index, total: selectedAssets.length });
+    });
+    onClose();
+  };
+
   const thumbPx = Math.round((THUMB_BASE_PX * zoom) / 100);
 
   return (
@@ -395,6 +446,15 @@ export function CanvasHistoryAssetsModal({
             <ArrowDownUp className="h-3.5 w-3.5" />
             {t(direction === 'desc' ? 'canvas.history.sortDesc' : 'canvas.history.sortAsc')}
           </button>
+          {selectionMode && activeAssets.length > 0 && (
+            <button
+              type="button"
+              onClick={handleToggleSelectAll}
+              className="text-[13px] text-white/60 transition-colors hover:text-white"
+            >
+              {t(allSelected ? 'canvas.history.deselectAll' : 'canvas.history.selectAll')}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => {
@@ -451,6 +511,39 @@ export function CanvasHistoryAssetsModal({
           ))
         )}
       </div>
+
+      {/* 批量操作栏：进入选择模式且至少选中一项时，从底部浮出。下载 / 使用 / 删除。 */}
+      {selectionMode && selectedAssets.length > 0 && (
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex justify-center pb-5">
+          <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-white/[0.12] bg-[#161922]/95 px-2.5 py-2 shadow-2xl backdrop-blur">
+            <span className="px-2 text-[13px] text-white/70">
+              {t('canvas.history.selectedCount', { n: selectedAssets.length })}
+            </span>
+            <span className="h-4 w-px bg-white/15" aria-hidden />
+            <button
+              type="button"
+              onClick={handleBatchDownload}
+              disabled={isDownloading}
+              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium text-white/85 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isDownloading ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Download className="h-3.5 w-3.5" />
+              )}
+              {t(isDownloading ? 'canvas.history.downloading' : 'canvas.history.batchDownload')}
+            </button>
+            <button
+              type="button"
+              onClick={handleBatchUse}
+              className="flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-medium text-white/85 transition-colors hover:bg-white/10 hover:text-white"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              {t('canvas.history.batchUse')}
+            </button>
+          </div>
+        </div>
+      )}
       </div>
 
       {/* Viewers */}
@@ -777,18 +870,21 @@ function AssetCard({
       )}
       </div>
 
-      {/* 提示词：非音频卡片在缩略图下方以卡片形式常显该版本提示词（最多三行，title
-          看全文）。视频历史里即「视频 + 提示词」一张卡片。 */}
-      {/* 提示词只在视频卡片显示（图片历史不需要）；双击看全文。 */}
-      {asset.kind === 'video' && !selectionMode && asset.label && (
-        <div
-          title={asset.label}
-          onDoubleClick={onOpenPrompt}
-          className="line-clamp-[6] flex-none cursor-pointer select-none px-2.5 py-2 text-[12px] leading-snug text-white/75 transition-colors hover:text-white/90"
-        >
-          {asset.label}
-        </div>
-      )}
+      {/* 提示词：图片 / 视频卡片在缩略图下方以卡片形式常显该版本提示词（多行截断，
+          title 悬停看全文，双击开完整弹窗）。历史资产里即「产物 + 提示词」一张卡片。
+          用 asset.prompt 作为显示条件（仅生成历史记录才有值）：分镜取图（live-canvas）
+          的 label 是文件名而非提示词、prompt 为空，故那里不会误显文件名。 */}
+      {(asset.kind === 'image' || asset.kind === 'video') &&
+        !selectionMode &&
+        asset.prompt && (
+          <div
+            title={asset.prompt}
+            onDoubleClick={onOpenPrompt}
+            className="line-clamp-[6] flex-none cursor-pointer select-none px-2.5 py-2 text-[12px] leading-snug text-white/75 transition-colors hover:text-white/90"
+          >
+            {asset.prompt}
+          </div>
+        )}
 
       {/* 世界模型：缩略图下方常显名字（提示词缺失时回退到「导演世界」默认名），
           让没有封面的世界卡片至少能认出是什么。双击看全文（有提示词时）。 */}

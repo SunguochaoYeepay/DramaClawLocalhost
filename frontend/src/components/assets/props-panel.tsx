@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Elastic-2.0
 // Copyright (c) 2026 ClaymoreLab
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Package, Plus, RefreshCw, Sparkles } from "lucide-react";
+import { Loader2, Package, Plus, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 
 import { AssetHeaderActions } from "@/components/assets/asset-header-actions-slot";
+import { CharacterImageSourceSelect } from "@/components/assets/character-image-source-select";
 import { PropAssetCard } from "@/components/assets/prop-asset-card";
 import { AssetBeatReferences } from "@/components/assets/asset-beat-references";
 import { CreditCostInline } from "@/components/credit-cost-inline";
@@ -22,9 +23,12 @@ import {
   type BeatReference,
 } from "@/lib/queries/asset-references";
 import { useGenerationCreditCost } from "@/lib/queries/generation-credit-cost";
+import { useAssetImageSourceSelection } from "@/lib/queries/character-image-selection";
 import { useAssetFocus } from "@/hooks/use-asset-focus";
 import { StageProgressPanel } from "@/components/stage-progress-panel";
 import { Button } from "@/components/ui/button";
+import { SUBTLE_HEADER_ACTION_BUTTON_CLASS } from "@/components/ui/header-action-styles";
+import { HeaderRefreshButton } from "@/components/ui/header-refresh-button";
 import {
   Tooltip,
   TooltipContent,
@@ -50,7 +54,9 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useTaskController } from "@/hooks/use-task-controller";
+import { propReferenceAssetScope } from "@/lib/task-scope";
 import { backendErrorToastMessage } from "@/lib/api-errors";
+import { cn } from "@/lib/utils";
 import {
   useBatchGeneratePropReferences,
   useCreateProp,
@@ -236,12 +242,14 @@ function PropDialog({
 function PropAssetCardController({
   project,
   prop,
+  imageSourceSelection,
   referenceCount,
   onEdit,
   onDelete,
 }: {
   project: string;
   prop: PropAsset;
+  imageSourceSelection: string;
   referenceCount: number;
   onEdit: () => void;
   onDelete: () => void;
@@ -256,14 +264,16 @@ function PropAssetCardController({
       taskType: "prop_reference_asset",
       project,
       episode: 0,
-      scope: `prop:${prop.name}:reference`,
+      // Must match the BE-hashed scope (see task-scope.ts), else the button
+      // loses its loading state after a refresh.
+      scope: propReferenceAssetScope(prop.name),
     },
     invalidateKeys: [queryKeys.props(project)],
   });
 
   async function handleGenerate() {
     try {
-      const res = await generateReference.mutateAsync();
+      const res = await generateReference.mutateAsync({ model: imageSourceSelection });
       if (isErrorResponse(res)) {
         toast.error(res.error);
         return;
@@ -329,6 +339,8 @@ export function PropsPanel({
   const refIndex = useAssetReferenceIndex(project);
   const referenceCost = useGenerationCreditCost("fixed_image", "prop_reference");
   const batchGenerate = useBatchGeneratePropReferences(project);
+  const imageSourceQuery = useAssetImageSourceSelection(project, "prop");
+  const imageSourceSelection = imageSourceQuery.data?.data.image_source_selection ?? "";
   const batchTask = useTaskController({
     key: { taskType: "batch_prop_ref", project, episode: 0 },
     invalidateKeys: [queryKeys.props(project)],
@@ -384,7 +396,7 @@ export function PropsPanel({
   }
 
   async function handleBatchGenerate() {
-    const res = await batchGenerate.mutateAsync();
+    const res = await batchGenerate.mutateAsync({ model: imageSourceSelection });
     if (isErrorResponse(res)) {
       toast.error(res.error);
       return;
@@ -410,22 +422,26 @@ export function PropsPanel({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       <AssetHeaderActions>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={async () => { await props.refetch(); toast.success(t("common.refreshed")); }}
+        <CharacterImageSourceSelect project={project} kind="prop" />
+        <HeaderRefreshButton
+          label={t("common.refresh")}
+          onRefresh={async () => {
+            const result = await props.refetch();
+            if (result.isError) {
+              toast.error(t("common.error"));
+              return false;
+            }
+            return true;
+          }}
+          refreshing={props.isRefetching}
           data-props-refresh
-          className="h-8 gap-1.5 rounded-[8px] border-white/10 bg-transparent px-3 text-xs font-normal shadow-none transition-transform hover:bg-white/[0.04] active:scale-95 dark:bg-transparent"
-        >
-          <RefreshCw className="size-3.5" />
-          {t("common.refresh")}
-        </Button>
+        />
         <Button
           variant="outline"
           size="sm"
           onClick={handleBatchGenerate}
           disabled={batchGenerate.isPending}
-          className="relative h-8 gap-1.5 rounded-[8px] border-white/10 bg-transparent px-3 text-xs font-normal shadow-none hover:bg-white/[0.04] dark:bg-transparent"
+          className={cn(SUBTLE_HEADER_ACTION_BUTTON_CLASS, "relative")}
         >
           {batchGenerate.isPending ? (
             <Loader2 className="size-3.5 animate-spin" />
@@ -445,7 +461,7 @@ export function PropsPanel({
                     setEditing(null);
                     setDialogOpen(true);
                   }}
-                  className="h-8 gap-1.5 rounded-[8px] px-3 text-xs font-normal shadow-none hover:bg-primary/85"
+                  className="h-8 gap-1.5 rounded-[8px] bg-primary px-3 text-xs font-normal text-primary-foreground shadow-none hover:bg-primary/85 active:bg-primary/75"
                 />
               }
             >
@@ -533,6 +549,7 @@ export function PropsPanel({
                 <PropAssetCardController
                   project={project}
                   prop={prop}
+                  imageSourceSelection={imageSourceSelection}
                   referenceCount={refIndex.countFor("prop", prop.name)}
                   onEdit={() => {
                     setEditing(prop);

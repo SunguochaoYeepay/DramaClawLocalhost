@@ -3,8 +3,9 @@
 import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Accessibility, Box, Crop, Download, ExternalLink, ImageIcon, Loader2, Package, RefreshCw, Sparkles, Upload } from "lucide-react";
+import { Accessibility, Box, Crop, Download, ExternalLink, ImageIcon, Loader2, Package, RefreshCw, Sparkles, Square, Upload } from "lucide-react";
 
+import { isNoReferenceMarker } from "@/lib/beat-markers";
 import { useGenerationCreditCost } from "@/lib/queries/generation-credit-cost";
 import {
   useBeatBackgroundAnchors,
@@ -180,6 +181,16 @@ export function SketchSection({
 
   const resolved = resolveImage(images, assignments, beat.beat_number, "sketch", beat.sketch_url ?? null);
   const resolvedDownloadUrl = resolved.url ? resolveMediaUrl(resolved.url) : null;
+  // Live loading state for the preview card: either the director generation or
+  // a regen run drives the overlay. Progress from the active task's SSE stream
+  // (0–1) is surfaced as a percentage; it survives refresh because both
+  // controllers reconcile against the persisted task row.
+  const sketchActive = directorTask.started || regenTask.started;
+  const sketchStream = directorTask.started ? directorTask.stream : regenTask.stream;
+  const sketchPercent = Math.max(
+    0,
+    Math.min(100, Math.round((sketchStream?.progress ?? 0) * 100)),
+  );
   const candidates = images
     .filter((i) => i.type === "sketch" && i.cell_url)
     .sort((a, b) => {
@@ -198,6 +209,7 @@ export function SketchSection({
     const sketchColors = scriptRes?.data?.sketch_colors ?? {};
     const characterNames = new Set((charsRes?.data ?? []).map((c) => c.name));
     return (beat.detected_identities ?? [])
+      .filter((identityId) => !isNoReferenceMarker(identityId))
       .map((identityId) => {
         const { hex } = parseColorValue(sketchColors[identityId] ?? "");
         if (!hex) return null;
@@ -210,15 +222,21 @@ export function SketchSection({
     const propById = new Map(
       (episodeRes?.data?.prop_menu ?? []).map((prop) => [prop.prop_id, prop]),
     );
-    return (beat.detected_props ?? []).map((propId) => {
-      const prop = propById.get(propId);
-      const { hex } = parseColorValue(prop?.marker_color ?? "");
-      return { propId, hex };
-    });
+    // __NO_PROP__ 是「本镜无道具」的哨兵，不是道具 id —— 过滤掉，否则会当成一个
+    // 名叫 __NO_PROP__ 的道具渲染成 chip。
+    return (beat.detected_props ?? [])
+      .filter((propId) => !isNoReferenceMarker(propId))
+      .map((propId) => {
+        const prop = propById.get(propId);
+        const { hex } = parseColorValue(prop?.marker_color ?? "");
+        return { propId, hex };
+      });
   }, [beat.detected_props, episodeRes]);
   const markedPropEntries = useMemo(() => {
     const detected = new Set(beat.detected_props ?? []);
-    return extractMarkedProps(beat.visual_description ?? "").filter((propId) => !detected.has(propId));
+    return extractMarkedProps(beat.visual_description ?? "").filter(
+      (propId) => !detected.has(propId) && !isNoReferenceMarker(propId),
+    );
   }, [beat.detected_props, beat.visual_description]);
   const directorControl =
     directorStatus.data?.ok === true ? directorStatus.data.data : null;
@@ -486,30 +504,55 @@ export function SketchSection({
         </div>
       )}
 
-      {/* Left: preview image */}
-      {resolved.url ? (
-        <button
-          type="button"
-          onClick={() => {
-            const safe = resolveMediaUrl(resolved.url);
-            if (safe) onPreview?.(safe);
-          }}
-          className={SKETCH_PREVIEW_CLASS}
-          style={{ aspectRatio: ratioToCss(spec.sketchAspect) }}
-        >
-          <img
-            src={resolveMediaUrl(resolved.url) ?? ""}
-            alt={`Beat ${beat.beat_number} sketch`}
-            className={SKETCH_PREVIEW_IMAGE_CLASS}
-            loading="lazy"
-            decoding="async"
-          />
-        </button>
-      ) : (
-        <div className={SKETCH_EMPTY_CLASS} style={{ aspectRatio: ratioToCss(spec.sketchAspect) }}>
-          {t("episode.beat.noSketch")}
-        </div>
-      )}
+      {/* Left: preview image (with a live progress overlay while generating) */}
+      <div className="relative justify-self-start">
+        {resolved.url ? (
+          <button
+            type="button"
+            onClick={() => {
+              const safe = resolveMediaUrl(resolved.url);
+              if (safe) onPreview?.(safe);
+            }}
+            className={SKETCH_PREVIEW_CLASS}
+            style={{ aspectRatio: ratioToCss(spec.sketchAspect) }}
+          >
+            <img
+              src={resolveMediaUrl(resolved.url) ?? ""}
+              alt={`Beat ${beat.beat_number} sketch`}
+              className={SKETCH_PREVIEW_IMAGE_CLASS}
+              loading="lazy"
+              decoding="async"
+            />
+          </button>
+        ) : (
+          <div className={SKETCH_EMPTY_CLASS} style={{ aspectRatio: ratioToCss(spec.sketchAspect) }}>
+            {t("episode.beat.noSketch")}
+          </div>
+        )}
+        {sketchActive && (
+          <div
+            className="pointer-events-none absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-[10px] bg-black/55 backdrop-blur-[1px]"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={sketchPercent}
+          >
+            <Loader2 aria-hidden className="size-5 animate-spin text-white/90" />
+            <div className="flex items-baseline leading-none text-white">
+              <span className="text-2xl font-semibold tabular-nums tracking-tight">
+                {sketchPercent}
+              </span>
+              <span className="ml-0.5 text-xs font-medium text-white/70">%</span>
+            </div>
+            <div className="h-1 w-24 overflow-hidden rounded-full bg-white/20">
+              <div
+                className="h-full rounded-full bg-white/85 transition-[width] duration-300 ease-out"
+                style={{ width: `${sketchPercent}%` }}
+              />
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Right: casted characters + candidates + actions */}
       <div className="flex min-h-0 flex-col gap-2.5">
@@ -536,20 +579,37 @@ export function SketchSection({
                 {t("episode.workbench.sketch.directorControlFile")}
               </div>
             </div>
-            <Button
-              size="xs"
-              variant="outline"
-              onClick={handleConvertDirectorControl}
-              disabled={directorConvert.isPending}
-              className="gap-1"
-            >
-              {directorConvert.isPending ? (
-                <Loader2 className="size-3 animate-spin" />
-              ) : (
-                <Sparkles className="size-3" />
-              )}
-              {t("episode.workbench.sketch.convertDirectorControl")}
-            </Button>
+            {directorTask.started ? (
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={() => void directorTask.stop()}
+                disabled={directorTask.stopping}
+                className="gap-1"
+              >
+                {directorTask.stopping ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : (
+                  <Square className="size-3" />
+                )}
+                {t("common.stop")}
+              </Button>
+            ) : (
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={handleConvertDirectorControl}
+                disabled={directorConvert.isPending}
+                className="gap-1"
+              >
+                {directorConvert.isPending ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : (
+                  <Sparkles className="size-3" />
+                )}
+                {t("episode.workbench.sketch.convertDirectorControl")}
+              </Button>
+            )}
           </div>
         )}
         {candidates.length > 0 && (
@@ -602,19 +662,36 @@ export function SketchSection({
       {/* Actions — full width row below both columns */}
       <div className="col-span-2 flex flex-wrap items-center gap-x-3 gap-y-2 pt-1">
         <div className="flex items-center gap-1.5">
-          <Button
-            size="xs"
-            variant="outline"
-            onClick={() => setRegenConfirm(true)}
-            disabled={regenerate.isPending}
-            className={MEDIA_PRIMARY_ACTION_BUTTON_CLASS}
-          >
-            {regenerate.isPending ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
-            {hasSketch
-              ? t("common.regenerate")
-              : t("episode.workbench.sketch.generateNow")}
-            <CreditCostInline display={sketchRegenCost.data?.data.display} />
-          </Button>
+          {regenTask.started ? (
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => void regenTask.stop()}
+              disabled={regenTask.stopping}
+              className={MEDIA_PRIMARY_ACTION_BUTTON_CLASS}
+            >
+              {regenTask.stopping ? (
+                <Loader2 className="size-3 animate-spin" />
+              ) : (
+                <Square className="size-3" />
+              )}
+              {t("common.stop")}
+            </Button>
+          ) : (
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => setRegenConfirm(true)}
+              disabled={regenerate.isPending}
+              className={MEDIA_PRIMARY_ACTION_BUTTON_CLASS}
+            >
+              {regenerate.isPending ? <Loader2 className="size-3 animate-spin" /> : <RefreshCw className="size-3" />}
+              {hasSketch
+                ? t("common.regenerate")
+                : t("common.generateNew")}
+              <CreditCostInline display={sketchRegenCost.data?.data.display} />
+            </Button>
+          )}
         </div>
         <div className="flex items-center gap-1.5">
           <Button

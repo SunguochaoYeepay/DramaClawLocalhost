@@ -112,6 +112,7 @@ import { NodeToolDialog } from './ui/NodeToolDialog';
 import { ImageViewerModal } from './ui/ImageViewerModal';
 import { VideoViewerModal } from './ui/VideoViewerModal';
 import { CanvasZoomControl } from './ui/CanvasZoomControl';
+import { useEdgeVisibilityStore } from './ui/edgeVisibilityStore';
 import { CanvasQuickActionBar } from './ui/CanvasQuickActionBar';
 import { BackToNodesHint } from './ui/BackToNodesHint';
 import { CanvasMinimapButton } from './ui/CanvasMinimapButton';
@@ -138,6 +139,9 @@ const REACT_FLOW_PRO_OPTIONS = { hideAttribution: true };
 // 自动吸附连线(React Flow 原生会高亮合法 handle 并把连线吸过去);更远处落到节
 // 点本体仍有 handleConnectEnd 里的 DOM 命中兜底。
 const CONNECTION_SNAP_RADIUS = 160;
+// 手动「+」连线时，光标离目标节点边缘多近（屏幕像素）就算进入其「可落点区域」——
+// 不必压到节点里面才触发落点高亮/建边，节点周围一圈邻域内即可吸附。
+const MANUAL_DROP_PROXIMITY_PX = 56;
 const MULTI_SELECTION_KEY_CODES = ['Control', 'Meta'];
 const PAN_ACTIVATION_KEY_CODE = 'Space';
 // Pan the canvas only by holding the middle mouse button (scroll-wheel) and dragging
@@ -750,6 +754,11 @@ export function Canvas({
   const suppressNextEdgeClickRef = useRef(false);
   const hoveredNodeClearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const plusConnectStartRef = useRef<PendingConnectStart | null>(null);
+  // 手动「+」拖线时，当前被高亮为合法落点的节点 DOM。手动连线走自绘预览线
+  // （非 React Flow 原生连线），RF 不会给目标 handle 挂 connectingto/valid，所以
+  // 落点动画靠这里在 dragMove 时直接给命中节点的 wrapper 加类、离开时摘掉，避免把
+  // 落点状态塞进 node.data 触发全量节点重渲染。
+  const dropTargetElRef = useRef<HTMLElement | null>(null);
   // Source node ids waiting to be fanned into the next spawned node (batch "+").
   const batchConnectDragRef = useRef<{
     sourceIds: string[];
@@ -968,6 +977,9 @@ export function Canvas({
 
   const nodes = useCanvasStore((state) => state.nodes);
   const edges = useCanvasStore((state) => state.edges);
+  // 连线可见性：隐藏时只给 ReactFlow 的边打 `hidden`，真实 edges 一动不动（见
+  // edgeVisibilityStore）。持久化/自动布局/导出全部照用 store 里的真实连线。
+  const edgesHidden = useEdgeVisibilityStore((state) => state.hidden);
 
   // 预取 beat-context 节点引用到的剧集 beats/episode-detail,焐热缓存。配合 BeatContextNode
   // 里「仅选中时才查询」的门控,避免视口虚拟化下节点挂载即请求、卸载即被取消的 499 循环。
@@ -1085,6 +1097,13 @@ export function Canvas({
       };
     });
   }, [nodes, placementConfirmNodeId]);
+
+  // 隐藏连线时给每条边补 `hidden: true`——ReactFlow 会跳过渲染但边仍在图里，
+  // 连接、reconnect、持久化都不受影响。显示时直接透传真实 edges，零额外分配。
+  const renderedEdges = useMemo(() => {
+    if (!edgesHidden) return edges;
+    return edges.map((edge) => (edge.hidden ? edge : { ...edge, hidden: true }));
+  }, [edges, edgesHidden]);
 
   const clearMarqueeSelection = useCallback(() => {
     marqueeSelectionRef.current = null;
@@ -3089,21 +3108,43 @@ export function Canvas({
   );
 
   // 历史资产弹窗「使用」：把该资产作为新节点生成到视口中心（复用素材落点的 spawnAssetNode）。
+  // 批量使用时传 placement，把多个新节点在视口中心附近铺成网格，避免全部叠在同一点。
   const handleUseHistoryAsset = useCallback(
-    (asset: CanvasAsset) => {
+    (asset: CanvasAsset, placement?: { index: number; total: number }) => {
       const payload: CanvasAssetDragPayload = {
         kind: asset.kind,
         label: asset.label ?? '',
+        // 历史记录里存的原始提示词，回填到新建视频节点的提示词框（见 spawnAssetNode）。
+        prompt: asset.prompt ?? undefined,
         url: asset.url,
         // 世界模型节点用 coverUrl 当封面（previewImageUrl）；其余类型无封面。
         coverUrl: asset.kind === 'model' ? asset.previewUrl : null,
+        // 历史「使用」还原的是生成产物：图片应还原成成品「图片节点」(imageGen)——
+        // 带回提示词、展开操作区、按图自适应比例，而非只读的上传参考图节点（见 spawnAssetNode）。
+        restoreAsGeneratedImage: true,
+        // 原始生成的注册表模型 id / 生成模式,透传给还原节点以复现原次生成配置
+        // （视频写回 data.model+data.genMode；图片写回 data.model）。旧记录为 undefined。
+        model: asset.model ?? undefined,
+        genMode: asset.genMode ?? undefined,
         source: {},
       };
-      const newNodeId = spawnAssetNode(
-        useCanvasStore.getState(),
-        payload,
-        spawnAtViewportCenter(),
-      );
+      const origin = spawnAtViewportCenter();
+      // 网格铺开：每行最多 4 个，格间距 320，整体大致以视口中心为中心。
+      const position =
+        placement && placement.total > 1
+          ? (() => {
+              const perRow = Math.min(4, placement.total);
+              const gap = 320;
+              const col = placement.index % perRow;
+              const row = Math.floor(placement.index / perRow);
+              const rows = Math.ceil(placement.total / perRow);
+              return {
+                x: origin.x + (col - (perRow - 1) / 2) * gap,
+                y: origin.y + (row - (rows - 1) / 2) * gap,
+              };
+            })()
+          : origin;
+      const newNodeId = spawnAssetNode(useCanvasStore.getState(), payload, position);
       setSelectedNode(newNodeId);
       scheduleCanvasPersist(0);
     },
@@ -3943,10 +3984,89 @@ export function Canvas({
     [nodes, reactFlowInstance],
   );
 
+  // 摘掉当前落点高亮（拖线结束/离开合法节点时调用）。
+  const clearDropTargetHighlight = useCallback(() => {
+    if (dropTargetElRef.current) {
+      dropTargetElRef.current.classList.remove('canvas-node-drop-target');
+      dropTargetElRef.current = null;
+    }
+  }, []);
+
+  // 给定光标位置 + 起手信息，返回「可作为合法落点」的节点 DOM（否则 null）。
+  // 校验规则与 dragEnd/handleConnectEnd 建边时一致：非自身、类型可连、两端 handle 齐备。
+  // 命中方式：① 光标直接压在某节点上优先；② 否则在节点边缘 MANUAL_DROP_PROXIMITY_PX
+  // 邻域内挑「点到矩形」距离最近的合法节点——不必压进节点内部才触发。
+  const resolveManualDropTargetEl = useCallback(
+    (clientPosition: { x: number; y: number }, pending: PendingConnectStart) => {
+      const validate = (el: HTMLElement | null): HTMLElement | null => {
+        const dropNodeId = el?.dataset?.id ?? null;
+        if (!el || !dropNodeId || dropNodeId === pending.nodeId) return null;
+        const sourceNode =
+          pending.handleType === 'source'
+            ? nodes.find((node) => node.id === pending.nodeId)
+            : nodes.find((node) => node.id === dropNodeId);
+        const targetNode =
+          pending.handleType === 'source'
+            ? nodes.find((node) => node.id === dropNodeId)
+            : nodes.find((node) => node.id === pending.nodeId);
+        if (
+          sourceNode &&
+          targetNode &&
+          canNodeTypeBeManualConnectionSource(sourceNode.type, targetNode.type) &&
+          nodeHasSourceHandle(sourceNode.type) &&
+          nodeHasTargetHandle(targetNode.type)
+        ) {
+          return el;
+        }
+        return null;
+      };
+
+      // ① 光标直接落在某节点上。
+      const direct = validate(
+        document
+          .elementFromPoint(clientPosition.x, clientPosition.y)
+          ?.closest?.('.react-flow__node[data-id]') as HTMLElement | null,
+      );
+      if (direct) return direct;
+
+      // ② 邻域内找「点到节点矩形」最近的合法节点。
+      const wrapper = wrapperRef.current;
+      if (!wrapper) return null;
+      let best: HTMLElement | null = null;
+      let bestDist = Infinity;
+      wrapper
+        .querySelectorAll<HTMLElement>('.react-flow__node[data-id]')
+        .forEach((el) => {
+          const rect = el.getBoundingClientRect();
+          const dx =
+            clientPosition.x < rect.left
+              ? rect.left - clientPosition.x
+              : clientPosition.x > rect.right
+                ? clientPosition.x - rect.right
+                : 0;
+          const dy =
+            clientPosition.y < rect.top
+              ? rect.top - clientPosition.y
+              : clientPosition.y > rect.bottom
+                ? clientPosition.y - rect.bottom
+                : 0;
+          const dist = Math.hypot(dx, dy);
+          if (dist > MANUAL_DROP_PROXIMITY_PX || dist >= bestDist) return;
+          if (validate(el)) {
+            best = el;
+            bestDist = dist;
+          }
+        });
+      return best;
+    },
+    [nodes],
+  );
+
   const handlePlusConnectDragStart = useCallback((params: PlusConnectDragParams) => {
     const containerRect = wrapperRef.current?.getBoundingClientRect();
     if (!containerRect) return;
     clearHoveredNodeTimer();
+    clearDropTargetHighlight();
     setHoveredNodeId(null);
     setIsPlusConnectDragging(true);
 
@@ -3984,7 +4104,7 @@ export function Canvas({
     setShowNodeMenu(false);
     setMenuAllowedTypes(undefined);
     setPreviewConnectionVisual(null);
-  }, [clearHoveredNodeTimer]);
+  }, [clearHoveredNodeTimer, clearDropTargetHighlight]);
 
   const handlePlusConnectDragMove = useCallback((params: PlusConnectDragParams) => {
     const pending = plusConnectStartRef.current;
@@ -4008,13 +4128,24 @@ export function Canvas({
       width: containerRect.width,
       height: containerRect.height,
     });
-  }, []);
+
+    // 落点反馈：光标进入某个合法目标节点时高亮它（呼吸+发光），离开则摘掉。
+    const dropEl = resolveManualDropTargetEl(params.clientPosition, pending);
+    if (dropEl !== dropTargetElRef.current) {
+      clearDropTargetHighlight();
+      if (dropEl) {
+        dropEl.classList.add('canvas-node-drop-target');
+        dropTargetElRef.current = dropEl;
+      }
+    }
+  }, [clearDropTargetHighlight, resolveManualDropTargetEl]);
 
   const handlePlusConnectDragEnd = useCallback(
     (params: PlusConnectDragParams) => {
       const pending = plusConnectStartRef.current;
       plusConnectStartRef.current = null;
       setIsPlusConnectDragging(false);
+      clearDropTargetHighlight();
 
       const containerRect = wrapperRef.current?.getBoundingClientRect();
       if (!pending || !containerRect) {
@@ -4023,10 +4154,8 @@ export function Canvas({
         return;
       }
 
-      const dropNodeElement = document.elementFromPoint(
-        params.clientPosition.x,
-        params.clientPosition.y,
-      )?.closest?.('.react-flow__node[data-id]') as HTMLElement | null;
+      // 与拖动高亮同一套邻域判定：松手时落在节点周围一圈邻域内即可建边，不必压进节点内部。
+      const dropNodeElement = resolveManualDropTargetEl(params.clientPosition, pending);
       const dropNodeId = dropNodeElement?.dataset?.id ?? null;
 
       if (dropNodeId && dropNodeId !== pending.nodeId) {
@@ -4115,7 +4244,14 @@ export function Canvas({
       suppressNextPaneClickRef.current = true;
       setShowNodeMenu(true);
     },
-    [connectGraphNodes, nodes, reactFlowInstance, scheduleCanvasPersist],
+    [
+      connectGraphNodes,
+      nodes,
+      reactFlowInstance,
+      scheduleCanvasPersist,
+      clearDropTargetHighlight,
+      resolveManualDropTargetEl,
+    ],
   );
 
   // ---- Batch connect from the multi-selection "+" -------------------------
@@ -4382,7 +4518,7 @@ export function Canvas({
     >
       <ReactFlow
         nodes={renderedNodes}
-        edges={edges}
+        edges={renderedEdges}
         onNodesChange={handleNodesChange}
         onEdgesChange={handleEdgesChange}
         onEdgeClick={handleEdgeClick}

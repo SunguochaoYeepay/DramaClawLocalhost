@@ -96,6 +96,18 @@ describe("recordsToAssetBuckets — world history", () => {
     expect(buckets.model).toHaveLength(0);
   });
 
+  it("carries the record's prompt onto image assets (drives the image prompt caption)", () => {
+    const buckets = recordsToAssetBuckets([
+      record({
+        id: "img-2",
+        media_type: "image",
+        result: { image_url: "/static/p/y.png", prompt: "一只在雨中的猫" },
+      }),
+    ]);
+    expect(buckets.image[0]?.prompt).toBe("一只在雨中的猫");
+    expect(buckets.image[0]?.label).toBe("一只在雨中的猫");
+  });
+
   it("falls back to the host node's cover/name when the record carries neither", () => {
     const buckets = recordsToAssetBuckets(
       [
@@ -134,5 +146,34 @@ describe("recordsToAssetBuckets — world history", () => {
     );
     expect(buckets.model[0]?.label).toBe("记录里的提示词");
     expect(buckets.model[0]?.previewUrl).toContain("record-src.png");
+  });
+});
+
+describe("recordsToAssetBuckets — model/genMode 记忆", () => {
+  it("从带 model/gen_mode 的记录提取到 asset", () => {
+    const buckets = recordsToAssetBuckets([
+      record({
+        media_type: "video",
+        model: "happyhouse_1_0",
+        gen_mode: "firstLastFrame",
+        result: { output_url: "/static/p/v.mp4" },
+      }),
+    ]);
+    const asset = Object.values(buckets)
+      .flat()
+      .find((a) => a.url === "/static/p/v.mp4");
+    expect(asset?.model).toBe("happyhouse_1_0");
+    expect(asset?.genMode).toBe("firstLastFrame");
+  });
+
+  it("旧记录无字段时得到 undefined", () => {
+    const buckets = recordsToAssetBuckets([
+      record({ media_type: "image", result: { output_url: "/static/p/i.png" } }),
+    ]);
+    const asset = Object.values(buckets)
+      .flat()
+      .find((a) => a.url === "/static/p/i.png");
+    expect(asset?.model).toBeUndefined();
+    expect(asset?.genMode).toBeUndefined();
   });
 });

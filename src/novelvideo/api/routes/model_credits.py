@@ -61,7 +61,7 @@ def _clean_quantity(value: object) -> int:
 def _image_model_supports_quality(model: str) -> bool:
     model_name = str(model or "").strip().lower()
     return (
-        model_name in {"gpt-image-2", "image-2", "image-2-official"}
+        model_name in {"lingshan-g2", "gpt-image-2", "image-2", "image-2-official"}
         or "gpt-image" in model_name
     )
 
@@ -235,14 +235,11 @@ def _generation_credit_cost_model(kind: str, value: str) -> str:
 
         return INDEXTTS2_RECORD_MODEL.strip()
     if kind == "freezone_audio_music":
-        return "eleven-music"
+        return "LingShan-MU-11"
     if kind == "freezone_image_reverse_prompt":
-        from novelvideo.config import get_newapi_text_model_name
+        from novelvideo.freezone.vision_gateway import resolve_freezone_vision_model
 
-        return get_newapi_text_model_name(
-            "FREEZONE_IMAGE_REVERSE_PROMPT_MODEL",
-            "gemini-3.5-flash",
-        )
+        return resolve_freezone_vision_model()
     if kind == "freezone_story_script":
         from novelvideo.freezone.text_node import resolve_freezone_story_script_model
 
@@ -384,7 +381,7 @@ async def get_generation_credit_cost(
     surface: GenerationCreditSurface = Query("supertale"),
     value: str = Query("", max_length=256),
     params: str = Query("", max_length=2048),
-    quantity: int = Query(1, ge=0, le=1_000_000),
+    quantity: int = Query(1, ge=0, le=50_000_000),
     mode_key: str = Query("", max_length=128),
     image_role: str = Query("", max_length=64),
     user: dict = Depends(get_api_user),
@@ -412,10 +409,17 @@ async def get_generation_credit_cost(
         ),
         quantity=_clean_quantity(quantity),
     )
-    return {
-        "ok": True,
-        "data": {
-            "cost": quote.total_cost,
-            "display": _display_credit_cost(quote.total_cost),
-        },
+    data = {
+        "cost": quote.total_cost,
+        "display": _display_credit_cost(quote.total_cost),
     }
+    if getattr(quote, "unit", "call") == "character":
+        data.update(
+            {
+                "unit": "character",
+                "unit_cost": getattr(quote, "unit_cost", 0),
+                "quantity": getattr(quote, "quantity", quantity),
+                "params": getattr(quote, "params", None) or {},
+            }
+        )
+    return {"ok": True, "data": data}

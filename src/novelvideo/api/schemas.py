@@ -455,6 +455,10 @@ class FreezoneGenRequest(BaseModel):
     provider: Optional[str] = None
     model: Optional[str] = None
     quality: Optional[str] = Field(default="medium", description="图片画质档位，默认 medium")
+    model_id: Optional[str] = Field(
+        default=None, description="可选：注册表模型 id，用于还原节点时回填 model"
+    )
+    gen_mode: Optional[str] = Field(default=None, description="可选：生成模式，用于还原节点时回填 genMode")
 
 
 class FreezoneEditRequest(BaseModel):
@@ -482,6 +486,10 @@ class FreezoneEditRequest(BaseModel):
     provider: Optional[str] = None
     model: Optional[str] = None
     quality: Optional[str] = Field(default="medium", description="图片画质档位，默认 medium")
+    model_id: Optional[str] = Field(
+        default=None, description="可选：注册表模型 id，用于还原节点时回填 model"
+    )
+    gen_mode: Optional[str] = Field(default=None, description="可选：生成模式，用于还原节点时回填 genMode")
 
 
 class FreezoneSketchFromContextRequest(BaseModel):
@@ -958,15 +966,28 @@ class FreezoneRelightRequest(BaseModel):
 
 
 class FreezoneVideoCharacterLibraryItemRequest(BaseModel):
-    """视频节点角色库录入请求。
+    """视频节点资产库录入请求。
 
-    角色图片先通过通用 upload 上传，再把静态地址登记到视频角色库。
+    素材先通过通用 upload 上传，再把静态地址登记到资产库。图片走 image_urls，
+    视频/音频走对应的单地址字段。
     """
 
-    name: str = Field(description="角色名称，用于前端角色库展示")
+    name: str = Field(description="资产名称，用于前端资产库展示")
+    media: Literal["image", "video", "audio"] = Field(
+        default="image",
+        description="素材类型：图片 / 视频 / 音频",
+    )
     image_urls: list[str] = Field(
         default_factory=list,
-        description="角色参考图静态地址列表，至少一张",
+        description="图片参考图静态地址列表（media=image 时至少一张）",
+    )
+    video_url: str | None = Field(
+        default=None,
+        description="视频静态地址（media=video 时必填）",
+    )
+    audio_url: str | None = Field(
+        default=None,
+        description="音频静态地址（media=audio 时必填）",
     )
 
 
@@ -1017,6 +1038,7 @@ class FreezoneVideoGenRequest(BaseModel):
     )
     canvas_id: str = Field(default="", description="可选：来源画布 id，用于记录节点生成历史")
     node_id: str = Field(default="", description="可选：来源节点 id，用于记录节点生成历史")
+    gen_mode: Optional[str] = Field(default=None, description="可选：生成模式，用于还原节点时回填 genMode")
 
 
 class FreezoneImageToVideoRequest(BaseModel):
@@ -1068,6 +1090,7 @@ class FreezoneImageToVideoRequest(BaseModel):
     )
     canvas_id: str = Field(default="", description="可选：来源画布 id，用于记录节点生成历史")
     node_id: str = Field(default="", description="可选：来源节点 id，用于记录节点生成历史")
+    gen_mode: Optional[str] = Field(default=None, description="可选：生成模式，用于还原节点时回填 genMode")
 
 
 class FreezoneKeyframeVideoRequest(BaseModel):
@@ -1121,6 +1144,58 @@ class FreezoneKeyframeVideoRequest(BaseModel):
     )
     canvas_id: str = Field(default="", description="可选：来源画布 id，用于记录节点生成历史")
     node_id: str = Field(default="", description="可选：来源节点 id，用于记录节点生成历史")
+    gen_mode: Optional[str] = Field(default=None, description="可选：生成模式，用于还原节点时回填 genMode")
+
+
+class FreezoneVideoEditRequest(BaseModel):
+    """视频编辑请求（HappyHorse 视频编辑功能）。
+
+    输入 1 个源视频 + 0-5 张参考图，对视频进行编辑改写。
+    """
+
+    video_url: str = Field(description="源视频静态地址，必填")
+    image_urls: list[str] = Field(
+        default_factory=list,
+        description="参考图静态地址列表，0-5 张，单张 <= 10MB",
+    )
+    prompt: str = Field(default="", description="用户编辑指令/视频描述，可为空")
+    camera_template_id: Optional[str] = Field(
+        default=None,
+        description="运镜模板 id，例如 locked_off / follow_tracking / pedestal_up",
+    )
+    marks: list["FreezoneVideoMark"] = Field(
+        default_factory=list,
+        description="局部元素标记列表",
+    )
+    aspect_ratio: Literal["auto", "16:9", "4:3", "1:1", "3:4", "9:16", "21:9"] = Field(
+        default="16:9",
+        description="视频比例；视频编辑画幅由源视频决定，此字段仅占位",
+    )
+    resolution: Literal["480p", "720p", "1080p"] = Field(
+        default="720p",
+        description="输出清晰度档位",
+    )
+    duration_seconds: int = Field(
+        default=5,
+        ge=1,
+        description="视频时长，至少 1 秒；不同模型支持的时长范围可能不同",
+    )
+    audio_setting: Literal["auto", "origin"] = Field(
+        default="auto",
+        description="视频编辑音频策略：auto 自动 / origin 保留原声",
+    )
+    generate_audio: bool = Field(default=False, description="是否生成原生音频")
+    human_review: bool = Field(
+        default=False,
+        description="是否开启真人素材审核/加白流程",
+    )
+    model: str = Field(
+        default="newapi_happyhorse-1.0",
+        description="视频模型或模型选项 id。请传 /freezone/video/models 返回值之一",
+    )
+    canvas_id: str = Field(default="", description="可选：来源画布 id，用于记录节点生成历史")
+    node_id: str = Field(default="", description="可选：来源节点 id，用于记录节点生成历史")
+    gen_mode: Optional[str] = Field(default=None, description="可选：生成模式，用于还原节点时回填 genMode")
 
 
 class FreezoneVideoReferenceItem(BaseModel):
@@ -1280,6 +1355,7 @@ class FreezoneVideoOmniGenRequest(BaseModel):
     )
     canvas_id: str = Field(default="", description="可选：来源画布 id，用于记录节点生成历史")
     node_id: str = Field(default="", description="可选：来源节点 id，用于记录节点生成历史")
+    gen_mode: Optional[str] = Field(default=None, description="可选：生成模式，用于还原节点时回填 genMode")
 
 
 class FreezoneVideoEraseRequest(BaseModel):
@@ -1448,7 +1524,7 @@ class FreezoneAudioMusicRequest(BaseModel):
         description="音乐描述 prompt。",
         examples=["cinematic rain-soaked suspense music"],
     )
-    model: str = Field(default="eleven-music", description="音乐模型，默认 eleven-music。")
+    model: str = Field(default="LingShan-MU-11", description="音乐模型，默认 LingShan-MU-11。")
     response_format: Literal["mp3", "opus", "pcm", "ulaw", "alaw"] = Field(
         default="mp3",
         description="音频返回格式。mp3 会自动映射为 mp3_44100_128。",
@@ -1789,6 +1865,10 @@ class ScenePanoGenerateRequest(BaseModel):
     timeout_seconds: int = 1800
 
 
+class SceneReferenceGenerateRequest(BaseModel):
+    model: Optional[str] = None
+
+
 # ── 道具资产 ─────────────────────────────────────────────────────────────────
 
 
@@ -1814,6 +1894,7 @@ class PropUpdate(BaseModel):
 
 class PropReferenceGenerateRequest(BaseModel):
     style: Optional[str] = None
+    model: Optional[str] = None
 
 
 # ── 身份 CRUD ────────────────────────────────────────────────────────────────
@@ -1841,6 +1922,10 @@ class CharacterAssetRestoreRequest(BaseModel):
 
 class CharacterImageSelectionRequest(BaseModel):
     character_image_selection: str
+
+
+class AssetImageSourceSelectionRequest(BaseModel):
+    image_source_selection: str
 
 
 class CharacterVoiceRecordRequest(BaseModel):

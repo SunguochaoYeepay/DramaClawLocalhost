@@ -17,24 +17,52 @@ function datePrefix(d: Date = new Date()): string {
   return `${yy}${mm}${dd}-`;
 }
 
-// Resolve the app version at config-load time. CI sets VITE_APP_VERSION
-// explicitly (already carrying the date prefix — see deploy.yml). Local
-// `vite dev` and `vite build` outside CI fall back to `git describe` and
-// the date prefix is applied here.
+// The human-facing version, shown in the status bar. It is display-only —
+// never compare it across deploys (two builds can legitimately carry the same
+// version string), that's what BUILD_ID below is for.
+// Resolution order:
+//   1. VITE_APP_VERSION — set by release CI from the tag.
+//   2. the nearest git tag (`git describe --tags --abbrev=0`) — so a local
+//      checkout shows the SAME version the release stamped, automatically,
+//      once you pull the code that carries the new tag. No manual bump needed.
+//   3. DEFAULT_APP_VERSION — last resort for a git-less build (source tarball).
+const DEFAULT_APP_VERSION = "v1.1.0";
+
 function resolveAppVersion(): string {
   if (process.env.VITE_APP_VERSION) return process.env.VITE_APP_VERSION;
+  try {
+    const tag = execSync("git describe --tags --abbrev=0", {
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+    if (tag) return tag;
+  } catch {
+    // not a git checkout, or no tags — fall through to the constant
+  }
+  return DEFAULT_APP_VERSION;
+}
+
+// The deploy fingerprint. MUST differ between any two builds, because the
+// running app compares it against the deployed /version.json to decide whether
+// to nudge the user to refresh (see lib/version-update-watch.ts). Prefer
+// `git describe`, and fall back to the build timestamp so even a git-less
+// build still produces a value that changes — a constant here would silently
+// disable update detection.
+function resolveBuildId(): string {
   try {
     const described = execSync("git describe --tags --always --dirty", {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
-    return `${datePrefix()}${described}`;
+    if (described) return `${datePrefix()}${described}`;
   } catch {
-    return `${datePrefix()}unknown`;
+    // not a git checkout (e.g. source tarball) — fall through to the timestamp
   }
+  return `${datePrefix()}${Date.now()}`;
 }
 
 const APP_VERSION = resolveAppVersion();
+const BUILD_ID = resolveBuildId();
 const DEFAULT_API_TARGET = "http://127.0.0.1:8780";
 
 export default defineConfig(({ mode }) => {
@@ -47,23 +75,24 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss(),
       {
-        // Emit a tiny version manifest the running app polls to detect deploys.
-        // The version written here is the SAME compile-time constant baked into
-        // the bundle via `define` below, so the running code can compare its own
-        // APP_VERSION against the deployed version.json — no fetched baseline,
-        // hence no seed race.
+        // Emit a tiny manifest the running app polls to detect deploys. The
+        // buildId written here is the SAME compile-time constant baked into the
+        // bundle via `define` below, so the running code can compare its own
+        // BUILD_ID against the deployed version.json — no fetched baseline,
+        // hence no seed race. `version` rides along for display/debugging only.
         name: "emit-version-json",
         generateBundle() {
           this.emitFile({
             type: "asset",
             fileName: "version.json",
-            source: JSON.stringify({ version: APP_VERSION }),
+            source: JSON.stringify({ version: APP_VERSION, buildId: BUILD_ID }),
           });
         },
       },
     ],
     define: {
       __APP_VERSION__: JSON.stringify(APP_VERSION),
+      __BUILD_ID__: JSON.stringify(BUILD_ID),
     },
     resolve: {
       alias: {

@@ -141,7 +141,7 @@ export function SingleBeatPanel({
             <div key={id}>
               <div
                 className={cn(
-                  "sticky top-0 z-20 flex min-h-11 items-center border-b border-white/[0.055] bg-[#111111] text-[13px] font-medium text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:bg-white/[0.035] hover:text-foreground",
+                  "sticky top-0 z-20 flex min-h-11 items-center border-b border-white/[0.055] bg-[#111111] text-sm font-semibold text-muted-foreground shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-colors hover:bg-white/[0.035] hover:text-foreground",
                   isOpen && "bg-[#121212] text-foreground/90",
                 )}
               >
@@ -157,8 +157,8 @@ export function SingleBeatPanel({
                       isOpen && "text-muted-foreground/75",
                     )}
                   />
-                  <Icon className={cn("size-3.5", isOpen ? "text-muted-foreground/80" : "text-muted-foreground/70")} />
-                  <span className="text-foreground/78">{t(labelKey)}</span>
+                  <Icon className={cn("size-4", isOpen ? "text-primary/85" : "text-muted-foreground/85")} />
+                  <span className={cn("font-semibold tracking-tight", isOpen ? "text-foreground" : "text-foreground/90")}>{t(labelKey)}</span>
                 </button>
                 {id === "video" && (
                   <VideoBackendHeaderSelect

@@ -21,6 +21,21 @@ export type CanvasAssetDragKind = "image" | "video" | "audio" | "model";
 export interface CanvasAssetDragPayload {
   kind: CanvasAssetDragKind;
   label: string;
+  /**
+   * 生成型节点(视频 / 图片)的提示词。历史「使用」流程从对应记录带过来,用于回填
+   * 新节点的提示词框;侧栏拖拽 / live-canvas 复制不带此字段(label 是显示名非提示词)。
+   */
+  prompt?: string;
+  /**
+   * 仅历史「使用」置真:表示这是一张「生成产物」而非上传参考图。图片据此还原成
+   * 成品「图片节点」(imageGen)——带回提示词、按图自适应比例、显示分辨率角标;
+   * 不置(普通拖拽 / 素材库参考图)则仍建 upload 节点(替换素材)。
+   */
+  restoreAsGeneratedImage?: boolean;
+  /** 原始生成注册表模型 id（还原用）。 */
+  model?: string;
+  /** 原始生成模式（还原用）。 */
+  genMode?: string;
   url: string;
   aspectRatio?: string;
   /** 3GS 借用同 scene 的封面图;其余类型为空。 */
@@ -113,6 +128,13 @@ export function spawnAssetNode(
           previewImageUrl: null,
           aspectRatio: payload.aspectRatio,
           sourceFileName: payload.label,
+          // 历史「使用」带来了该记录的原始提示词时,回填到视频节点的提示词框;
+          // 无提示词(拖拽/live-canvas)则不写,保持占位符。
+          ...(payload.prompt ? { prompt: payload.prompt } : {}),
+          // 历史「使用」带来了原始注册表模型 / 生成模式时回填,让还原的视频节点与原次
+          // 生成一致(VideoNode 读 data.model / data.genMode);缺省则不写,走节点默认。
+          ...(payload.model ? { model: payload.model } : {}),
+          ...(payload.genMode ? { genMode: payload.genMode } : {}),
           __freezone_source: sourceMeta,
           ...candidateData,
           ...directorControlBundle,
@@ -137,6 +159,32 @@ export function spawnAssetNode(
       );
     case "image":
     default:
+      // 历史「使用」还原生成产物 → 建成品「图片节点」(imageGen):带回提示词与操作区,
+      // onLoad 按图片自然尺寸自适应比例并显示分辨率角标(见 ImageGenNode)。写入
+      // committed_* 使其与生成完成后落地的节点字段一致(成品图直接展示、可继续再生成)。
+      // 普通拖拽 / 素材库参考图(无此标记)仍建 upload 节点(替换素材)。
+      if (payload.restoreAsGeneratedImage) {
+        return store.addNode(
+          CANVAS_NODE_TYPES.imageGen,
+          position,
+          {
+            displayName: payload.label,
+            imageUrl: payload.url,
+            previewImageUrl: payload.url,
+            committed_at: new Date().toISOString(),
+            committed_slot_url: payload.url,
+            ...(payload.prompt ? { prompt: payload.prompt } : {}),
+            // 历史「使用」带来原始注册表模型 id 时回填,让还原的成品图片节点与原次生成
+            // 同模型(ImageGenNode 读 data.model);缺省则不写,节点自行 seed 默认模型。
+            ...(payload.model ? { model: payload.model } : {}),
+            __freezone_source: sourceMeta,
+            ...candidateData,
+            ...directorControlBundle,
+            ...mainlineData,
+            ...slotData,
+          } as Record<string, unknown> as Partial<CanvasNodeData>,
+        );
+      }
       return store.addNode(
         CANVAS_NODE_TYPES.upload,
         position,

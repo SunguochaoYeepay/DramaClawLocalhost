@@ -12,6 +12,7 @@ import {
 import { useAppStore } from "@/stores/app-store";
 import { displayLabel } from "@/task-center/derivations";
 import { RegionBadge } from "@/components/layout/region-badge";
+import { APP_VERSION } from "@/lib/app-version";
 import { cn } from "@/lib/utils";
 import type { StreamHealth, TaskState } from "@/task-center/types";
 
@@ -201,6 +202,12 @@ export function TaskStatusBar({ onOpenPikoStation }: TaskStatusBarProps) {
             {t(`taskCenter.statusBar.${health}`)}
           </span>
           <span aria-hidden="true">{t(`taskCenter.statusBar.${health}`)}</span>
+        </span>
+        <span
+          className="shrink-0 font-normal tabular-nums text-muted-foreground"
+          title={APP_VERSION}
+        >
+          {APP_VERSION}
         </span>
         <RegionBadge />
       </div>
