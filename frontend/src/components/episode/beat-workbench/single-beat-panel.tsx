@@ -288,6 +288,9 @@ function VideoBackendHeaderSelect({
   const videoBackends = videoBackendsRes?.data ?? [];
   const selectedBackend = videoBackends.find((backend) => backend.value === value);
 
+  // DEBUG: Log video backends
+  console.log('[DEBUG] Video backends:', videoBackends.map(b => ({ value: b.value, label: b.label })));
+
   return (
     <div
       className="mr-4 hidden shrink-0 items-center md:flex"

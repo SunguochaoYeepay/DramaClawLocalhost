@@ -73,6 +73,7 @@ export type FreezoneProvider =
   | "openrouter"
   | "huimeng"
   | "openai"
+  | "newapi"
   | "comfyui";
 
 export interface FreezoneGenCamera {
@@ -742,6 +743,8 @@ const MODEL_PROVIDER_HINTS: Array<{
   { match: (s) => s.toLowerCase().startsWith("openrouter/"), providerId: "openrouter" },
   { match: (s) => s.toLowerCase().startsWith("gpt-image"), providerId: "openai" },
   { match: (s) => s.toLowerCase().startsWith("dall-e"), providerId: "openai" },
+  { match: (s) => s.toLowerCase().startsWith("dc-") || s.toLowerCase().startsWith("newapi_"), providerId: "newapi" },
+  { match: (s) => s.toLowerCase().startsWith("comfyui") || s.toLowerCase().startsWith("flux"), providerId: "comfyui" },
 ];
 
 function inferProvider(raw: string): FreezoneProvider {
@@ -784,7 +787,7 @@ function pickStringArray(record: Record<string, unknown>, ...keys: string[]): st
 function normalizeProviderId(raw: string | null): FreezoneProvider | null {
   if (!raw) return null;
   const lowered = raw.toLowerCase();
-  if (lowered === "huimeng" || lowered === "openrouter" || lowered === "openai") {
+  if (lowered === "huimeng" || lowered === "openrouter" || lowered === "openai" || lowered === "newapi" || lowered === "comfyui") {
     return lowered;
   }
   return null;

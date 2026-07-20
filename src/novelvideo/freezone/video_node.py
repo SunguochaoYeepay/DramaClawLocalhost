@@ -326,6 +326,49 @@ def get_freezone_video_model_options() -> list[dict[str, Any]]:
                 }
             )
         data.append(item)
+    
+    # ── 本地 ComfyUI 选项 ──
+    local_backends = [
+        (
+            "comfyui",
+            "Wan2.2 (本地 ComfyUI)",
+            "comfyui",
+            2,
+            10,
+        ),
+        (
+            "ltx23",
+            "LTX 2.3 22B (本地 ComfyUI)",
+            "ltx23",
+            3,
+            10,
+        ),
+        (
+            "ltx23_director",
+            "LTX 2.3 Director (本地 ComfyUI)",
+            "ltx23_director",
+            3,
+            11,
+        ),
+    ]
+    for backend_id, label, provider_id, min_dur, max_dur in local_backends:
+        item = {
+            "id": backend_id,
+            "providerId": provider_id,
+            "provider": provider_id,
+            "apiModel": backend_id,
+            "api_model": backend_id,
+            "label": label,
+            "backend": backend_id,
+            "resolutionOptions": ["720p", "1080p"],
+            "resolution_options": ["720p", "1080p"],
+            "minDuration": min_dur,
+            "min_duration": min_dur,
+            "maxDuration": max_dur,
+            "max_duration": max_dur,
+        }
+        data.append(item)
+    
     return data
 
 
@@ -361,6 +404,12 @@ def resolve_freezone_video_backend(model: str | None) -> str:
 
     if parse_newapi_video_backend(text):
         return text
+
+    # 本地 ComfyUI 后端
+    LOCAL_COMFYUI_VIDEO_BACKENDS = {"comfyui", "ltx23", "ltx23_director"}
+    if text in LOCAL_COMFYUI_VIDEO_BACKENDS:
+        return text
+
     raise ValueError(f"unknown video model: {text}")
 
 

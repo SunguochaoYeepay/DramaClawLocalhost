@@ -85,6 +85,13 @@ import {
 
 const NEW_WINDOW_MS = 10 * 60 * 1000;
 const CROP_SOURCE_ANCHORS = new Set(["master", "reverse", "director_env_only"]);
+
+/** Map render aspect label to single-cell regen mode_key. */
+function singleCellModeKey(renderAspect: string): string {
+  if (renderAspect === "16:9") return "1x1_16-9";
+  if (renderAspect === "1:1") return "1x1_1-1";
+  return "1x1_2-3";
+}
 const RENDER_GRID_CLASS =
   "grid grid-cols-[auto_minmax(260px,1fr)] items-start gap-x-4 gap-y-3";
 const RENDER_PREVIEW_CLASS =
@@ -150,7 +157,7 @@ export function RenderSection({
   const renderRegenCost = useGenerationCreditCost(
     "image_selection",
     renderSettings.data?.data.render_image_selection,
-    { surface: "supertale", imageRole: "render", modeKey: "1x1_2-3" },
+    { surface: "supertale", imageRole: "render", modeKey: singleCellModeKey(aspectSpec.renderAspect) },
   );
   const uploadRender = useUploadBeatImage(project, episode, "render");
   const backgroundAnchors = useBeatBackgroundAnchors(project, episode, beat.beat_number);
@@ -250,7 +257,7 @@ export function RenderSection({
         toast.error(backgroundRes.error || t("episode.workbench.render.backgroundSaveFailed"));
         return;
       }
-      const res = await regenerate.mutateAsync({ beatIndices: [beat.beat_number], modeKey: "1x1_2-3" });
+      const res = await regenerate.mutateAsync({ beatIndices: [beat.beat_number], modeKey: singleCellModeKey(aspectSpec.renderAspect) });
       if (res.ok === false) {
         toast.error(res.error || t("episode.workbench.render.regenFailed"));
         return;

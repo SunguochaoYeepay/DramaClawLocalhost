@@ -770,6 +770,27 @@ async def _run_freezone_video_gen_async(
         logs=["开始 freezone 视频生成"],
     )
 
+    def _on_progress(value: float) -> None:
+        # 将 0~1 映射到 0.1~0.95，留头尾给上传和收尾
+        mapped = 0.1 + value * 0.85
+        manager.update_progress_for_project(
+            ctx,
+            "freezone_video_gen",
+            0,
+            scope=job_id,
+            progress=min(mapped, 0.95),
+            current_task=f"视频生成中 {value * 100:.0f}%",
+        )
+
+    def _on_log(msg: str) -> None:
+        manager.update_progress_for_project(
+            ctx,
+            "freezone_video_gen",
+            0,
+            scope=job_id,
+            logs=[msg],
+        )
+
     try:
         out_path = await run_freezone_video_gen(
             project_dir=project_dir,
@@ -784,6 +805,8 @@ async def _run_freezone_video_gen_async(
             scene_optimize=str(payload.get("scene_optimize") or ""),
             backend=str(payload.get("backend") or ""),
             last_frame_path=payload.get("last_frame_path"),
+            on_progress=_on_progress,
+            on_log=_on_log,
         )
     except Exception as exc:
         _append_freezone_video_node_history(

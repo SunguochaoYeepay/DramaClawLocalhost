@@ -17,7 +17,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Any, Callable, Optional
 
 import aiohttp
 import websockets
@@ -126,9 +126,10 @@ class VideoBackend(Enum):
     SEEDANCE_PRO = "seedance_pro"  # Seedance 1.5 Pro 有声
     SEEDANCE_PRO_SILENT = "seedance_pro_silent"  # Seedance 1.5 Pro 无声
     SEEDANCE_2 = "seedance_2"  # Seedance 2.0（v2.0 主力）
-    COMFYUI = "comfyui"  # Claymore 1.0
+    COMFYUI = "comfyui"  # ComfyUI 本地视频（Wan2.2 GGUF / FLF）
     WAN26 = "wan26"  # 阿里云 DashScope Wan2.6-i2v-flash
     LTX23 = "ltx23"  # Lightricks LTX-Video 2.3 22B
+    LTX23_DIRECTOR = "ltx23_director"  # LTX 2.3 Director 工作流
     GROK_720 = "grok_720"  # xAI Grok Imagine Video 720p
 
 
@@ -2726,10 +2727,8 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         ... )
     """
 
-    # ComfyUI 服务器配置
-    DEFAULT_ADDRESS = "u864639-76942a5c8e3b.westd.seetacloud.com:8443"
-    LTX23_DEFAULT_ADDRESS = "u864639-7730b46a98f9.westd.seetacloud.com:8443"
-    DEFAULT_USE_SSL = True  # 云服务器使用 HTTPS/WSS
+    # 本地默认地址
+    DEFAULT_VIDEO_URL = "http://localhost:9527"
     FPS = 24
 
     # FLF 模式固定帧数（~3.3 秒）
@@ -2737,12 +2736,15 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
 
     # LTX 2.3 帧率（与 Wan 2.2 的 24fps 不同）
     LTX23_FPS = 25
+    # LTX Director 工作流的时间轴帧率约定
+    LTX23_DIRECTOR_FPS = 72
 
     # 工作流模板路径
     GGUF_WORKFLOW_PATH = Path(__file__).parent / "wan2-2-I2V-GGUF-LightX2V.json"
     FP8_I2V_WORKFLOW_PATH = Path(__file__).parent / "wan2-2-I2V-LightX2V.json"
     FP8_FLF_WORKFLOW_PATH = Path(__file__).parent / "wan2-2-FLF-LightX2V.json"
     LTX23_I2V_WORKFLOW_PATH = Path(__file__).parent / "ltx2-3-I2V.json"
+    LTX23_DIRECTOR_WORKFLOW_PATH = Path(__file__).parent / "ltx2-3-director.json"
 
     # 节点映射配置（不同工作流的节点 ID）
     NODE_MAPPING = {
@@ -2780,7 +2782,45 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             "seed_low": "167:165",  # RandomNoise
             "video_output": "75",  # SaveVideo
         },
+        "ltx23_director": {
+            "director": "46",
+            "seed": "28",
+            "video_output": "30",
+        },
     }
+
+    @staticmethod
+    def _parse_url(url: str) -> tuple[str, str, str]:
+        """解析 URL，返回 (http_scheme, ws_scheme, host_port)。"""
+        from urllib.parse import urlparse
+
+        parsed = urlparse(url)
+        http_scheme = parsed.scheme or "http"
+        ws_scheme = "wss" if http_scheme == "https" else "ws"
+        host_port = parsed.netloc or parsed.path
+        return http_scheme, ws_scheme, host_port
+
+    @staticmethod
+    def _director_dimensions(aspect_ratio: str, resolution: str | None) -> tuple[int, int]:
+        """Map Freezone ratio/resolution to Director's 32-aligned canvas."""
+        short_edge_presets = {"480p": 480, "720p": 720, "1080p": 1080, "2k": 1440}
+        short_edge = short_edge_presets.get(str(resolution or "720p").strip().lower(), 720)
+        try:
+            w_part, h_part = str(aspect_ratio or "16:9").split(":", 1)
+            ratio = float(w_part) / float(h_part)
+            if ratio <= 0:
+                raise ValueError
+        except (TypeError, ValueError, ZeroDivisionError):
+            ratio = 16 / 9
+        if ratio >= 1:
+            height = short_edge
+            width = round(height * ratio)
+        else:
+            width = short_edge
+            height = round(width / ratio)
+        width = max(32, round(width / 32) * 32)
+        height = max(32, round(height / 32) * 32)
+        return width, height
 
     def __init__(
         self,
@@ -2788,33 +2828,41 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         timeout: float = 600.0,
         workflow_type: str = "gguf",
         use_ssl: Optional[bool] = None,
+        resolution: Optional[str] = None,
+        generate_audio: bool = False,
+        **_kwargs: Any,
     ):
         """初始化 ComfyUI 生成器。
 
         Args:
             server_address: ComfyUI 服务器地址（默认从环境变量读取）
             timeout: 请求超时时间（秒）
-            workflow_type: 工作流类型 ("gguf" 或 "fp8")，默认 "gguf"
-            use_ssl: 是否使用 HTTPS/WSS（默认从环境变量读取）
+            workflow_type: 工作流类型 ("gguf" / "fp8" / "ltx23")，默认 "gguf"
+            use_ssl: 是否使用 HTTPS/WSS（默认从 URL scheme 自动推断）
+            resolution: 忽略（ComfyUI 分辨率在工作流 JSON 中控制）
+            generate_audio: 忽略（LTX2.3 自动生成音频）
         """
-        # LTX 2.3 使用独立 ComfyUI 服务器（有 LTX 节点）
-        if server_address:
-            self.server_address = server_address
-        elif workflow_type.lower() == "ltx23":
-            self.server_address = os.environ.get(
-                "COMFYUI_LTX23_ADDRESS", self.LTX23_DEFAULT_ADDRESS
-            )
-        else:
-            self.server_address = os.environ.get("COMFYUI_ADDRESS", self.DEFAULT_ADDRESS)
         self.timeout = timeout
         self.workflow_type = workflow_type.lower()
+        self.resolution = resolution or "720p"
 
-        # SSL 配置
-        if use_ssl is None:
-            use_ssl_env = os.environ.get("COMFYUI_USE_SSL", "").lower()
-            self.use_ssl = use_ssl_env in ("true", "1", "yes")
+        if server_address:
+            # 显式传入 host:port，保持旧行为
+            self.server_address = server_address
+            if use_ssl is None:
+                use_ssl_env = os.environ.get("COMFYUI_USE_SSL", "").lower()
+                self.use_ssl = use_ssl_env in ("true", "1", "yes")
+            else:
+                self.use_ssl = use_ssl
         else:
-            self.use_ssl = use_ssl
+            # 从 COMFYUI_VIDEO_URL 读取完整 URL（如 http://localhost:9527）
+            video_url = os.environ.get("COMFYUI_VIDEO_URL", self.DEFAULT_VIDEO_URL)
+            http_scheme, ws_scheme, host_port = self._parse_url(video_url)
+            self.server_address = host_port
+            if use_ssl is None:
+                self.use_ssl = http_scheme == "https"
+            else:
+                self.use_ssl = use_ssl
 
         # 构建 URL
         http_scheme = "https" if self.use_ssl else "http"
@@ -2837,6 +2885,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             ("fp8_i2v", self.FP8_I2V_WORKFLOW_PATH),
             ("fp8_flf", self.FP8_FLF_WORKFLOW_PATH),
             ("ltx23", self.LTX23_I2V_WORKFLOW_PATH),
+            ("ltx23_director", self.LTX23_DIRECTOR_WORKFLOW_PATH),
         ]:
             if path.exists():
                 with open(path, "r") as f:
@@ -2850,15 +2899,32 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 "fp8_i2v" if self.workflow_type == "fp8" else "gguf"
             )
 
-    async def _upload_image(self, image_bytes: bytes, filename: str) -> dict:
-        """上传图片到 ComfyUI input 文件夹。"""
-        async with aiohttp.ClientSession() as session:
-            data = aiohttp.FormData()
-            data.add_field("image", image_bytes, filename=filename, content_type="image/png")
-            async with session.post(f"{self.http_url}/upload/image", data=data) as response:
-                if response.status != 200:
-                    raise Exception(f"上传图片失败: {await response.text()}")
-                return await response.json()
+    async def _upload_image(
+        self, image_bytes: bytes, filename: str, max_retries: int = 3
+    ) -> dict:
+        """上传图片到 ComfyUI input 文件夹，容忍隧道瞬时断线。"""
+        for attempt in range(1, max_retries + 1):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    data = aiohttp.FormData()
+                    data.add_field(
+                        "image", image_bytes, filename=filename, content_type="image/png"
+                    )
+                    async with session.post(
+                        f"{self.http_url}/upload/image",
+                        data=data,
+                        timeout=aiohttp.ClientTimeout(total=120),
+                    ) as response:
+                        if response.status != 200:
+                            raise Exception(f"HTTP {response.status}: {await response.text()}")
+                        return await response.json()
+            except (ConnectionError, OSError, aiohttp.ClientError, asyncio.TimeoutError) as exc:
+                if attempt < max_retries:
+                    await asyncio.sleep(2 * attempt)
+                    continue
+                raise Exception(
+                    f"上传首帧到 ComfyUI 失败 (重试 {max_retries} 次): {exc}"
+                ) from exc
 
     async def _queue_prompt(self, workflow: dict, client_id: str) -> dict:
         """提交工作流到 ComfyUI 队列。"""
@@ -2869,23 +2935,43 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                     raise Exception(f"提交工作流失败: {await response.text()}")
                 return await response.json()
 
-    async def _get_history(self, prompt_id: str) -> dict:
-        """获取执行历史。"""
-        async with aiohttp.ClientSession() as session:
-            async with session.get(f"{self.http_url}/history/{prompt_id}") as response:
-                if response.status != 200:
-                    raise Exception(f"获取历史失败: {await response.text()}")
-                return await response.json()
+    async def _get_history(self, prompt_id: str, max_retries: int = 3) -> dict:
+        """获取执行历史（带重试，应对隧道连接不稳定）。"""
+        for attempt in range(1, max_retries + 1):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        f"{self.http_url}/history/{prompt_id}",
+                        timeout=aiohttp.ClientTimeout(total=30),
+                    ) as response:
+                        if response.status != 200:
+                            raise Exception(f"获取历史失败: {await response.text()}")
+                        return await response.json()
+            except (ConnectionError, OSError, aiohttp.ClientError) as exc:
+                if attempt < max_retries:
+                    await asyncio.sleep(2)
+                    continue
+                raise Exception(f"获取历史失败 (重试 {max_retries} 次): {exc}") from exc
 
-    async def _download_video(self, filename: str, subfolder: str = "") -> bytes:
-        """从 ComfyUI 下载视频文件。"""
+    async def _download_video(self, filename: str, subfolder: str = "", max_retries: int = 3) -> bytes:
+        """从 ComfyUI 下载视频文件（带重试）。"""
         params = {"filename": filename, "subfolder": subfolder, "type": "output"}
         url = f"{self.http_url}/view?{urllib.parse.urlencode(params)}"
-        async with aiohttp.ClientSession() as session:
-            async with session.get(url) as response:
-                if response.status != 200:
-                    raise Exception(f"下载视频失败: {await response.text()}")
-                return await response.read()
+        for attempt in range(1, max_retries + 1):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(
+                        url,
+                        timeout=aiohttp.ClientTimeout(total=120),
+                    ) as response:
+                        if response.status != 200:
+                            raise Exception(f"下载视频失败: {await response.text()}")
+                        return await response.read()
+            except (ConnectionError, OSError, aiohttp.ClientError) as exc:
+                if attempt < max_retries:
+                    await asyncio.sleep(2)
+                    continue
+                raise Exception(f"下载视频失败 (重试 {max_retries} 次): {exc}") from exc
 
     async def generate(
         self,
@@ -2935,9 +3021,12 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         if use_flf_mode:
             workflow_key = "fp8_flf"
             mode_desc = "FLF (首尾帧过渡)"
-        elif self.workflow_type == "ltx23":
+        elif self.workflow_type in {"ltx23", "ltx23_director"}:
             workflow_key = "ltx23"
             mode_desc = "LTX 2.3 I2V"
+            if self.workflow_type == "ltx23_director":
+                workflow_key = "ltx23_director"
+                mode_desc = "LTX 2.3 Director I2V"
         elif self.workflow_type == "fp8":
             workflow_key = "fp8_i2v"
             mode_desc = "fp8 I2V"
@@ -2953,6 +3042,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 "fp8_i2v": self.FP8_I2V_WORKFLOW_PATH,
                 "fp8_flf": self.FP8_FLF_WORKFLOW_PATH,
                 "ltx23": self.LTX23_I2V_WORKFLOW_PATH,
+                "ltx23_director": self.LTX23_DIRECTOR_WORKFLOW_PATH,
             }.get(workflow_key, "unknown")
             return VideoGenResult(
                 status=VideoGenStatus.FAILED,
@@ -2979,6 +3069,24 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         client_id = str(uuid.uuid4())
         first_image_filename = f"first_{client_id}.png"
         last_image_filename = f"last_{client_id}.png" if use_flf_mode else None
+        director_refs = [
+            ref for ref in (kwargs.get("references") or [])
+            if getattr(ref, "type", "image") == "image"
+            and getattr(ref, "path", None)
+            and os.path.abspath(ref.path) != os.path.abspath(image_path)
+        ]
+        director_reference_filenames = [first_image_filename] + [
+            f"ref_{client_id}_{index}.png" for index, _ in enumerate(director_refs, 1)
+        ]
+        director_refs = [
+            ref for ref in (kwargs.get("references") or [])
+            if getattr(ref, "type", "image") == "image"
+            and getattr(ref, "path", None)
+            and os.path.abspath(ref.path) != os.path.abspath(image_path)
+        ]
+        director_reference_filenames = [first_image_filename] + [
+            f"ref_{client_id}_{index}.png" for index, _ in enumerate(director_refs, 1)
+        ]
 
         # FLF 模式固定帧数
         if use_flf_mode:
@@ -2986,7 +3094,13 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             actual_duration = frames / self.FPS
             log(f"开始生成视频 | 模式: {mode_desc} | 固定帧数: {frames} (~{actual_duration:.1f}s)")
         else:
-            fps = self.LTX23_FPS if workflow_key == "ltx23" else self.FPS
+            fps = (
+                self.LTX23_DIRECTOR_FPS
+                if workflow_key == "ltx23_director"
+                else self.LTX23_FPS
+                if workflow_key == "ltx23"
+                else self.FPS
+            )
             frames = int(duration * fps) + 1  # +1 确保时长足够
             log(f"开始生成视频 | 模式: {mode_desc} | 时长: {duration}s")
 
@@ -2997,6 +3111,16 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 first_image_bytes = f.read()
             await self._upload_image(first_image_bytes, first_image_filename)
             log(f"首帧已上传: {first_image_filename}")
+            if workflow_key == "ltx23_director":
+                for ref, filename in zip(director_refs, director_reference_filenames[1:]):
+                    with open(ref.path, "rb") as f:
+                        await self._upload_image(f.read(), filename)
+                    log(f"参考图已上传: {filename}")
+            if workflow_key == "ltx23_director":
+                for ref, filename in zip(director_refs, director_reference_filenames[1:]):
+                    with open(ref.path, "rb") as f:
+                        await self._upload_image(f.read(), filename)
+                    log(f"参考图已上传: {filename}")
 
             # FLF 模式：上传尾帧
             if use_flf_mode:
@@ -3020,6 +3144,73 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 # 设置帧数（PrimitiveInt.value）
                 workflow[node_map["frame_count"]]["inputs"]["value"] = frames
                 log(f"帧数: {frames} (duration={duration}s, fps={self.LTX23_FPS})")
+            elif workflow_key == "ltx23_director":
+                director_inputs = workflow[node_map["director"]]["inputs"]
+                director_width, director_height = self._director_dimensions(
+                    aspect_ratio,
+                    self.resolution,
+                )
+                director_inputs["duration_seconds"] = float(duration)
+                director_inputs["duration_frames"] = frames
+                director_inputs["end_second"] = float(duration)
+                director_inputs["end_frame"] = frames
+                director_inputs["frame_rate"] = self.LTX23_DIRECTOR_FPS
+                director_inputs["custom_width"] = director_width
+                director_inputs["custom_height"] = director_height
+                director_inputs["use_custom_audio"] = False
+                director_inputs["use_custom_motion"] = False
+                director_inputs["inpaint_audio"] = False
+                director_inputs["retakeMode"] = False
+                segment_count = len(director_reference_filenames)
+                base_segment_frames, remainder = divmod(frames, segment_count)
+                segment_lengths = [
+                    base_segment_frames + (1 if index < remainder else 0)
+                    for index in range(segment_count)
+                ]
+                director_inputs["local_prompts"] = " | ".join([prompt or ""] * segment_count)
+                director_inputs["segment_lengths"] = ",".join(
+                    str(length) for length in segment_lengths
+                )
+                director_inputs["guide_strength"] = ",".join(["1.0"] * segment_count)
+                try:
+                    timeline = json.loads(director_inputs.get("timeline_data") or "{}")
+                    timeline["mainTrackEnabled"] = True
+                    timeline["audioTrackEnabled"] = False
+                    timeline["motionTrackEnabled"] = False
+                    timeline["overrideAudio"] = False
+                    timeline["inpaint_audio"] = False
+                    timeline["retakeMode"] = False
+                    timeline["retakeVideo"] = None
+                    timeline["audioSegments"] = []
+                    timeline["motionSegments"] = []
+                    timeline["global_prompt"] = prompt or ""
+                    timeline["retake_global_prompt"] = ""
+                    timeline["retakePrompt"] = ""
+                    timeline["segments"] = []
+                    for index, image_filename in enumerate(director_reference_filenames):
+                        segment_start = sum(segment_lengths[:index])
+                        segment_length = segment_lengths[index]
+                        segment = {
+                            "id": f"dramaclaws_{index}",
+                            "type": "image",
+                            "imageFile": image_filename,
+                            "imageB64": (
+                                f"/api/view?filename={urllib.parse.quote(image_filename)}"
+                                "&type=input&subfolder="
+                            ),
+                            "start": segment_start,
+                            "length": segment_length,
+                            "normalDurationFrames": segment_length,
+                            "prompt": prompt or "",
+                        }
+                        timeline["segments"].append(segment)
+                    director_inputs["timeline_data"] = json.dumps(timeline, ensure_ascii=False)
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    log("警告: Director timeline_data 解析失败，使用单段提示词")
+                log(
+                    f"画布: {director_width}x{director_height}, "
+                    f"帧数: {frames} (duration={duration}s, fps={self.LTX23_DIRECTOR_FPS})"
+                )
             elif workflow_key == "fp8_i2v":
                 # fp8 I2V 模式
                 workflow[node_map["input_image"]]["inputs"]["image"] = first_image_filename
@@ -3034,15 +3225,19 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 log(f"帧数: {frames} (duration={duration}s, fps={self.FPS})")
 
             # 设置提示词（LTX23 用 "prompt" 字段，其余用 "text"）
-            prompt_field = "prompt" if workflow_key == "ltx23" else "text"
-            workflow[node_map["positive_prompt"]]["inputs"][prompt_field] = prompt or ""
+            if workflow_key == "ltx23":
+                workflow[node_map["positive_prompt"]]["inputs"]["prompt"] = prompt or ""
+            elif workflow_key != "ltx23_director":
+                workflow[node_map["positive_prompt"]]["inputs"]["text"] = prompt or ""
             # 负向提示词保持默认（已在模板中设置）
             if prompt:
                 log(f"提示词: {prompt[:80]}{'...' if len(prompt) > 80 else ''}")
 
             # 设置随机种子
             seed = random.randint(0, 0xFFFFFFFFFFFF)
-            if workflow_key in ("fp8_i2v", "ltx23"):
+            if workflow_key == "ltx23_director":
+                workflow[node_map["seed"]]["inputs"]["noise_seed"] = seed
+            elif workflow_key in ("fp8_i2v", "ltx23"):
                 # fp8 I2V / LTX 2.3 有两个采样器
                 workflow[node_map["seed_high"]]["inputs"]["noise_seed"] = seed
                 workflow[node_map["seed_low"]]["inputs"]["noise_seed"] = seed
@@ -3061,6 +3256,8 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 proxy=None,  # 禁用代理检测
             )
 
+            ws_completed = False
+            prompt_id: str | None = None
             try:
                 # 4. 提交工作流
                 log("提交工作流到队列...")
@@ -3073,6 +3270,10 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 # 5. 监听 WebSocket 消息
                 log("等待 ComfyUI 执行...")
                 current_node = None
+                total_nodes = len(workflow)
+                executed_nodes: list[str] = []  # 已执行完成的节点 ID
+                node_progress: dict[str, float] = {}  # 各节点最近一次进度
+
                 while True:
                     out = await ws.recv()
                     if isinstance(out, str):
@@ -3084,30 +3285,66 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                             if data.get("prompt_id") == prompt_id:
                                 node = data.get("node")
                                 if node is None:
+                                    # 所有节点执行完毕
+                                    ws_completed = True
+                                    progress(0.95)
                                     log("推理完成!")
                                     break
                                 elif node != current_node:
+                                    # 上一个节点完成
+                                    if current_node is not None:
+                                        executed_nodes.append(current_node)
+                                        node_progress[current_node] = 1.0
+                                    # 新节点开始
                                     current_node = node
+                                    node_index = len(executed_nodes)
                                     node_title = (
                                         workflow.get(node, {}).get("_meta", {}).get("title", node)
                                     )
-                                    log(f"执行节点: {node_title}")
+                                    log(f"执行节点 [{node_index + 1}/{total_nodes}]: {node_title}")
+                                    # 节点间进度
+                                    overall = node_index / total_nodes
+                                    progress(overall)
 
                         elif msg_type == "progress":
                             data = message.get("data", {})
                             value = data.get("value", 0)
                             max_val = data.get("max", 100)
-                            pct = value / max_val * 100 if max_val > 0 else 0
-                            log(f"进度: {value}/{max_val} ({pct:.0f}%)")
-                            # 更新进度 (0.0 ~ 1.0)
-                            progress(value / max_val if max_val > 0 else 0)
+                            node_pct = value / max_val if max_val > 0 else 0
+                            pct = node_pct * 100
+                            # 综合节点间 + 节点内进度
+                            node_index = len(executed_nodes)
+                            overall = (node_index + node_pct) / total_nodes
+                            progress(overall)
+                            log(f"进度: {value}/{max_val} ({pct:.0f}%) | 总进度 {overall * 100:.0f}%")
 
                         elif msg_type == "execution_error":
                             error_data = message.get("data", {})
                             raise Exception(f"执行错误: {error_data}")
 
+            except (websockets.ConnectionClosed, ConnectionError, OSError) as ws_exc:
+                log(f"WebSocket 连接断开: {ws_exc}")
+                # 隧道连接不稳定时，检查任务是否已在 ComfyUI 端完成
+                if not prompt_id:
+                    raise Exception(
+                        f"WebSocket 连接在提交任务前断开: {ws_exc}"
+                    ) from ws_exc
+                await asyncio.sleep(2)
+                try:
+                    history = await self._get_history(prompt_id)
+                    if prompt_id in history:
+                        ws_completed = True
+                        log("WebSocket 断开但任务已在 ComfyUI 完成，继续下载...")
+                    else:
+                        raise Exception(f"WebSocket 断开且任务未完成: {ws_exc}") from ws_exc
+                except Exception as hist_exc:
+                    if not ws_completed:
+                        raise Exception(f"WebSocket 断开且无法确认任务状态: {hist_exc}") from ws_exc
             finally:
-                await ws.close()
+                try:
+                    await ws.close()
+                except Exception:
+                    pass
 
             # 6. 获取输出文件名
             log("获取输出文件...")
@@ -3640,7 +3877,7 @@ def create_video_generator(
             - SEEDANCE_FAST: Seedance 1.0 Pro Fast（火山方舟）
             - SEEDANCE_PRO: Seedance 1.5 Pro 有声（火山方舟）
             - SEEDANCE_PRO_SILENT: Seedance 1.5 Pro 无声（火山方舟）
-            - COMFYUI: Claymore 1.0 本地服务
+            - COMFYUI: 本地 ComfyUI 视频服务（Wan2.2 GGUF/FLF + LTX2.3）
             - WAN26: 阿里云 DashScope Wan2.6-i2v-flash
             - GROK_720: xAI Grok Imagine Video 720p
         use_mock: 兼容旧接口，True 时使用 MockVideoGenerator
@@ -3657,7 +3894,7 @@ def create_video_generator(
         COMFYUI_WORKFLOW: ComfyUI 工作流类型 (gguf/fp8)
         DASHSCOPE_API_KEY: Wan2.6 API 密钥
         VOLCENGINE_VISUAL_API_KEY: Seedance API 密钥
-        COMFYUI_ADDRESS: ComfyUI 服务器地址
+        COMFYUI_VIDEO_URL: ComfyUI 视频服务地址（如 http://localhost:9527）
         XAI_API_KEY: Grok 视频生成 API 密钥
     """
     from novelvideo.config import SEEDANCE_FAST_MODEL, SEEDANCE_PRO_MODEL
@@ -3701,6 +3938,8 @@ def create_video_generator(
         return Seedance2VideoGenerator(**kwargs)
     elif backend_enum == VideoBackend.LTX23:
         return ComfyUIVideoGenerator(workflow_type="ltx23", **kwargs)
+    elif backend_enum == VideoBackend.LTX23_DIRECTOR:
+        return ComfyUIVideoGenerator(workflow_type="ltx23_director", **kwargs)
     elif backend_enum == VideoBackend.WAN26:
         return Wan26VideoGenerator(**kwargs)
     elif backend_enum == VideoBackend.GROK_720:

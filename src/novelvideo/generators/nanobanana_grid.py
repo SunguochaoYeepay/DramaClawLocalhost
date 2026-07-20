@@ -3723,7 +3723,7 @@ class NanoBananaGridGenerator:
         self.batch_size = config.get("batch_size", self.rows * self.cols)
         self.total_panels = config["total_panels"]
 
-        if not self.api_key:
+        if not self.api_key and self.provider != "comfyui":
             if self.provider == "openrouter":
                 key_name = "OPENROUTER_API_KEY"
             elif self.provider == "huimeng":
@@ -4454,6 +4454,51 @@ class NanoBananaGridGenerator:
                     if newapi_error:
                         message = f"{message}: {newapi_error}"
                     return _usage_fail(message)
+            elif self.provider == "comfyui":
+                # ===== ComfyUI FLUX2 本地生成分支 =====
+                from novelvideo.generators.comfyui_image import ComfyUIImageGenerator
+
+                comfyui_gen = ComfyUIImageGenerator()
+                prompt_text, ref_bytes_list = self._extract_ref_bytes_from_contents(contents)
+                ref_paths = self._write_ref_bytes_to_temp_files(ref_bytes_list)
+                try:
+                    w, h = self._parse_dimensions(aspect_ratio, image_size)
+                    print(
+                        f"[ComfyUI FLUX2] 调用本地 FLUX2 生成网格图 "
+                        f"(尺寸: {w}x{h}, 比例: {aspect_ratio}, refs: {len(ref_paths)})..."
+                    )
+                    if ref_paths:
+                        comfy_result = await comfyui_gen.generate_with_references(
+                            prompt=prompt_text,
+                            reference_images=ref_paths,
+                            output_path=output_path,
+                            width=w,
+                            height=h,
+                        )
+                    else:
+                        comfy_result = await comfyui_gen.generate(
+                            prompt=prompt_text,
+                            output_path=output_path,
+                            width=w,
+                            height=h,
+                        )
+                    if not comfy_result.success:
+                        return _usage_fail(
+                            f"ComfyUI FLUX2 生成失败: {comfy_result.error}"
+                        )
+                    if output_path and os.path.exists(output_path):
+                        with open(output_path, "rb") as _f:
+                            image_bytes = _f.read()
+                    else:
+                        image_bytes = base64.b64decode(comfy_result.image_base64) if comfy_result.image_base64 else None
+                        if image_bytes and output_path:
+                            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                            with open(output_path, "wb") as _f:
+                                _f.write(image_bytes)
+                finally:
+                    self._cleanup_temp_ref_files(ref_paths)
+                if not image_bytes:
+                    return _usage_fail("ComfyUI FLUX2 未返回图像数据")
             else:
                 # ===== Google 直连分支 =====
                 # 根据模型选择配置：gemini-3 支持 image_size，gemini-2.5 不支持
@@ -4772,6 +4817,53 @@ class NanoBananaGridGenerator:
                         error=f"DramaClawAPI Images 未返回图片: {error_detail or ''}".strip(),
                         generation_time=time.time() - start_time,
                     )
+            elif self.provider == "comfyui":
+                # ===== ComfyUI FLUX2 本地生成分支 =====
+                from novelvideo.generators.comfyui_image import ComfyUIImageGenerator
+
+                comfyui_gen = ComfyUIImageGenerator()
+                prompt_text, ref_bytes_list = self._extract_ref_bytes_from_contents(contents)
+                ref_paths = self._write_ref_bytes_to_temp_files(ref_bytes_list)
+                try:
+                    w, h = self._parse_dimensions(aspect_ratio, image_size)
+                    print(
+                        f"[ComfyUI FLUX2] 调用本地 FLUX2 生成动作网格 "
+                        f"(尺寸: {w}x{h}, refs: {len(ref_paths)})..."
+                    )
+                    if ref_paths:
+                        comfy_result = await comfyui_gen.generate_with_references(
+                            prompt=prompt_text,
+                            reference_images=ref_paths,
+                            output_path=output_path,
+                            width=w,
+                            height=h,
+                        )
+                    else:
+                        comfy_result = await comfyui_gen.generate(
+                            prompt=prompt_text,
+                            output_path=output_path,
+                            width=w,
+                            height=h,
+                        )
+                    if not comfy_result.success:
+                        return GridGenerationResult(
+                            success=False,
+                            error=f"ComfyUI FLUX2 生成失败: {comfy_result.error}",
+                            generation_time=time.time() - start_time,
+                        )
+                    if output_path and os.path.exists(output_path):
+                        with open(output_path, "rb") as _f:
+                            image_bytes = _f.read()
+                    else:
+                        image_bytes = base64.b64decode(comfy_result.image_base64) if comfy_result.image_base64 else None
+                finally:
+                    self._cleanup_temp_ref_files(ref_paths)
+                if not image_bytes:
+                    return GridGenerationResult(
+                        success=False,
+                        error="ComfyUI FLUX2 未返回图片",
+                        generation_time=time.time() - start_time,
+                    )
             else:
                 from google import genai
                 from google.genai import types
@@ -5028,6 +5120,53 @@ class NanoBananaGridGenerator:
                             if newapi_error
                             else "[Reformat] DramaClawAPI Images 未返回图像数据"
                         ),
+                        generation_time=time.time() - start_time,
+                    )
+            elif self.provider == "comfyui":
+                # ===== ComfyUI FLUX2 本地 reformat 分支 =====
+                from novelvideo.generators.comfyui_image import ComfyUIImageGenerator
+
+                comfyui_gen = ComfyUIImageGenerator()
+                prompt_text, ref_bytes_list = self._extract_ref_bytes_from_contents(contents)
+                ref_paths = self._write_ref_bytes_to_temp_files(ref_bytes_list)
+                try:
+                    w, h = self._parse_dimensions(target_aspect, target_size)
+                    print(
+                        f"[ComfyUI FLUX2] Reformat → {target_aspect} "
+                        f"(尺寸: {w}x{h}, refs: {len(ref_paths)})..."
+                    )
+                    if ref_paths:
+                        comfy_result = await comfyui_gen.generate_with_references(
+                            prompt=prompt_text,
+                            reference_images=ref_paths,
+                            output_path=output_path,
+                            width=w,
+                            height=h,
+                        )
+                    else:
+                        comfy_result = await comfyui_gen.generate(
+                            prompt=prompt_text,
+                            output_path=output_path,
+                            width=w,
+                            height=h,
+                        )
+                    if not comfy_result.success:
+                        return GridGenerationResult(
+                            success=False,
+                            error=f"[Reformat] ComfyUI FLUX2 失败: {comfy_result.error}",
+                            generation_time=time.time() - start_time,
+                        )
+                    if output_path and os.path.exists(output_path):
+                        with open(output_path, "rb") as _f:
+                            image_bytes = _f.read()
+                    else:
+                        image_bytes = base64.b64decode(comfy_result.image_base64) if comfy_result.image_base64 else None
+                finally:
+                    self._cleanup_temp_ref_files(ref_paths)
+                if not image_bytes:
+                    return GridGenerationResult(
+                        success=False,
+                        error="[Reformat] ComfyUI FLUX2 未返回图像数据",
                         generation_time=time.time() - start_time,
                     )
             else:
@@ -6178,6 +6317,78 @@ class NanoBananaGridGenerator:
                 else:
                     ref_bytes.append(item.inline_data.data)
         return prompt_text, ref_bytes
+
+    @staticmethod
+    def _parse_dimensions(aspect_ratio: str, image_size: str) -> tuple[int, int]:
+        """从 aspect_ratio 和 image_size 计算像素尺寸。
+
+        image_size 约定:
+        - "0.5K" → ~512px 短边
+        - "1K"   → ~1024px 短边
+        - "2K"   → ~1536px 短边
+        - "4K"   → ~2048px 短边
+
+        Args:
+            aspect_ratio: 宽高比字符串，如 "2:3", "1:1", "16:9"
+            image_size: 分辨率标识，如 "1K", "2K"
+
+        Returns:
+            (width, height) 像素尺寸元组
+        """
+        size_map = {"0.5K": 512, "1K": 1024, "2K": 1536, "4K": 2048}
+        base = size_map.get(image_size, 1024)
+        try:
+            ar_w, ar_h = (int(x) for x in aspect_ratio.split(":"))
+        except (ValueError, AttributeError):
+            return base, base
+        # base 对应短边，长边按比例计算
+        if ar_w <= ar_h:
+            short_val = base
+            long_val = int(round(base * ar_h / ar_w))
+            return short_val, long_val
+        else:
+            short_val = base
+            long_val = int(round(base * ar_w / ar_h))
+            return long_val, short_val
+
+    @staticmethod
+    def _write_ref_bytes_to_temp_files(ref_bytes_list: list) -> list[str]:
+        """将参考图 bytes 写入临时文件，返回文件路径列表。
+
+        支持两种格式:
+        - bytes: 纯图片字节
+        - (bytes, mime_type): 带 MIME 类型的元组
+
+        Args:
+            ref_bytes_list: 参考图数据列表
+
+        Returns:
+            临时文件路径列表（调用方负责清理）
+        """
+        import tempfile
+
+        paths = []
+        for item in ref_bytes_list:
+            if isinstance(item, tuple):
+                data, mime = item
+            else:
+                data, mime = item, "image/png"
+            ext = ".jpg" if "jpeg" in mime or "jpg" in mime else ".png"
+            fd, tmp_path = tempfile.mkstemp(suffix=ext)
+            with os.fdopen(fd, "wb") as f:
+                f.write(data)
+            paths.append(tmp_path)
+        return paths
+
+    @staticmethod
+    def _cleanup_temp_ref_files(paths: list[str]) -> None:
+        """清理临时参考图文件。"""
+        for p in paths:
+            try:
+                if p and os.path.exists(p):
+                    os.remove(p)
+            except OSError:
+                pass
 
     def _crop_center_panel(self, image_path: str):
         """从 3 面板 sheet 裁出中间面板（正面全身）。"""

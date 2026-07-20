@@ -54,7 +54,7 @@
   },
   "39": {
     "inputs": {
-      "vae_name": "Wan2.1_VAE.safetensors"
+      "vae_name": "wan_2.1_vae.safetensors"
     },
     "class_type": "VAELoader",
     "_meta": {
@@ -90,7 +90,7 @@
   "57": {
     "inputs": {
       "add_noise": "enable",
-      "noise_seed": 263888202860562,
+      "noise_seed": 27436288411256,
       "steps": 4,
       "cfg": 1,
       "sampler_name": "euler",
@@ -123,7 +123,7 @@
   "58": {
     "inputs": {
       "add_noise": "disable",
-      "noise_seed": 1100763417599289,
+      "noise_seed": 282863851282649,
       "steps": 4,
       "cfg": 1,
       "sampler_name": "euler",
@@ -156,6 +156,7 @@
   "60": {
     "inputs": {
       "fps": 24,
+      "bit_depth": 8,
       "images": [
         "8",
         0
@@ -171,7 +172,6 @@
       "filename_prefix": "video/ComfyUI",
       "format": "auto",
       "codec": "h264",
-      "video-preview": "",
       "video": [
         "60",
         0
@@ -184,7 +184,7 @@
   },
   "62": {
     "inputs": {
-      "image": "beat_12.png"
+      "image": "ComfyUI_00406_.png"
     },
     "class_type": "LoadImage",
     "_meta": {
@@ -249,7 +249,7 @@
   },
   "90": {
     "inputs": {
-      "unet_name": "HighNoise/Wan2.2-I2V-A14B-HighNoise-Q3_K_S.gguf"
+      "unet_name": "HighNoise\\Wan2.2-I2V-A14B-HighNoise-Q3_K_S.gguf"
     },
     "class_type": "UnetLoaderGGUF",
     "_meta": {
@@ -258,7 +258,7 @@
   },
   "91": {
     "inputs": {
-      "unet_name": "LowNoise/Wan2.2-I2V-A14B-LowNoise-Q3_K_S.gguf"
+      "unet_name": "HighNoise\\Wan2.2-I2V-A14B-LowNoise-Q3_K_S.gguf"
     },
     "class_type": "UnetLoaderGGUF",
     "_meta": {

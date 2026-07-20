@@ -4,7 +4,6 @@
       "filename_prefix": "video/LTX_2.3_i2v",
       "format": "auto",
       "codec": "auto",
-      "video-preview": "",
       "video": [
         "167:136",
         0
@@ -17,7 +16,7 @@
   },
   "98": {
     "inputs": {
-      "image": "20260114-142048.jpg"
+      "image": "ComfyUI_00406_.png"
     },
     "class_type": "LoadImage",
     "_meta": {
@@ -127,6 +126,23 @@
       "title": "LTXV Empty Latent Audio"
     }
   },
+  "167:133": {
+    "inputs": {
+      "frame_rate": 25,
+      "positive": [
+        "167:160",
+        0
+      ],
+      "negative": [
+        "167:159",
+        0
+      ]
+    },
+    "class_type": "LTXVConditioning",
+    "_meta": {
+      "title": "LTXVConditioning"
+    }
+  },
   "167:134": {
     "inputs": {
       "noise": [
@@ -157,11 +173,29 @@
   },
   "167:135": {
     "inputs": {
-      "noise_seed": 0
+      "noise_seed": 1052444143039874
     },
     "class_type": "RandomNoise",
     "_meta": {
       "title": "RandomNoise"
+    }
+  },
+  "167:136": {
+    "inputs": {
+      "fps": 24,
+      "bit_depth": 8,
+      "images": [
+        "167:138",
+        0
+      ],
+      "audio": [
+        "167:141",
+        0
+      ]
+    },
+    "class_type": "CreateVideo",
+    "_meta": {
+      "title": "Create Video"
     }
   },
   "167:137": {
@@ -174,6 +208,22 @@
     "class_type": "LTXVSeparateAVLatent",
     "_meta": {
       "title": "LTXVSeparateAVLatent"
+    }
+  },
+  "167:138": {
+    "inputs": {
+      "samples": [
+        "167:139",
+        0
+      ],
+      "vae": [
+        "167:162",
+        2
+      ]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {
+      "title": "VAE Decode"
     }
   },
   "167:139": {
@@ -493,58 +543,6 @@
       "title": "Resize Images by Longer Edge"
     }
   },
-  "167:162": {
-    "inputs": {
-      "ckpt_name": "ltx-2.3-22b-dev.safetensors"
-    },
-    "class_type": "CheckpointLoaderSimple",
-    "_meta": {
-      "title": "Load Checkpoint"
-    }
-  },
-  "167:165": {
-    "inputs": {
-      "noise_seed": 10
-    },
-    "class_type": "RandomNoise",
-    "_meta": {
-      "title": "RandomNoise"
-    }
-  },
-  "167:102": {
-    "inputs": {
-      "resize_type": "scale dimensions",
-      "resize_type.width": 720,
-      "resize_type.height": 1280,
-      "resize_type.crop": "center",
-      "scale_method": "lanczos",
-      "input": [
-        "98",
-        0
-      ]
-    },
-    "class_type": "ResizeImageMaskNode",
-    "_meta": {
-      "title": "Resize Image/Mask"
-    }
-  },
-  "167:133": {
-    "inputs": {
-      "frame_rate": 25,
-      "positive": [
-        "167:160",
-        0
-      ],
-      "negative": [
-        "167:159",
-        0
-      ]
-    },
-    "class_type": "LTXVConditioning",
-    "_meta": {
-      "title": "LTXVConditioning"
-    }
-  },
   "167:159": {
     "inputs": {
       "text": "blurry, low quality, still frame, frames, watermark, overlay, titles, has blurbox, has subtitles",
@@ -574,39 +572,6 @@
       "title": "CLIP Text Encode (Prompt)"
     }
   },
-  "167:138": {
-    "inputs": {
-      "samples": [
-        "167:139",
-        0
-      ],
-      "vae": [
-        "167:162",
-        2
-      ]
-    },
-    "class_type": "VAEDecode",
-    "_meta": {
-      "title": "VAE Decode"
-    }
-  },
-  "167:136": {
-    "inputs": {
-      "fps": 24,
-      "images": [
-        "167:138",
-        0
-      ],
-      "audio": [
-        "167:141",
-        0
-      ]
-    },
-    "class_type": "CreateVideo",
-    "_meta": {
-      "title": "Create Video"
-    }
-  },
   "167:161": {
     "inputs": {
       "text_encoder": "gemma_3_12B_it_fp4_mixed.safetensors",
@@ -616,6 +581,15 @@
     "class_type": "LTXAVTextEncoderLoader",
     "_meta": {
       "title": "LTXV Audio Text Encoder Loader"
+    }
+  },
+  "167:162": {
+    "inputs": {
+      "ckpt_name": "ltx-2.3-22b-dev.safetensors"
+    },
+    "class_type": "CheckpointLoaderSimple",
+    "_meta": {
+      "title": "Load Checkpoint"
     }
   },
   "167:164": {
@@ -629,6 +603,8 @@
       "sampling_mode.min_p": 0.05,
       "sampling_mode.repetition_penalty": 1.05,
       "sampling_mode.seed": 0,
+      "thinking": false,
+      "use_default_template": true,
       "clip": [
         "167:161",
         0
@@ -643,10 +619,17 @@
       "title": "TextGenerateLTX2Prompt"
     }
   },
+  "167:165": {
+    "inputs": {
+      "noise_seed": 435656621506781
+    },
+    "class_type": "RandomNoise",
+    "_meta": {
+      "title": "RandomNoise"
+    }
+  },
   "167:166": {
     "inputs": {
-      "preview": "Style: cinematic - A medium shot inside a grand ancient Chinese palace hall with towering golden carved pillars and warm amber lighting. Two young women in elaborate traditional court attire face each other in a tense confrontation. The woman on the left stands tall and composed, wearing a crimson and gold robe embroidered with a large golden phoenix pattern, a golden crown tiara on her black updo hair, her expression cold and defiant. The woman on the right, dressed in a soft pink hanfu adorned with painted birds and floral motifs with a pink silk sash, points her finger accusingly at the other woman, her face flushed with emotion, tears glistening on her cheeks, her lips trembling as she speaks angrily. Behind them, a crowd of court ladies in muted silk robes watch in stunned silence. The camera slowly pushes in on the two women, shallow depth of field blurring the background crowd. Warm golden light from palace lanterns casts dramatic shadows across their faces.",
-      "previewMode": null,
       "source": [
         "167:164",
         0
@@ -655,6 +638,23 @@
     "class_type": "PreviewAny",
     "_meta": {
       "title": "Preview as Text"
+    }
+  },
+  "167:102": {
+    "inputs": {
+      "resize_type": "scale dimensions",
+      "resize_type.width": 720,
+      "resize_type.height": 1280,
+      "resize_type.crop": "center",
+      "scale_method": "lanczos",
+      "input": [
+        "98",
+        0
+      ]
+    },
+    "class_type": "ResizeImageMaskNode",
+    "_meta": {
+      "title": "Resize Image/Mask"
     }
   }
 }

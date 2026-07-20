@@ -63,7 +63,7 @@
   },
   "54": {
     "inputs": {
-      "shift": 8.000000000000002,
+      "shift": 8,
       "model": [
         "69",
         0
@@ -89,7 +89,7 @@
   },
   "56": {
     "inputs": {
-      "unet_name": "Wan/wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors",
+      "unet_name": "wan2.2_i2v_low_noise_14B_fp8_scaled.safetensors",
       "weight_dtype": "fp8_e4m3fn_fast"
     },
     "class_type": "UNETLoader",
@@ -100,7 +100,7 @@
   "57": {
     "inputs": {
       "add_noise": "enable",
-      "noise_seed": 1014889645523476,
+      "noise_seed": 1111995384724138,
       "steps": 6,
       "cfg": 1,
       "sampler_name": "lcm",
@@ -133,7 +133,7 @@
   "58": {
     "inputs": {
       "add_noise": "disable",
-      "noise_seed": 0,
+      "noise_seed": 665203747341403,
       "steps": 6,
       "cfg": 1,
       "sampler_name": "lcm",
@@ -165,8 +165,8 @@
   },
   "63": {
     "inputs": {
-      "lora_name": "Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank256_bf16.safetensors",
-      "strength_model": 5.000000000000001,
+      "lora_name": "lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors",
+      "strength_model": 5,
       "model": [
         "71",
         0
@@ -201,8 +201,7 @@
   },
   "68": {
     "inputs": {
-      "sage_attention": "sageattn_qk_int8_pv_fp16_triton",
-      "allow_compile": false,
+      "sage_attention": "disabled",
       "model": [
         "74",
         0
@@ -247,7 +246,7 @@
   },
   "71": {
     "inputs": {
-      "unet_name": "Wan/wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors",
+      "unet_name": "wan2.2_i2v_high_noise_14B_fp8_scaled.safetensors",
       "weight_dtype": "fp8_e4m3fn_fast"
     },
     "class_type": "UNETLoader",
@@ -257,8 +256,8 @@
   },
   "72": {
     "inputs": {
-      "lora_name": "Wan/Wan22_PusaV1_lora_HIGH_resized_dynamic_avg_rank_98_bf16.safetensors",
-      "strength_model": 1.5000000000000002,
+      "lora_name": "Wan22_PusaV1_lora_HIGH_resized_dynamic_avg_rank_98_bf16.safetensors",
+      "strength_model": 1.5,
       "model": [
         "63",
         0
@@ -271,8 +270,8 @@
   },
   "74": {
     "inputs": {
-      "lora_name": "Wan/Wan22_PusaV1_lora_LOW_resized_dynamic_avg_rank_98_bf16.safetensors",
-      "strength_model": 1.3000000000000003,
+      "lora_name": "Wan22_PusaV1_lora_LOW_resized_dynamic_avg_rank_98_bf16.safetensors",
+      "strength_model": 1.3,
       "model": [
         "129",
         0
@@ -298,7 +297,7 @@
       "pad_color": "0, 0, 0",
       "crop_position": "center",
       "divisible_by": 2,
-      "device": "cpu",
+      "device": "gpu",
       "image": [
         "119",
         0
@@ -338,7 +337,7 @@
   },
   "119": {
     "inputs": {
-      "image": "first_frame.png"
+      "image": "5c02fadf-a19a-4c84-af09-e7f303e59e97.jpg"
     },
     "class_type": "LoadImage",
     "_meta": {
@@ -427,7 +426,7 @@
   },
   "125": {
     "inputs": {
-      "image": "last_frame.png"
+      "image": "3e3d0a7c-105f-40b2-be23-bba2790ccc38.jpg"
     },
     "class_type": "LoadImage",
     "_meta": {
@@ -449,7 +448,7 @@
       "pad_color": "0, 0, 0",
       "crop_position": "center",
       "divisible_by": 2,
-      "device": "cpu",
+      "device": "gpu",
       "image": [
         "125",
         0
@@ -462,8 +461,8 @@
   },
   "129": {
     "inputs": {
-      "lora_name": "Lightx2v/lightx2v_I2V_14B_480p_cfg_step_distill_rank256_bf16.safetensors",
-      "strength_model": 2.0000000000000004,
+      "lora_name": "lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors",
+      "strength_model": 2,
       "model": [
         "56",
         0

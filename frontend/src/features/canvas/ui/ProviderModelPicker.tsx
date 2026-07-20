@@ -23,6 +23,8 @@ export type ProviderId =
   | 'huimeng'
   | 'openrouter'
   | 'openai'
+  | 'newapi'
+  | 'comfyui'
   | 'seedance'
   | 'minimax'
   | 'eleven'

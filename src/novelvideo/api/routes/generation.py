@@ -1576,6 +1576,12 @@ def _api_video_backend_options() -> list[VideoBackendOption]:
             dialogue_only=False,
             min_duration=2,
             max_duration=10,
+            resolution_options=None,  # Wan2.2 分辨率在工作流 JSON 中固定
+            ratio_options=None,       # Wan2.2 画幅在工作流 JSON 中固定
+            supported_modes=["first_frame", "first_last_frame"],  # 支持首帧和首尾帧模式
+            reference_image_max=1,    # 仅支持单张首帧（FLF 模式额外一张尾帧）
+            reference_video_max=0,
+            reference_audio_max=0,
         ),
         VideoBackendOption(
             value="ltx23",
@@ -1584,6 +1590,12 @@ def _api_video_backend_options() -> list[VideoBackendOption]:
             dialogue_only=False,
             min_duration=3,
             max_duration=10,
+            resolution_options=None,  # LTX 2.3 分辨率在工作流 JSON 中固定
+            ratio_options=None,       # LTX 2.3 画幅在工作流 JSON 中固定
+            supported_modes=["first_frame"],  # 仅支持首帧模式
+            reference_image_max=1,    # 仅支持单张首帧
+            reference_video_max=0,
+            reference_audio_max=0,
         ),
     ]
     backend_options.extend(local_options)

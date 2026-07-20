@@ -20,7 +20,7 @@ import shutil
 import subprocess
 import tempfile
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 import numpy as np
 from PIL import Image
@@ -1213,6 +1213,8 @@ async def run_freezone_video_gen(
     scene_optimize: str | None = None,
     backend: str = "huimeng_seedance-2.0-fast",
     last_frame_path: Optional[str] = None,
+    on_progress: Optional[Callable[[float], None]] = None,
+    on_log: Optional[Callable[[str], None]] = None,
 ) -> Path:
     """Freezone 文生视频。
 
@@ -1277,6 +1279,8 @@ async def run_freezone_video_gen(
             references=references,
             human_review=bool(human_review),
             seedance2_config={"scene_optimize": scene_optimize} if scene_optimize else None,
+            on_progress=on_progress,
+            on_log=on_log,
         )
     if not result or result.status.value != "done":
         err = result.error if result else "unknown error"

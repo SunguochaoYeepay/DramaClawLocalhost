@@ -345,9 +345,23 @@ export function VideoPane({
     return labels;
   }, [videoBackends]);
   const selectedBackend = videoBackends.find((b) => b.value === defaultBackend);
+  // 判断是否为本地 ComfyUI 模型（Wan2.2 / LTX 2.3）
+  const isComfyUILocalBackend =
+    defaultBackend === "comfyui" || defaultBackend === "ltx23";
+  // 判断是否支持参考图模式（有 supported_modes 且包含 first_frame）
+  const hasReferenceModeSupport =
+    selectedBackend?.supported_modes?.includes("first_frame") === true;
+  // 判断是否支持首尾帧模式
+  const hasFirstLastFrameSupport =
+    selectedBackend?.supported_modes?.includes("first_last_frame") === true;
+  
   const showSeedance2Config = selectedBackend?.is_seedance2 === true;
   const showHappyHorseConfig = selectedBackend?.is_happyhorse === true;
   const showGrokVideoConfig = selectedBackend?.is_grok_video === true;
+  // ComfyUI 本地模型显示简化的配置界面（仅时长，无分辨率/画幅选择）
+  const showComfyUIConfig = isComfyUILocalBackend && hasReferenceModeSupport;
+  // showPromptConfig 仅控制 Seedance2/HappyHorse/Grok 的检视器面板
+  // ComfyUI 有自己独立的配置区域，不需要 Seedance2 检视器
   const showPromptConfig =
     showSeedance2Config || showHappyHorseConfig || showGrokVideoConfig;
   const showReferenceDetails =
@@ -462,8 +476,10 @@ export function VideoPane({
     () =>
       showHappyHorseConfig || showGrokVideoConfig
         ? seedance2AssetItems.filter((asset) => asset.media_type === "image")
+        : showComfyUIConfig
+        ? seedance2AssetItems.filter((asset) => asset.key === "first_frame" || (hasFirstLastFrameSupport && asset.key === "last_frame"))
         : seedance2AssetItems,
-    [seedance2AssetItems, showGrokVideoConfig, showHappyHorseConfig],
+    [seedance2AssetItems, showGrokVideoConfig, showHappyHorseConfig, showComfyUIConfig, hasFirstLastFrameSupport],
   );
   const referenceCropImageItems = useMemo(
     () => {
@@ -476,9 +492,15 @@ export function VideoPane({
       if (showSeedance2Config || showHappyHorseConfig || showGrokVideoConfig) {
         return imageAssets;
       }
+      if (showComfyUIConfig) {
+        // ComfyUI 仅支持首帧（和可选的尾帧）裁剪
+        return imageAssets.filter((asset) => 
+          asset.key === "first_frame" || (hasFirstLastFrameSupport && asset.key === "last_frame")
+        );
+      }
       return imageAssets.filter((asset) => asset.key === "first_frame");
     },
-    [seedance2AssetItems, showGrokVideoConfig, showHappyHorseConfig, showSeedance2Config],
+    [seedance2AssetItems, showGrokVideoConfig, showHappyHorseConfig, showSeedance2Config, showComfyUIConfig, hasFirstLastFrameSupport],
   );
   const seedance2ReferenceOptions = useMemo(
     () =>
@@ -777,6 +799,13 @@ export function VideoPane({
           : {}),
         ...(isSd15ProConfig
           ? { resolution: sd15Resolution, duration: sd15Duration }
+          : {}),
+        // ComfyUI 本地模型传递 duration 和 mode
+        ...(showComfyUIConfig
+          ? {
+              duration: seedance2DraftRef.current.duration,
+              mode: seedance2DraftRef.current.mode,
+            }
           : {}),
       });
       if (res.ok === false) {
@@ -1416,7 +1445,7 @@ export function VideoPane({
         )}
       </div>
 
-      {!showPromptConfig && (
+      {!showPromptConfig && !showComfyUIConfig && (
         <div
           className={cn(
             "col-span-2 rounded-[10px] border border-white/[0.055] bg-white/[0.012] p-3",
@@ -1455,7 +1484,7 @@ export function VideoPane({
       )}
 
       {/* Full-width action row. Seedance2 keeps its generate action after config. */}
-      {!showPromptConfig && (
+      {!showPromptConfig && !showComfyUIConfig && (
         <div
           className={cn(
             "col-span-2 flex flex-wrap items-start gap-x-3 gap-y-2 pt-1",
@@ -1649,7 +1678,7 @@ export function VideoPane({
         </div>
       )}
 
-      {!showPromptConfig && showReferenceDetails && (
+      {!showPromptConfig && !showComfyUIConfig && showReferenceDetails && (
         <div
           className={cn(
             "col-span-2 rounded-[10px] border border-white/[0.055] bg-white/[0.012]",
@@ -2436,6 +2465,196 @@ export function VideoPane({
                   <CreditCostInline display={videoCost.data?.data.display} />
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ComfyUI 本地模型配置区域 (Wan2.2 / LTX 2.3) */}
+      {showComfyUIConfig && (
+        <div className="space-y-3">
+          {/* 参数栏：模式 + 时长 */}
+          <div className="grid gap-3 rounded-[10px] border border-white/[0.055] bg-white/[0.012] p-3 md:grid-cols-[1fr_1fr]">
+            {hasFirstLastFrameSupport ? (
+              <Seedance2Field
+                label={t("episode.workbench.video.mode")}
+                htmlFor={`${seedance2Id}-comfyui-mode`}
+              >
+                <Select
+                  value={seedance2Draft.mode}
+                  onValueChange={(v) => updateSeedance2Mode(normalizeSeedance2Mode(v))}
+                >
+                  <SelectTrigger
+                    id={`${seedance2Id}-comfyui-mode`}
+                    className={cn("!h-9", SEEDANCE2_CONTROL_CLASS)}
+                  >
+                    <span data-slot="select-value" className="flex flex-1 items-center gap-1.5 text-left">
+                      {t(
+                        `episode.workbench.video.seedance2ModeLabels.${seedance2Draft.mode}`,
+                      )}
+                    </span>
+                  </SelectTrigger>
+                  <SelectContent alignItemWithTrigger={false}>
+                    <SelectItem value="first_frame">
+                      {t("episode.workbench.video.seedance2ModeLabels.first_frame")}
+                    </SelectItem>
+                    <SelectItem value="first_last_frame">
+                      {t("episode.workbench.video.seedance2ModeLabels.first_last_frame")}
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </Seedance2Field>
+            ) : (
+              <Seedance2Field
+                label={t("episode.workbench.video.mode")}
+                htmlFor={`${seedance2Id}-comfyui-mode-readonly`}
+              >
+                <div
+                  id={`${seedance2Id}-comfyui-mode-readonly`}
+                  className={cn(
+                    "!h-9 rounded-md border border-white/[0.075] bg-white/[0.03] px-3 text-sm",
+                    "flex items-center text-muted-foreground/70",
+                  )}
+                >
+                  {t("episode.workbench.video.seedance2ModeLabels.first_frame")}
+                </div>
+              </Seedance2Field>
+            )}
+            <Seedance2Field
+              label={t("episode.workbench.video.duration")}
+              htmlFor={`${seedance2Id}-comfyui-duration`}
+            >
+              <Input
+                id={`${seedance2Id}-comfyui-duration`}
+                aria-label={t("episode.workbench.video.duration")}
+                type="number"
+                min={seedance2DurationBounds.min}
+                max={seedance2DurationBounds.max}
+                value={seedance2Draft.duration}
+                onChange={(e) =>
+                  updateSeedance2Draft(
+                    "duration",
+                    clampDuration(e.target.value, seedance2DurationBounds),
+                  )
+                }
+                className={cn("!h-9", SEEDANCE2_CONTROL_CLASS)}
+              />
+            </Seedance2Field>
+          </div>
+
+          {/* 参考图 + 提示词 */}
+          <div className="rounded-[10px] border border-white/[0.055] bg-white/[0.012] p-3">
+            <div className="grid gap-3 md:grid-cols-[auto_1fr]">
+              {/* 参考图（首帧） */}
+              <div className="flex flex-col items-center gap-1.5">
+                <span className="text-[11px] text-muted-foreground/78">
+                  {t("episode.workbench.video.seedance2ReferenceImage")}
+                </span>
+                {beat.frame_url ? (
+                  <div className="relative h-24 w-32 overflow-hidden rounded-md border border-white/[0.075]">
+                    <img
+                      src={resolveMediaUrl(beat.frame_url)}
+                      alt="First frame reference"
+                      className="h-full w-full object-cover"
+                    />
+                  </div>
+                ) : (
+                  <div className="flex h-24 w-32 items-center justify-center rounded-md border border-dashed border-white/[0.1] bg-white/[0.015]">
+                    <span className="px-2 text-center text-[10px] leading-tight text-muted-foreground/60">
+                      暂无首帧
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* 提示词编辑区 */}
+              <div className="min-w-0 space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Label
+                    htmlFor={`${seedance2Id}-comfyui-prompt`}
+                    className="text-[11px] text-muted-foreground/78"
+                  >
+                    {defaultBackend === "ltx23"
+                      ? "LTX 2.3 提示词"
+                      : t("episode.workbench.video.videoPrompt")}
+                  </Label>
+                </div>
+                <Textarea
+                  id={`${seedance2Id}-comfyui-prompt`}
+                  aria-label={t("episode.workbench.video.videoPrompt")}
+                  value={legacyVideoPrompt}
+                  onChange={(e) => setLegacyVideoPrompt(e.target.value)}
+                  rows={3}
+                  className={cn("min-h-[80px]", SEEDANCE2_TEXTAREA_CLASS)}
+                />
+                {/* 提示词引导标签 */}
+                <div className="flex flex-wrap gap-1.5">
+                  {SEEDANCE2_PROMPT_GUIDANCE_TEMPLATES.map((template) => {
+                    const active = legacyVideoPrompt.includes(template.text);
+                    return (
+                      <Button
+                        key={template.key}
+                        type="button"
+                        size="xs"
+                        variant="ghost"
+                        className={cn(
+                          SEEDANCE2_PILL_ACTION_CLASS,
+                          active && "border-cyan-400/30 bg-cyan-400/10 text-cyan-200",
+                        )}
+                        onClick={() => {
+                          if (active) {
+                            setLegacyVideoPrompt(
+                              legacyVideoPrompt.replace(template.text, "").replace(/\n{2,}/g, "\n").trim(),
+                            );
+                          } else {
+                            const next = [legacyVideoPrompt.trim(), template.text]
+                              .filter(Boolean)
+                              .join("\n");
+                            setLegacyVideoPrompt(next);
+                          }
+                        }}
+                      >
+                        {t(`episode.workbench.video.${template.labelKey}`)}
+                      </Button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* 操作按钮 */}
+            <div className="flex flex-wrap justify-start gap-2 pt-2">
+              <Button
+                size="xs"
+                variant="outline"
+                disabled={generateBeatVideoPrompt.isPending}
+                onClick={() => void handleGenerateBeatVideoPrompt()}
+                className={MEDIA_PRIMARY_ACTION_BUTTON_CLASS}
+              >
+                {generateBeatVideoPrompt.isPending ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : (
+                  <WandSparkles className="size-3" />
+                )}
+                {t("episode.workbench.video.generatePrompt")}
+              </Button>
+              <Button
+                size="xs"
+                variant="outline"
+                onClick={openRegenConfirm}
+                disabled={regenerate.isPending}
+                className={MEDIA_PRIMARY_ACTION_BUTTON_CLASS}
+              >
+                {regenerate.isPending ? (
+                  <Loader2 className="size-3 animate-spin" />
+                ) : hasGeneratedVideo ? (
+                  <RefreshCw className="size-3" />
+                ) : (
+                  <Film className="size-3" />
+                )}
+                {videoActionLabel}
+                <CreditCostInline display={videoCost.data?.data.display} />
+              </Button>
             </div>
           </div>
         </div>
