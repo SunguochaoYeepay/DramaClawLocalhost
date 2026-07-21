@@ -130,6 +130,7 @@ class VideoBackend(Enum):
     WAN26 = "wan26"  # 阿里云 DashScope Wan2.6-i2v-flash
     LTX23 = "ltx23"  # Lightricks LTX-Video 2.3 22B
     LTX23_DIRECTOR = "ltx23_director"  # LTX 2.3 Director 工作流
+    LTX23_DIRECTOR_FAST = "ltx23_director_fast"  # LTX 2.3 Director 性能工作流
     GROK_720 = "grok_720"  # xAI Grok Imagine Video 720p
 
 
@@ -2762,8 +2763,8 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
 
     # LTX 2.3 帧率（与 Wan 2.2 的 24fps 不同）
     LTX23_FPS = 25
-    # LTX Director 工作流的时间轴帧率约定
-    LTX23_DIRECTOR_FPS = 72
+    # LTX Director 的生产工作流以 24fps 时间轴生成视频。
+    LTX23_DIRECTOR_FPS = 24
 
     # 工作流模板路径
     GGUF_WORKFLOW_PATH = Path(__file__).parent / "wan2-2-I2V-GGUF-LightX2V.json"
@@ -2777,6 +2778,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         "gguf": {
             "input_image": "62",
             "frame_count": "63",  # WanImageToVideo.length
+            "dimensions": "63",  # WanImageToVideo.width/height
             "positive_prompt": "6",
             "negative_prompt": "7",
             "seed": "57",
@@ -2785,6 +2787,8 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         "fp8_i2v": {
             "input_image": "34",
             "frame_count": "20",  # Int node
+            "image_scale": "369",  # ImageScaleByAspectRatio V2
+            "scale_length": "30",  # Int node: longest edge
             "positive_prompt": "29",
             "negative_prompt": "3",
             "seed_high": "94",
@@ -2794,6 +2798,8 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         "fp8_flf": {
             "first_image": "119",
             "last_image": "125",
+            "width": "112",  # INTConstant
+            "height": "114",  # INTConstant
             "positive_prompt": "6",
             "negative_prompt": "7",
             "seed": "57",
@@ -2848,6 +2854,75 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         height = max(32, round(height / 32) * 32)
         return width, height
 
+    @staticmethod
+    def _director_timeline_frames(duration: float) -> int:
+        """Translate a requested duration to LTX Director timeline frames."""
+        return max(1, int(round(duration * ComfyUIVideoGenerator.LTX23_DIRECTOR_FPS)))
+
+    @staticmethod
+    def _wan_dimensions(aspect_ratio: str, resolution: str | None) -> tuple[int, int]:
+        """Map a requested ratio to a Wan canvas with 16-pixel alignment."""
+        short_edge_presets = {"480p": 480, "720p": 720, "1080p": 1080}
+        short_edge = short_edge_presets.get(str(resolution or "720p").strip().lower(), 720)
+        try:
+            w_part, h_part = str(aspect_ratio or "16:9").split(":", 1)
+            ratio = float(w_part) / float(h_part)
+            if ratio <= 0:
+                raise ValueError
+        except (TypeError, ValueError, ZeroDivisionError):
+            ratio = 16 / 9
+        if ratio >= 1:
+            height = short_edge
+            width = round(height * ratio)
+        else:
+            width = short_edge
+            height = round(width / ratio)
+        width = max(16, round(width / 16) * 16)
+        height = max(16, round(height / 16) * 16)
+        return width, height
+
+    def _apply_wan_dimensions(
+        self,
+        workflow: dict,
+        workflow_key: str,
+        aspect_ratio: str,
+    ) -> tuple[int, int]:
+        """Apply the requested canvas size to the active Wan workflow copy."""
+        width, height = self._wan_dimensions(aspect_ratio, self.resolution)
+        node_map = self.NODE_MAPPING[workflow_key]
+        if workflow_key == "gguf":
+            inputs = workflow[node_map["dimensions"]]["inputs"]
+            inputs["width"] = width
+            inputs["height"] = height
+        elif workflow_key == "fp8_i2v":
+            workflow[node_map["image_scale"]]["inputs"]["aspect_ratio"] = aspect_ratio
+            workflow[node_map["scale_length"]]["inputs"]["Number"] = str(max(width, height))
+        elif workflow_key == "fp8_flf":
+            workflow[node_map["width"]]["inputs"]["value"] = width
+            workflow[node_map["height"]]["inputs"]["value"] = height
+        return width, height
+
+    @staticmethod
+    def _apply_director_fast_profile(workflow: dict) -> None:
+        """Use the local FP8 distilled model and skip the high-resolution pass."""
+        workflow["77"] = {
+            "inputs": {
+                "unet_name": "ltx-2.3-22b-distilled-1.1_transformer_only_fp8_scaled.safetensors",
+                "weight_dtype": "default",
+            },
+            "class_type": "UNETLoader",
+            "_meta": {"title": "UNET Loader (Director Fast)"},
+        }
+        # The high-quality profile chains two style LoRAs after node 77. The fast
+        # profile intentionally feeds the distilled model directly to Director.
+        workflow["46"]["inputs"]["model"] = ["77", 0]
+        workflow["11"]["inputs"]["steps"] = 10
+
+        # Decode the first pass directly. This makes the x2 latent upscaler and
+        # the second 4-step sampling pass unreachable for this prompt.
+        workflow["94"]["inputs"]["samples"] = ["13", 0]
+        workflow["16"]["inputs"]["samples"] = ["13", 1]
+
     def __init__(
         self,
         server_address: Optional[str] = None,
@@ -2865,7 +2940,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             timeout: 请求超时时间（秒）
             workflow_type: 工作流类型 ("gguf" / "fp8" / "ltx23")，默认 "gguf"
             use_ssl: 是否使用 HTTPS/WSS（默认从 URL scheme 自动推断）
-            resolution: 忽略（ComfyUI 分辨率在工作流 JSON 中控制）
+            resolution: Wan 工作流的短边分辨率（480p / 720p / 1080p）
             generate_audio: 忽略（LTX2.3 自动生成音频）
         """
         self.timeout = timeout
@@ -2899,7 +2974,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         # 根据类型选择工作流路径
         if self.workflow_type == "fp8":
             workflow_path = self.FP8_I2V_WORKFLOW_PATH
-        elif self.workflow_type == "ltx23":
+        elif self.workflow_type in {"ltx23", "ltx23_director", "ltx23_director_fast"}:
             workflow_path = self.LTX23_I2V_WORKFLOW_PATH
         else:
             workflow_path = self.GGUF_WORKFLOW_PATH
@@ -2920,6 +2995,8 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         # 兼容旧代码
         if self.workflow_type == "ltx23":
             self._workflow_template = self._workflow_templates.get("ltx23")
+        elif self.workflow_type in {"ltx23_director", "ltx23_director_fast"}:
+            self._workflow_template = self._workflow_templates.get("ltx23_director")
         else:
             self._workflow_template = self._workflow_templates.get(
                 "fp8_i2v" if self.workflow_type == "fp8" else "gguf"
@@ -3022,7 +3099,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             image_path: 首帧图像路径
             prompt: 动作描述
             output_path: 输出视频路径
-            aspect_ratio: 宽高比（未使用，保留兼容）
+            aspect_ratio: 宽高比（用于调整 Wan 工作流画布尺寸）
             duration: 视频时长（秒），默认 5.0，最大 10.0（FLF 模式固定 ~3.3s）
             on_log: 日志回调函数
             on_progress: 进度回调函数 (0.0 ~ 1.0)
@@ -3047,12 +3124,16 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         if use_flf_mode:
             workflow_key = "fp8_flf"
             mode_desc = "FLF (首尾帧过渡)"
-        elif self.workflow_type in {"ltx23", "ltx23_director"}:
+        elif self.workflow_type in {"ltx23", "ltx23_director", "ltx23_director_fast"}:
             workflow_key = "ltx23"
             mode_desc = "LTX 2.3 I2V"
-            if self.workflow_type == "ltx23_director":
+            if self.workflow_type in {"ltx23_director", "ltx23_director_fast"}:
                 workflow_key = "ltx23_director"
-                mode_desc = "LTX 2.3 Director I2V"
+                mode_desc = (
+                    "LTX 2.3 Director Fast I2V"
+                    if self.workflow_type == "ltx23_director_fast"
+                    else "LTX 2.3 Director I2V"
+                )
         elif self.workflow_type == "fp8":
             workflow_key = "fp8_i2v"
             mode_desc = "fp8 I2V"
@@ -3120,14 +3201,11 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             actual_duration = frames / self.FPS
             log(f"开始生成视频 | 模式: {mode_desc} | 固定帧数: {frames} (~{actual_duration:.1f}s)")
         else:
-            fps = (
-                self.LTX23_DIRECTOR_FPS
-                if workflow_key == "ltx23_director"
-                else self.LTX23_FPS
-                if workflow_key == "ltx23"
-                else self.FPS
-            )
-            frames = int(duration * fps) + 1  # +1 确保时长足够
+            if workflow_key == "ltx23_director":
+                frames = self._director_timeline_frames(duration)
+            else:
+                fps = self.LTX23_FPS if workflow_key == "ltx23" else self.FPS
+                frames = int(duration * fps) + 1  # +1 确保时长足够
             log(f"开始生成视频 | 模式: {mode_desc} | 时长: {duration}s")
 
         try:
@@ -3137,11 +3215,6 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 first_image_bytes = f.read()
             await self._upload_image(first_image_bytes, first_image_filename)
             log(f"首帧已上传: {first_image_filename}")
-            if workflow_key == "ltx23_director":
-                for ref, filename in zip(director_refs, director_reference_filenames[1:]):
-                    with open(ref.path, "rb") as f:
-                        await self._upload_image(f.read(), filename)
-                    log(f"参考图已上传: {filename}")
             if workflow_key == "ltx23_director":
                 for ref, filename in zip(director_refs, director_reference_filenames[1:]):
                     with open(ref.path, "rb") as f:
@@ -3158,6 +3231,18 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             # 2. 准备工作流
             log("准备工作流...")
             workflow = json.loads(json.dumps(workflow_template))
+
+            if self.workflow_type == "ltx23_director_fast":
+                self._apply_director_fast_profile(workflow)
+                log("性能配置: FP8 distilled 1.1，单阶段采样")
+
+            if workflow_key in {"gguf", "fp8_i2v", "fp8_flf"}:
+                wan_width, wan_height = self._apply_wan_dimensions(
+                    workflow,
+                    workflow_key,
+                    aspect_ratio,
+                )
+                log(f"画布: {wan_width}x{wan_height}")
 
             # 设置输入图片（根据工作流类型）
             if workflow_key == "fp8_flf":
@@ -3967,6 +4052,8 @@ def create_video_generator(
         return ComfyUIVideoGenerator(workflow_type="ltx23", **kwargs)
     elif backend_enum == VideoBackend.LTX23_DIRECTOR:
         return ComfyUIVideoGenerator(workflow_type="ltx23_director", **kwargs)
+    elif backend_enum == VideoBackend.LTX23_DIRECTOR_FAST:
+        return ComfyUIVideoGenerator(workflow_type="ltx23_director_fast", **kwargs)
     elif backend_enum == VideoBackend.WAN26:
         return Wan26VideoGenerator(**kwargs)
     elif backend_enum == VideoBackend.GROK_720:

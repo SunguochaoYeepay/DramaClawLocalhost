@@ -8,6 +8,7 @@ import io
 import logging
 import re
 import mimetypes
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -119,18 +120,27 @@ class CloudinaryRelay:
         content_type = mimetypes.types_map.get(f".{ext}", "application/octet-stream")
         payload = {"folder": self._folder} if self._folder else {}
         url = f"https://api.cloudinary.com/v1_1/{self._cloud_name}/image/upload"
-        try:
-            # Use 180s timeout for large images (e.g., 360° panoramas)
-            with httpx.Client(timeout=180.0) as client:
-                response = client.post(
-                    url,
-                    data=payload,
-                    files={"file": (filename, data, content_type)},
-                    auth=(self._api_key, self._api_secret),
-                )
-                response.raise_for_status()
-        except httpx.HTTPError as exc:
-            raise MediaRelayConfigError(f"Cloudinary media relay upload failed: {exc}") from exc
+        for attempt in range(3):
+            try:
+                with httpx.Client(timeout=180.0) as client:
+                    response = client.post(
+                        url,
+                        data=payload,
+                        files={"file": (filename, data, content_type)},
+                        auth=(self._api_key, self._api_secret),
+                    )
+                    response.raise_for_status()
+                break
+            except httpx.RequestError as exc:
+                if attempt == 2:
+                    raise MediaRelayConfigError(
+                        f"Cloudinary media relay upload failed: {exc}"
+                    ) from exc
+                time.sleep(0.5 * (2**attempt))
+            except httpx.HTTPStatusError as exc:
+                raise MediaRelayConfigError(
+                    f"Cloudinary media relay upload failed: {exc}"
+                ) from exc
 
         result = response.json()
         secure_url = str(result.get("secure_url") or result.get("url") or "").strip()

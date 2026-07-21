@@ -329,6 +329,18 @@ class CharacterEnrichment(BaseModel):
     aliases: List[str] = Field(
         default_factory=list, description="原文中真实出现过的稳定别名/昵称/固定称呼"
     )
+
+    @field_validator("aliases", mode="before")
+    @classmethod
+    def normalize_aliases(cls, value: Any) -> list[str]:
+        """Accept common scalar/null variants returned by compatible LLMs."""
+        if value is None:
+            return []
+        if isinstance(value, str):
+            alias = value.strip()
+            return [alias] if alias else []
+        return value
+
     role: str = Field(default="", description="角色定位")
     is_main: bool = Field(default=False, description="是否为主角/核心角色")
     gender: str = Field(default="", description="性别")

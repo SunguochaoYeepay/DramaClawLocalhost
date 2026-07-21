@@ -501,6 +501,25 @@ def get_effective_newapi_config(
     official_base_url: str | None = None,
     official_api_key: str | None = None,
 ) -> EffectiveNewApiConfig:
+    # Allow deployments that document MODEL_* as the source of truth to bypass
+    # the CE settings database explicitly. The default keeps the existing
+    # database-first gateway behavior for backwards compatibility.
+    direct_env = os.environ.get("MODEL_GATEWAY_FROM_ENV", "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+    env_base_url = os.environ.get("MODEL_BASE_URL", "").strip()
+    env_api_key = os.environ.get("MODEL_API_KEY", "").strip()
+    if direct_env and env_base_url and env_api_key:
+        return EffectiveNewApiConfig(
+            mode=MODE_CUSTOM,
+            source="environment",
+            base_url=normalize_relay_base_url(env_base_url),
+            api_key=normalize_api_key(env_api_key),
+        )
+
     if not _uses_ce_gateway_settings():
         return EffectiveNewApiConfig(
             mode=MODE_OFFICIAL,

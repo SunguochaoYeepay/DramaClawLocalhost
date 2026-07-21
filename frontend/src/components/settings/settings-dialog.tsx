@@ -119,7 +119,7 @@ function ModelConfigSection({ open }: { open: boolean }) {
       </div>
 
       {config?.effective ? (
-        <div className="mt-3 space-y-1.5">
+        <div className="mt-3 space-y-3">
           <div className="flex items-center gap-2 text-xs">
             <span className="text-muted-foreground">{t("settings.modelConfig.statusLabel")}:</span>
             <span className={isConfigured ? "text-emerald-400" : "text-amber-300"}>
@@ -129,14 +129,40 @@ function ModelConfigSection({ open }: { open: boolean }) {
             </span>
           </div>
           {isConfigured ? (
-            <div className="space-y-1 text-[11px] text-muted-foreground">
-              <p>{t("settings.modelConfig.effectiveBaseUrl")}: <code className="rounded bg-white/[0.05] px-1">{config.effective.baseUrl}</code></p>
-              <p>{t("settings.modelConfig.effectiveApiKey")}: {config.effective.apiKeyPreview}</p>
+            <div className="space-y-3 text-[11px] text-muted-foreground">
+              <GatewayDetails title="当前生效" endpoint={config.effective} source={config.effective.source} />
+              <GatewayDetails title="官方配置" endpoint={config.official} source={config.official.source} />
+              <GatewayDetails title="环境变量回退" endpoint={config.official.environment} source="environment" />
+              <GatewayDetails title="自定义配置" endpoint={config.custom} source="custom" />
             </div>
           ) : null}
         </div>
       ) : null}
     </section>
+  );
+}
+
+function GatewayDetails({
+  title,
+  endpoint,
+  source,
+}: {
+  title: string;
+  endpoint?: { baseUrl: string; apiKeyPreview: string; configured: boolean };
+  source?: string;
+}) {
+  if (!endpoint) return null;
+  return (
+    <div className="rounded-md border border-border/60 bg-black/20 p-2.5">
+      <div className="mb-1 font-medium text-foreground">
+        {title}{source ? <span className="ml-2 text-[10px] font-normal text-muted-foreground">来源: {source}</span> : null}
+      </div>
+      <div className="space-y-0.5 break-all">
+        <p>地址: <code className="rounded bg-white/[0.05] px-1">{endpoint.baseUrl || "(空)"}</code></p>
+        <p>API Key: {endpoint.apiKeyPreview || "(未配置)"}</p>
+        <p>状态: {endpoint.configured ? "已配置" : "未配置"}</p>
+      </div>
+    </div>
   );
 }
 

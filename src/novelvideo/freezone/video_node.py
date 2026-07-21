@@ -349,6 +349,13 @@ def get_freezone_video_model_options() -> list[dict[str, Any]]:
             3,
             11,
         ),
+        (
+            "ltx23_director_fast",
+            "LTX 2.3 Director 性能版 (本地 ComfyUI)",
+            "ltx23_director_fast",
+            3,
+            11,
+        ),
     ]
     for backend_id, label, provider_id, min_dur, max_dur in local_backends:
         item = {
@@ -407,7 +414,12 @@ def resolve_freezone_video_backend(model: str | None) -> str:
         return text
 
     # 本地 ComfyUI 后端
-    LOCAL_COMFYUI_VIDEO_BACKENDS = {"comfyui", "ltx23", "ltx23_director"}
+    LOCAL_COMFYUI_VIDEO_BACKENDS = {
+        "comfyui",
+        "ltx23",
+        "ltx23_director",
+        "ltx23_director_fast",
+    }
     if text in LOCAL_COMFYUI_VIDEO_BACKENDS:
         return text
 

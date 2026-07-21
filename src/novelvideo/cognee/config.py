@@ -151,13 +151,16 @@ def _get_scoped_env(primary_key: str, fallback_key: str = "") -> str:
 
 
 def _get_endpoint_env(provider: str, primary_key: str, fallback_key: str) -> str:
+    # Provider-scoped endpoints must win over the shared LLM gateway. This is
+    # required when chat uses one OpenAI-compatible service and embeddings use
+    # another (for example DeepSeek + DashScope).
+    value = _get_scoped_env(primary_key, fallback_key)
+    if value:
+        return value
     if _uses_newapi_gateway(provider):
         gateway_key, gateway_base_url = _effective_newapi_gateway()
         if gateway_key and gateway_base_url:
             return gateway_base_url
-    value = _get_scoped_env(primary_key, fallback_key)
-    if value:
-        return value
     if _uses_newapi_gateway(provider):
         return os.getenv("NEWAPI_BASE_URL", "").strip()
     return ""
@@ -737,9 +740,8 @@ def _apply_embedding_env(llm_provider: str, api_key: str) -> tuple[str, str, str
     )
     embedding_provider = _to_cognee_provider(embedding_provider)
 
-    embedding_api_key = ""
-    if not _uses_newapi_gateway(raw_embedding_provider):
-        embedding_api_key = os.getenv("COGNEE_EMBEDDING_API_KEY", "")
+    # An explicit embedding key must not be replaced by the shared LLM key.
+    embedding_api_key = os.getenv("COGNEE_EMBEDDING_API_KEY", "").strip()
     if not embedding_api_key:
         if embedding_provider == "gemini":
             embedding_api_key = (
