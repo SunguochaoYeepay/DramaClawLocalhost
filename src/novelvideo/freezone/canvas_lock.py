@@ -54,8 +54,6 @@ def canvas_write_lock(
                 portalocker.lock(fh, portalocker.LOCK_EX | portalocker.LOCK_NB)
                 break
             except portalocker.exceptions.AlreadyLocked as exc:
-                # 仅竞争(EAGAIN/ERROR_LOCK_VIOLATION)重试;其余锁故障
-                # (如不支持锁的挂载)立即上抛,不得伪装成 CanvasLockBusy。
                 if time.monotonic() >= deadline:
                     raise CanvasLockBusy(canvas_id) from exc
                 time.sleep(retry_interval_seconds)
