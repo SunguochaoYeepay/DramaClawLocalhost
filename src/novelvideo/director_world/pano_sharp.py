@@ -1073,7 +1073,18 @@ def build_sharp_model(model_url: str, device: torch.device):
     from sharp.models import PredictorParams, create_predictor
 
     print(f"Loading SHARP checkpoint: {model_url}", flush=True)
-    state_dict = torch.hub.load_state_dict_from_url(model_url, progress=True)
+    # Keep SHARP weights out of Torch's shared cache. A partially interrupted
+    # download there otherwise makes every subsequent 3DGS task fail before it
+    # can retry the download.
+    cache_dir = Path(
+        os.environ.get("SHARP_MODEL_CACHE_DIR", Path.home() / ".cache" / "dramaclaw" / "sharp")
+    ).expanduser()
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    state_dict = torch.hub.load_state_dict_from_url(
+        model_url,
+        model_dir=str(cache_dir),
+        progress=True,
+    )
     predictor = create_predictor(PredictorParams())
     predictor.load_state_dict(state_dict)
     predictor.eval()
