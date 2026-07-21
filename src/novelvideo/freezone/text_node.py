@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -151,11 +152,12 @@ class FreezoneTranslationResult(BaseModel):
 
 def create_freezone_translation_agent() -> Agent:
     """创建 Freezone 中英互译 Agent。"""
-    from novelvideo.config import get_newapi_text_pydantic_model
+    from novelvideo.config import get_pydantic_model
 
-    model = get_newapi_text_pydantic_model(
-        "FREEZONE_TRANSLATION_MODEL",
-        FREEZONE_TRANSLATION_MODEL,
+    model = get_pydantic_model(
+        model_name_override=os.environ.get(
+            "FREEZONE_TRANSLATION_MODEL", FREEZONE_TRANSLATION_MODEL
+        ),
     )
     return Agent(
         model,

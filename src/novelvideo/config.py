@@ -263,8 +263,14 @@ def _newapi_text_openai_model(
 
 
 def get_newapi_text_pydantic_model(model_env: str, default_model: str):
-    """Create a PydanticAI OpenAI-compatible model that routes through newAPI."""
+    """Create a text model for gateway or direct-provider deployments."""
     model_name = get_newapi_text_model_name(model_env, default_model)
+    # A configured direct provider is authoritative for local deployments.
+    # Without this branch, stale UI gateway settings in settings.db override
+    # MODEL_BASE_URL/MODEL_API_KEY and send direct-provider keys to RelayClaw.
+    if os.environ.get("MODEL_PROVIDER", "").strip():
+        return get_pydantic_model(model_name_override=model_name)
+
     api_key, base_url = get_newapi_runtime_credentials(
         env_api_key="MODEL_API_KEY",
         env_base_url="MODEL_BASE_URL",

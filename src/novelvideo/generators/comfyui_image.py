@@ -263,7 +263,7 @@ class ComfyUIImageGenerator:
             "client_id": "dramaclaw",
         }
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
             response = await client.post(
                 f"{self.api_url}/prompt",
                 headers={"Content-Type": "application/json"},
@@ -302,7 +302,7 @@ class ComfyUIImageGenerator:
         while time.time() - start_time < _POLL_TIMEOUT:
             await asyncio.sleep(_POLL_INTERVAL)
 
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            async with httpx.AsyncClient(timeout=10.0, trust_env=False) as client:
                 response = await client.get(
                     f"{self.api_url}/history/{prompt_id}",
                 )
@@ -354,7 +354,9 @@ class ComfyUIImageGenerator:
         Returns:
             base64 编码的图片数据
         """
-        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(
+            timeout=60.0, follow_redirects=True, trust_env=False
+        ) as client:
             response = await client.get(url)
 
         if response.status_code != 200:

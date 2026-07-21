@@ -229,6 +229,10 @@ cp .env.example .env && $EDITOR .env
 uv run novelvideo api --port 8780   # 启动 REST API（CE 默认 inline 任务，无需 Ray/Redis）
 ```
 
+#### Windows 本地 ComfyUI
+
+本地 ComfyUI 默认使用 `http://127.0.0.1:8188`。Windows 系统代理可能会拦截 Python 对本机地址的请求；内置 ComfyUI 图像客户端已强制直连。若使用本地视频工作流，工作流 JSON 按 UTF-8 读取，修改代码或 `.env` 后请重启 API 服务。
+
 <br/>
 
 ## 支持的模型与服务商

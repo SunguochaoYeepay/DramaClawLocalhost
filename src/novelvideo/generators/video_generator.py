@@ -2914,7 +2914,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             ("ltx23_director", self.LTX23_DIRECTOR_WORKFLOW_PATH),
         ]:
             if path.exists():
-                with open(path, "r") as f:
+                with open(path, "r", encoding="utf-8") as f:
                     self._workflow_templates[name] = json.load(f)
 
         # 兼容旧代码
