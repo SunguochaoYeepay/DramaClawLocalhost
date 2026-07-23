@@ -203,6 +203,10 @@ def create_global_video_optimizer_agent(language: str = "en") -> Agent:
         system_prompt=GLOBAL_VIDEO_OPTIMIZER_INSTRUCTIONS_EN,
         output_type=NativeOutput(list[BeatVideoStrategy]),
         name="Global Video Motion Director",
+        # qwen-max occasionally returns a prose wrapper or a one-object JSON
+        # response to this multimodal request. Let PydanticAI feed the schema
+        # error back and request a compliant response before failing the task.
+        output_retries=3,
         **agent_kwargs,
     )
 

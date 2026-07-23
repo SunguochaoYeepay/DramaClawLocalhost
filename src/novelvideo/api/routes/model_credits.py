@@ -391,7 +391,12 @@ async def get_generation_credit_cost(
     model = _generation_credit_cost_model(kind, value)
     if not model:
         # 本地 ComfyUI 后端不消耗 API 额度
-        if kind == "video_backend" and value.strip() in {"comfyui", "ltx23", "ltx23_director"}:
+        if kind == "video_backend" and value.strip() in {
+            "comfyui",
+            "ltx23",
+            "ltx23_director",
+            "ltx23_director_fast",
+        }:
             return {"ok": True, "data": {"cost": 0, "display": "0"}}
         raise HTTPException(status_code=400, detail="generation model is not configured")
     parsed_params = _parse_billing_params(params)

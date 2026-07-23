@@ -4459,16 +4459,16 @@ class NanoBananaGridGenerator:
                         message = f"{message}: {newapi_error}"
                     return _usage_fail(message)
             elif self.provider == "comfyui":
-                # ===== ComfyUI FLUX2 本地生成分支 =====
+                # ===== ComfyUI 本地生成分支 =====
                 from novelvideo.generators.comfyui_image import ComfyUIImageGenerator
 
-                comfyui_gen = ComfyUIImageGenerator()
+                comfyui_gen = ComfyUIImageGenerator(model=self.model)
                 prompt_text, ref_bytes_list = self._extract_ref_bytes_from_contents(contents)
                 ref_paths = self._write_ref_bytes_to_temp_files(ref_bytes_list)
                 try:
                     w, h = self._parse_dimensions(aspect_ratio, image_size)
                     print(
-                        f"[ComfyUI FLUX2] 调用本地 FLUX2 生成网格图 "
+                        f"[ComfyUI {comfyui_gen.model_name}] 调用本地模型生成网格图 "
                         f"(尺寸: {w}x{h}, 比例: {aspect_ratio}, refs: {len(ref_paths)})..."
                     )
                     if ref_paths:
@@ -4488,7 +4488,7 @@ class NanoBananaGridGenerator:
                         )
                     if not comfy_result.success:
                         return _usage_fail(
-                            f"ComfyUI FLUX2 生成失败: {comfy_result.error}"
+                            f"ComfyUI {comfyui_gen.model_name} 生成失败: {comfy_result.error}"
                         )
                     if output_path and os.path.exists(output_path):
                         with open(output_path, "rb") as _f:
@@ -4502,7 +4502,7 @@ class NanoBananaGridGenerator:
                 finally:
                     self._cleanup_temp_ref_files(ref_paths)
                 if not image_bytes:
-                    return _usage_fail("ComfyUI FLUX2 未返回图像数据")
+                    return _usage_fail(f"ComfyUI {comfyui_gen.model_name} 未返回图像数据")
             else:
                 # ===== Google 直连分支 =====
                 # 根据模型选择配置：gemini-3 支持 image_size，gemini-2.5 不支持
@@ -4822,16 +4822,16 @@ class NanoBananaGridGenerator:
                         generation_time=time.time() - start_time,
                     )
             elif self.provider == "comfyui":
-                # ===== ComfyUI FLUX2 本地生成分支 =====
+                # ===== ComfyUI 本地生成分支 =====
                 from novelvideo.generators.comfyui_image import ComfyUIImageGenerator
 
-                comfyui_gen = ComfyUIImageGenerator()
+                comfyui_gen = ComfyUIImageGenerator(model=self.model)
                 prompt_text, ref_bytes_list = self._extract_ref_bytes_from_contents(contents)
                 ref_paths = self._write_ref_bytes_to_temp_files(ref_bytes_list)
                 try:
                     w, h = self._parse_dimensions(aspect_ratio, image_size)
                     print(
-                        f"[ComfyUI FLUX2] 调用本地 FLUX2 生成动作网格 "
+                        f"[ComfyUI {comfyui_gen.model_name}] 调用本地模型生成动作网格 "
                         f"(尺寸: {w}x{h}, refs: {len(ref_paths)})..."
                     )
                     if ref_paths:
@@ -4852,7 +4852,7 @@ class NanoBananaGridGenerator:
                     if not comfy_result.success:
                         return GridGenerationResult(
                             success=False,
-                            error=f"ComfyUI FLUX2 生成失败: {comfy_result.error}",
+                            error=f"ComfyUI {comfyui_gen.model_name} 生成失败: {comfy_result.error}",
                             generation_time=time.time() - start_time,
                         )
                     if output_path and os.path.exists(output_path):
@@ -4865,7 +4865,7 @@ class NanoBananaGridGenerator:
                 if not image_bytes:
                     return GridGenerationResult(
                         success=False,
-                        error="ComfyUI FLUX2 未返回图片",
+                        error=f"ComfyUI {comfyui_gen.model_name} 未返回图片",
                         generation_time=time.time() - start_time,
                     )
             else:
@@ -5127,16 +5127,16 @@ class NanoBananaGridGenerator:
                         generation_time=time.time() - start_time,
                     )
             elif self.provider == "comfyui":
-                # ===== ComfyUI FLUX2 本地 reformat 分支 =====
+                # ===== ComfyUI 本地 reformat 分支 =====
                 from novelvideo.generators.comfyui_image import ComfyUIImageGenerator
 
-                comfyui_gen = ComfyUIImageGenerator()
+                comfyui_gen = ComfyUIImageGenerator(model=self.model)
                 prompt_text, ref_bytes_list = self._extract_ref_bytes_from_contents(contents)
                 ref_paths = self._write_ref_bytes_to_temp_files(ref_bytes_list)
                 try:
                     w, h = self._parse_dimensions(target_aspect, target_size)
                     print(
-                        f"[ComfyUI FLUX2] Reformat → {target_aspect} "
+                        f"[ComfyUI {comfyui_gen.model_name}] Reformat → {target_aspect} "
                         f"(尺寸: {w}x{h}, refs: {len(ref_paths)})..."
                     )
                     if ref_paths:
@@ -5157,7 +5157,7 @@ class NanoBananaGridGenerator:
                     if not comfy_result.success:
                         return GridGenerationResult(
                             success=False,
-                            error=f"[Reformat] ComfyUI FLUX2 失败: {comfy_result.error}",
+                            error=f"[Reformat] ComfyUI {comfyui_gen.model_name} 失败: {comfy_result.error}",
                             generation_time=time.time() - start_time,
                         )
                     if output_path and os.path.exists(output_path):
@@ -5170,7 +5170,7 @@ class NanoBananaGridGenerator:
                 if not image_bytes:
                     return GridGenerationResult(
                         success=False,
-                        error="[Reformat] ComfyUI FLUX2 未返回图像数据",
+                        error=f"[Reformat] ComfyUI {comfyui_gen.model_name} 未返回图像数据",
                         generation_time=time.time() - start_time,
                     )
             else:

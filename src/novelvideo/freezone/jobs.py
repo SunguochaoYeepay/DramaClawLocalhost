@@ -53,7 +53,7 @@ async def run_freezone_gen(
 
     # Routing (v1.2):
     #   provider == "volcengine"  → Volcengine Seedream (text-only path; refs ignored)
-    #   provider == "comfyui"     → ComfyUIImageGenerator (local FLUX2 Klein)
+    #   provider == "comfyui"     → ComfyUIImageGenerator (local FLUX2 / Qwen Image)
     #   anything else (including None default) → nanobanana_grid:
     #     - with refs → generate_reference_edit_image
     #     - no refs   → generate_text_to_image  (NEW v1.2)
@@ -254,7 +254,7 @@ async def _run_comfyui_gen(
     model: Optional[str] = None,
     quality: Optional[str] = None,
 ) -> Path:
-    """ComfyUI FLUX2 Klein local text→image / img2img.
+    """ComfyUI local text→image / img2img.
 
     Uses ComfyUIImageGenerator with the configured local ComfyUI service.
     Supports:
@@ -264,7 +264,7 @@ async def _run_comfyui_gen(
     from novelvideo.generators.comfyui_image import ComfyUIImageGenerator
 
     # Initialize ComfyUI generator
-    comfyui_gen = ComfyUIImageGenerator()
+    comfyui_gen = ComfyUIImageGenerator(model=model)
 
     # Convert aspect ratio to dimensions
     width, height = _aspect_to_dims(aspect_ratio, image_size)

@@ -168,6 +168,8 @@ const SEEDANCE2_SEGMENTED_OPTION_CLASS =
 const SEEDANCE2_COLLAPSE_TRIGGER_CLASS =
   "-ml-1 h-6 gap-1.5 px-1 text-xs font-medium text-foreground/78 !bg-transparent hover:!bg-transparent hover:text-foreground aria-expanded:!bg-transparent dark:hover:!bg-transparent";
 const SEEDANCE2_DEFAULT_RESOLUTION_OPTIONS = ["480p", "720p"] as const;
+const LOCAL_WAN_RESOLUTION_OPTIONS = ["480p", "720p", "1080p"] as const;
+const LOCAL_WAN_RATIO_OPTIONS = ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"] as const;
 const HAPPYHORSE_RESOLUTION_OPTIONS = ["720p", "1080p"] as const;
 const HAPPYHORSE_RATIO_OPTIONS = ["16:9", "9:16", "1:1", "4:3", "3:4"] as const;
 const GROK_VIDEO_RESOLUTION_OPTIONS = ["720p", "480p"] as const;
@@ -182,6 +184,7 @@ const SEEDANCE2_RESOLUTION_OPTIONS_BY_MODEL = {
 } as const;
 
 type Seedance2Resolution = "480p" | "720p" | "1080p";
+type LocalWanRatio = (typeof LOCAL_WAN_RATIO_OPTIONS)[number];
 type HappyHorseRatio = (typeof HAPPYHORSE_RATIO_OPTIONS)[number];
 type GrokVideoRatio = (typeof GROK_VIDEO_RATIO_OPTIONS)[number];
 
@@ -360,7 +363,11 @@ export function VideoPane({
   const selectedBackend = videoBackends.find((b) => b.value === defaultBackend);
   // 判断是否为本地 ComfyUI 模型（Wan2.2 / LTX 2.3）
   const isComfyUILocalBackend =
-    defaultBackend === "comfyui" || defaultBackend === "ltx23";
+    defaultBackend === "comfyui" ||
+    defaultBackend === "ltx23" ||
+    defaultBackend === "ltx23_director" ||
+    defaultBackend === "ltx23_director_fast";
+  const isDynamicCanvasComfyBackend = isComfyUILocalBackend;
   // 判断是否支持参考图模式（有 supported_modes 且包含 first_frame）
   const hasReferenceModeSupport =
     selectedBackend?.supported_modes?.includes("first_frame") === true;
@@ -418,6 +425,14 @@ export function VideoPane({
   );
   const grokVideoRatioOptions = useMemo(
     () => grokVideoRatioOptionsForBackend(selectedBackend),
+    [selectedBackend],
+  );
+  const localWanResolutionOptions = useMemo(
+    () => localWanResolutionOptionsForBackend(selectedBackend),
+    [selectedBackend],
+  );
+  const localWanRatioOptions = useMemo(
+    () => localWanRatioOptionsForBackend(selectedBackend),
     [selectedBackend],
   );
   // seedance-1.5-pro：复用清晰度/时长控件（精品剧+解说剧），但不走 seedance2 多模态那套。
@@ -598,6 +613,25 @@ export function VideoPane({
       serializeSeedance2Config(seedance2Config, seedance2Config),
     );
   }, [beat.beat_number, seedance2Config]);
+  useEffect(() => {
+    if (!isDynamicCanvasComfyBackend) return;
+    const current = seedance2DraftRef.current;
+    const resolution = localWanResolutionOptions.includes(current.resolution)
+      ? current.resolution
+      : "720p";
+    const ratio = localWanRatioOptions.includes(current.ratio as LocalWanRatio)
+      ? current.ratio
+      : seedance2DefaultRatioForProjectAspect(spec.renderAspect);
+    if (current.resolution === resolution && current.ratio === ratio) return;
+    const next = { ...current, resolution, ratio };
+    seedance2DraftRef.current = next;
+    setSeedance2Draft(next);
+  }, [
+    isDynamicCanvasComfyBackend,
+    localWanRatioOptions,
+    localWanResolutionOptions,
+    spec.renderAspect,
+  ]);
   useEffect(() => {
     if (!showSeedance2Config && !showHappyHorseConfig && !showGrokVideoConfig) return;
     const current = seedance2DraftRef.current;
@@ -832,6 +866,12 @@ export function VideoPane({
           ? {
               duration: seedance2DraftRef.current.duration,
               mode: seedance2DraftRef.current.mode,
+              ...(isDynamicCanvasComfyBackend
+                ? {
+                    resolution: seedance2DraftRef.current.resolution,
+                    ratio: seedance2DraftRef.current.ratio,
+                  }
+                : {}),
             }
           : {}),
       });
@@ -897,7 +937,7 @@ export function VideoPane({
     showSeedance2Config,
   ]);
   useEffect(() => {
-    if (!showPromptConfig || !seedance2Dirty) return;
+    if (!(showPromptConfig || isDynamicCanvasComfyBackend) || !seedance2Dirty) return;
     const nextConfig = showGrokVideoConfig
       ? serializeGrokVideoConfig(seedance2Draft, seedance2Config)
       : showHappyHorseConfig
@@ -920,6 +960,7 @@ export function VideoPane({
     showGrokVideoConfig,
     showPromptConfig,
     showSeedance2Config,
+    isDynamicCanvasComfyBackend,
   ]);
   const handleGenerateSeedance2Prompt = async () => {
     // Bind the result to the beat that triggered the optimize. The request is
@@ -2579,7 +2620,7 @@ export function VideoPane({
       {showComfyUIConfig && (
         <div className="space-y-3">
           {/* 参数栏：模式 + 时长 */}
-          <div className="grid gap-3 rounded-[10px] border border-white/[0.055] bg-white/[0.012] p-3 md:grid-cols-[1fr_1fr]">
+          <div className="grid gap-3 rounded-[10px] border border-white/[0.055] bg-white/[0.012] p-3 md:grid-cols-2 xl:grid-cols-4">
             {hasFirstLastFrameSupport ? (
               <Seedance2Field
                 label={t("episode.workbench.video.mode")}
@@ -2645,6 +2686,63 @@ export function VideoPane({
                 className={cn("!h-9", SEEDANCE2_CONTROL_CLASS)}
               />
             </Seedance2Field>
+            {isDynamicCanvasComfyBackend && (
+              <>
+                <Seedance2Field
+                  label={t("episode.workbench.video.resolution")}
+                  htmlFor={`${seedance2Id}-comfyui-resolution`}
+                >
+                  <Select
+                    value={seedance2Draft.resolution}
+                    onValueChange={(value) =>
+                      updateSeedance2Draft(
+                        "resolution",
+                        normalizeSeedance2Resolution(value),
+                      )
+                    }
+                  >
+                    <SelectTrigger
+                      id={`${seedance2Id}-comfyui-resolution`}
+                      className={cn("!h-9", SEEDANCE2_CONTROL_CLASS)}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent alignItemWithTrigger={false}>
+                      {localWanResolutionOptions.map((resolution) => (
+                        <SelectItem key={resolution} value={resolution}>
+                          {resolution}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Seedance2Field>
+                <Seedance2Field
+                  label={t("episode.workbench.video.ratio")}
+                  htmlFor={`${seedance2Id}-comfyui-ratio`}
+                >
+                  <Select
+                    value={seedance2Draft.ratio}
+                    onValueChange={(value) =>
+                      updateSeedance2Draft("ratio", normalizeSeedance2Ratio(value))
+                    }
+                  >
+                    <SelectTrigger
+                      id={`${seedance2Id}-comfyui-ratio`}
+                      className={cn("!h-9", SEEDANCE2_CONTROL_CLASS)}
+                    >
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent alignItemWithTrigger={false}>
+                      {localWanRatioOptions.map((ratio) => (
+                        <SelectItem key={ratio} value={ratio}>
+                          {ratio}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Seedance2Field>
+              </>
+            )}
           </div>
 
           {/* 参考图 + 提示词 */}
@@ -2658,7 +2756,7 @@ export function VideoPane({
                 {beat.frame_url ? (
                   <div className="relative h-24 w-32 overflow-hidden rounded-md border border-white/[0.075]">
                     <img
-                      src={resolveMediaUrl(beat.frame_url)}
+                      src={resolveMediaUrl(beat.frame_url ?? "") ?? ""}
                       alt="First frame reference"
                       className="h-full w-full object-cover"
                     />
@@ -3478,6 +3576,31 @@ function happyHorseResolutionOptionsForBackend(
       value === "720p" || value === "1080p",
   );
   return options?.length ? options : HAPPYHORSE_RESOLUTION_OPTIONS;
+}
+
+function localWanResolutionOptionsForBackend(
+  backend: VideoBackendOption | null | undefined,
+): readonly Seedance2Resolution[] {
+  const options = backend?.resolution_options?.filter(
+    (value): value is Seedance2Resolution =>
+      value === "480p" || value === "720p" || value === "1080p",
+  );
+  return options?.length ? options : LOCAL_WAN_RESOLUTION_OPTIONS;
+}
+
+function localWanRatioOptionsForBackend(
+  backend: VideoBackendOption | null | undefined,
+): readonly LocalWanRatio[] {
+  const options = backend?.ratio_options?.filter(
+    (value): value is LocalWanRatio =>
+      value === "16:9" ||
+      value === "9:16" ||
+      value === "1:1" ||
+      value === "4:3" ||
+      value === "3:4" ||
+      value === "21:9",
+  );
+  return options?.length ? options : LOCAL_WAN_RATIO_OPTIONS;
 }
 
 function happyHorseRatioOptionsForBackend(

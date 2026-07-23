@@ -1,6 +1,6 @@
-"""ComfyUI FLUX2 本地图像生成模块。
+"""ComfyUI 本地图像生成模块。
 
-通过 ComfyUI API 提交 FLUX2 Klein 工作流，支持：
+通过 ComfyUI API 提交 FLUX2 Klein 或 Qwen Image 工作流，支持：
 - 纯文生图（text2img）
 - 1~3 张参考图生图（img2img with ReferenceLatent chain）
 - 高清修复/放大（upscale）
@@ -19,7 +19,7 @@ import os
 import random
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 import httpx
 
@@ -34,6 +34,22 @@ from novelvideo.config import (
     COMFYUI_FLUX2_VAE,
     COMFYUI_IMAGE_URL,
     COMFYUI_IMAGE_WORKFLOW_DIR,
+    COMFYUI_QWEN_CFG,
+    COMFYUI_QWEN_CLIP,
+    COMFYUI_QWEN_DENOISE,
+    COMFYUI_QWEN_EDIT_CFG,
+    COMFYUI_QWEN_EDIT_LORA,
+    COMFYUI_QWEN_EDIT_SHIFT,
+    COMFYUI_QWEN_EDIT_STEPS,
+    COMFYUI_QWEN_EDIT_UNET,
+    COMFYUI_QWEN_LORA,
+    COMFYUI_QWEN_SAMPLER,
+    COMFYUI_QWEN_SCHEDULER,
+    COMFYUI_QWEN_SHIFT,
+    COMFYUI_QWEN_STEPS,
+    COMFYUI_QWEN_UNET,
+    COMFYUI_QWEN_VAE,
+    IMAGE_GENERATION_SELECTIONS,
 )
 from novelvideo.generators.image_generator import ImageGenResult
 from novelvideo.shared.billing_errors import is_insufficient_credits_error
@@ -45,6 +61,11 @@ _WORKFLOW_IMG2IMG_1REF = "img2img_1ref.json"
 _WORKFLOW_IMG2IMG_2REF = "img2img_2ref.json"
 _WORKFLOW_IMG2IMG_3REF = "img2img_3ref.json"
 _WORKFLOW_UPSCALE = "upscale.json"
+
+_QWEN_WORKFLOW_TEXT2IMG = "qwen_text2img.json"
+_QWEN_WORKFLOW_IMG2IMG = "qwen_img2img.json"
+
+_QWEN_MODEL_NAMES = {"qwen-image", "qwen_image", "comfyui_qwen_image"}
 
 # 参考图 base64 注入节点映射
 _REF_BASE64_NODES = {
@@ -103,7 +124,7 @@ def _load_image_as_base64(image_path: str, quality: int = 60) -> str:
 
 
 class ComfyUIImageGenerator:
-    """ComfyUI FLUX2 本地图像生成器。
+    """ComfyUI FLUX2 / Qwen Image 本地图像生成器。
 
     通过 ComfyUI HTTP API 提交工作流并获取结果。
     工作流 JSON 模板从 COMFYUI_IMAGE_WORKFLOW_DIR 加载。
@@ -122,25 +143,73 @@ class ComfyUIImageGenerator:
         self,
         api_url: Optional[str] = None,
         workflow_dir: Optional[str] = None,
+        model: Optional[str] = None,
     ):
         """初始化生成器。
 
         Args:
             api_url: ComfyUI API 地址，默认从 COMFYUI_IMAGE_URL 读取
             workflow_dir: 工作流 JSON 目录，默认从 COMFYUI_IMAGE_WORKFLOW_DIR 读取
+            model: 本地模型标识或 selection key，默认使用 FLUX2 Klein
         """
         self.api_url = (api_url or COMFYUI_IMAGE_URL).rstrip("/")
         self.workflow_dir = Path(workflow_dir or COMFYUI_IMAGE_WORKFLOW_DIR)
 
-        # FLUX2 模型配置（静态，所有工作流共享）
-        self.clip_model = COMFYUI_FLUX2_CLIP
-        self.vae_model = COMFYUI_FLUX2_VAE
-        self.unet_model = COMFYUI_FLUX2_UNET
-        self.steps = COMFYUI_FLUX2_STEPS
-        self.cfg = COMFYUI_FLUX2_CFG
-        self.sampler = COMFYUI_FLUX2_SAMPLER
-        self.scheduler = COMFYUI_FLUX2_SCHEDULER
-        self.default_denoise = COMFYUI_FLUX2_DENOISE
+        requested_model = str(model or "flux2-klein").strip()
+        selection = IMAGE_GENERATION_SELECTIONS.get(requested_model)
+        if selection and selection.get("provider") == "comfyui":
+            requested_model = selection.get("model", requested_model)
+        self.model_name = requested_model
+        self.workflow_family = (
+            "qwen_image" if requested_model in _QWEN_MODEL_NAMES else "flux2"
+        )
+
+        if self.workflow_family == "qwen_image":
+            self.clip_model = COMFYUI_QWEN_CLIP
+            self.vae_model = COMFYUI_QWEN_VAE
+            self.unet_model = COMFYUI_QWEN_UNET
+            self.edit_unet_model = COMFYUI_QWEN_EDIT_UNET
+            self.lora_model = COMFYUI_QWEN_LORA
+            self.edit_lora_model = COMFYUI_QWEN_EDIT_LORA
+            self.steps = COMFYUI_QWEN_STEPS
+            self.edit_steps = COMFYUI_QWEN_EDIT_STEPS
+            self.cfg = COMFYUI_QWEN_CFG
+            self.edit_cfg = COMFYUI_QWEN_EDIT_CFG
+            self.sampler = COMFYUI_QWEN_SAMPLER
+            self.scheduler = COMFYUI_QWEN_SCHEDULER
+            self.shift = COMFYUI_QWEN_SHIFT
+            self.edit_shift = COMFYUI_QWEN_EDIT_SHIFT
+            self.default_denoise = COMFYUI_QWEN_DENOISE
+            self.text2img_template = _QWEN_WORKFLOW_TEXT2IMG
+            self.img2img_templates = {
+                1: _QWEN_WORKFLOW_IMG2IMG,
+                2: _QWEN_WORKFLOW_IMG2IMG,
+                3: _QWEN_WORKFLOW_IMG2IMG,
+            }
+            self.upscale_template = _QWEN_WORKFLOW_IMG2IMG
+        else:
+            self.clip_model = COMFYUI_FLUX2_CLIP
+            self.vae_model = COMFYUI_FLUX2_VAE
+            self.unet_model = COMFYUI_FLUX2_UNET
+            self.edit_unet_model = COMFYUI_FLUX2_UNET
+            self.lora_model = ""
+            self.edit_lora_model = ""
+            self.steps = COMFYUI_FLUX2_STEPS
+            self.edit_steps = COMFYUI_FLUX2_STEPS
+            self.cfg = COMFYUI_FLUX2_CFG
+            self.edit_cfg = COMFYUI_FLUX2_CFG
+            self.sampler = COMFYUI_FLUX2_SAMPLER
+            self.scheduler = COMFYUI_FLUX2_SCHEDULER
+            self.shift = 0.0
+            self.edit_shift = 0.0
+            self.default_denoise = COMFYUI_FLUX2_DENOISE
+            self.text2img_template = _WORKFLOW_TEXT2IMG
+            self.img2img_templates = {
+                1: _WORKFLOW_IMG2IMG_1REF,
+                2: _WORKFLOW_IMG2IMG_2REF,
+                3: _WORKFLOW_IMG2IMG_3REF,
+            }
+            self.upscale_template = _WORKFLOW_UPSCALE
 
         # 预加载工作流模板
         self._templates: dict[str, dict] = {}
@@ -148,6 +217,7 @@ class ComfyUIImageGenerator:
 
         print(
             f"[ComfyUI] 初始化完成: url={self.api_url}, "
+            f"family={self.workflow_family}, "
             f"workflows={list(self._templates.keys())}, "
             f"clip={self.clip_model}, unet={self.unet_model}",
             flush=True,
@@ -156,11 +226,9 @@ class ComfyUIImageGenerator:
     def _load_templates(self) -> None:
         """从磁盘加载所有工作流 JSON 模板。"""
         template_names = [
-            _WORKFLOW_TEXT2IMG,
-            _WORKFLOW_IMG2IMG_1REF,
-            _WORKFLOW_IMG2IMG_2REF,
-            _WORKFLOW_IMG2IMG_3REF,
-            _WORKFLOW_UPSCALE,
+            self.text2img_template,
+            *self.img2img_templates.values(),
+            self.upscale_template,
         ]
         for name in template_names:
             path = self.workflow_dir / name
@@ -199,6 +267,10 @@ class ComfyUIImageGenerator:
             raise ValueError(f"工作流模板未加载: {template_name}")
 
         workflow = copy.deepcopy(self._templates[template_name])
+        is_qwen_edit = (
+            self.workflow_family == "qwen_image"
+            and template_name != self.text2img_template
+        )
 
         # 填入模型文件名
         if "107" in workflow:
@@ -206,13 +278,25 @@ class ComfyUIImageGenerator:
         if "110" in workflow:
             workflow["110"]["inputs"]["vae_name"] = self.vae_model
         if "197" in workflow:
-            workflow["197"]["inputs"]["unet_name"] = self.unet_model
+            workflow["197"]["inputs"]["unet_name"] = (
+                self.edit_unet_model if is_qwen_edit else self.unet_model
+            )
+        if "198" in workflow:
+            workflow["198"]["inputs"]["lora_name"] = (
+                self.edit_lora_model if is_qwen_edit else self.lora_model
+            )
+        if "199" in workflow:
+            workflow["199"]["inputs"]["shift"] = (
+                self.edit_shift if is_qwen_edit else self.shift
+            )
 
         # 填入提示词
         if "108" in workflow:
-            workflow["108"]["inputs"]["text"] = prompt
+            prompt_key = "text" if "text" in workflow["108"]["inputs"] else "prompt"
+            workflow["108"]["inputs"][prompt_key] = prompt
         if "109" in workflow:
-            workflow["109"]["inputs"]["text"] = negative_prompt
+            prompt_key = "text" if "text" in workflow["109"]["inputs"] else "prompt"
+            workflow["109"]["inputs"][prompt_key] = negative_prompt
 
         # 填入尺寸
         if "128" in workflow:
@@ -222,12 +306,31 @@ class ComfyUIImageGenerator:
         # 填入采样参数
         if "146" in workflow:
             workflow["146"]["inputs"]["seed"] = random.randint(0, 10**18)
-            workflow["146"]["inputs"]["steps"] = self.steps
-            workflow["146"]["inputs"]["cfg"] = self.cfg
+            workflow["146"]["inputs"]["steps"] = (
+                self.edit_steps if is_qwen_edit else self.steps
+            )
+            workflow["146"]["inputs"]["cfg"] = (
+                self.edit_cfg if is_qwen_edit else self.cfg
+            )
             workflow["146"]["inputs"]["sampler_name"] = self.sampler
             workflow["146"]["inputs"]["scheduler"] = self.scheduler
             if denoise is not None:
                 workflow["146"]["inputs"]["denoise"] = denoise
+
+        if is_qwen_edit:
+            ref_count = min(len(reference_images or []), 3)
+            optional_nodes = {
+                1: ("164", "165"),
+                2: ("179", "180"),
+            }
+            for ref_index, node_ids in optional_nodes.items():
+                if ref_index < ref_count:
+                    continue
+                for node_id in node_ids:
+                    workflow.pop(node_id, None)
+                input_name = f"image{ref_index + 1}"
+                workflow.get("108", {}).get("inputs", {}).pop(input_name, None)
+                workflow.get("109", {}).get("inputs", {}).pop(input_name, None)
 
         # 填入参考图 base64
         if reference_images:
@@ -417,13 +520,13 @@ class ComfyUIImageGenerator:
         h = height or 720
 
         try:
-            # 有参考图 -> img2img_1ref，否则 -> text2img
+            # 有参考图 -> 当前模型对应的单参考图模板，否则 -> 文生图
             if reference_image and os.path.exists(reference_image):
-                template = _WORKFLOW_IMG2IMG_1REF
+                template = self.img2img_templates[1]
                 denoise = reference_strength
                 ref_images = [reference_image]
             else:
-                template = _WORKFLOW_TEXT2IMG
+                template = self.text2img_template
                 denoise = 1.0
                 ref_images = None
 
@@ -512,12 +615,7 @@ class ComfyUIImageGenerator:
             )
 
         # 根据参考图数量选模板
-        template_map = {
-            1: _WORKFLOW_IMG2IMG_1REF,
-            2: _WORKFLOW_IMG2IMG_2REF,
-            3: _WORKFLOW_IMG2IMG_3REF,
-        }
-        template = template_map[ref_count]
+        template = self.img2img_templates[ref_count]
         effective_denoise = denoise if denoise is not None else self.default_denoise
 
         try:
@@ -603,7 +701,7 @@ class ComfyUIImageGenerator:
 
         try:
             workflow = self._build_workflow(
-                _WORKFLOW_UPSCALE,
+                self.upscale_template,
                 prompt=prompt,
                 width=target_width,
                 height=target_height,
@@ -702,10 +800,10 @@ class ComfyUIImageGenerator:
     upscale_with_img2img = upscale
 
 
-def create_comfyui_image_generator() -> ComfyUIImageGenerator:
+def create_comfyui_image_generator(model: Optional[str] = None) -> ComfyUIImageGenerator:
     """创建 ComfyUI 图像生成器实例。
 
     Returns:
         ComfyUIImageGenerator
     """
-    return ComfyUIImageGenerator()
+    return ComfyUIImageGenerator(model=model)

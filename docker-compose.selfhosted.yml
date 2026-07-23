@@ -59,7 +59,8 @@ services:
     ports:
       - "${ST_NEWAPI_PORT:-3000}:3000"
     volumes:
-      - /Users/sunguochao/Documents/DramaClaw/newapi-data:/data
+      # 使用文件底部声明的 newapi-data 命名卷，跨平台可移植（原 macOS 宿主路径已移除）。
+      - newapi-data:/data
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/status >/dev/null 2>&1 || exit 1"]
       interval: 10s

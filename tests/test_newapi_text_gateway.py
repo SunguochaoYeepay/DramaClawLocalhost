@@ -342,6 +342,7 @@ def test_global_video_optimizer_uses_newapi_optimizer_model_env(monkeypatch):
     assert agent_kwargs["model"] == "optimizer-model"
     assert agent_kwargs["model_settings"] == {"openai_reasoning_effort": "low"}
     assert agent_kwargs["name"] == "Global Video Motion Director"
+    assert agent_kwargs["output_retries"] == 3
 
 
 def test_global_video_optimizer_keeps_legacy_global_video_model_fallback(monkeypatch):

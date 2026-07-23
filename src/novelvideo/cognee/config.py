@@ -200,11 +200,13 @@ def cognee_gateway_restart_required() -> bool:
 
 
 def _resolve_llm_api_key(llm_provider: str, llm_model: str) -> str:
-    if _is_newapi_provider(llm_provider):
-        return _effective_newapi_gateway()[0]
-    api_key = os.getenv("COGNEE_LLM_API_KEY", "")
+    # Allow Cognee's LLM to use a provider independent from the application's
+    # global text-model gateway (for example DeepSeek LLM + DashScope tools).
+    api_key = os.getenv("COGNEE_LLM_API_KEY", "").strip()
     if api_key:
         return api_key
+    if _is_newapi_provider(llm_provider):
+        return _effective_newapi_gateway()[0]
     if llm_provider == "gemini":
         return os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_API_KEY", "")
     if _is_openrouter_config(

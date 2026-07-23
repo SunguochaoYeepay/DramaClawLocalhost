@@ -1,0 +1,98 @@
+{
+  "104": {
+    "inputs": {
+      "samples": ["146", 0],
+      "vae": ["110", 0]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {"title": "VAE解码"}
+  },
+  "107": {
+    "inputs": {
+      "clip_name": "",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {"title": "加载Qwen文本编码器"}
+  },
+  "108": {
+    "inputs": {
+      "text": "",
+      "clip": ["107", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "正向提示词"}
+  },
+  "109": {
+    "inputs": {
+      "text": "",
+      "clip": ["107", 0]
+    },
+    "class_type": "CLIPTextEncode",
+    "_meta": {"title": "负向提示词"}
+  },
+  "110": {
+    "inputs": {"vae_name": ""},
+    "class_type": "VAELoader",
+    "_meta": {"title": "加载Qwen VAE"}
+  },
+  "128": {
+    "inputs": {
+      "width": 1280,
+      "height": 720,
+      "batch_size": 1
+    },
+    "class_type": "EmptySD3LatentImage",
+    "_meta": {"title": "空Latent图像"}
+  },
+  "146": {
+    "inputs": {
+      "seed": 0,
+      "steps": 8,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": ["199", 0],
+      "positive": ["108", 0],
+      "negative": ["109", 0],
+      "latent_image": ["128", 0]
+    },
+    "class_type": "KSampler",
+    "_meta": {"title": "Qwen采样器"}
+  },
+  "195": {
+    "inputs": {
+      "filename_prefix": "ComfyUI_Qwen",
+      "images": ["104", 0]
+    },
+    "class_type": "SaveImage",
+    "_meta": {"title": "保存图像"}
+  },
+  "197": {
+    "inputs": {
+      "unet_name": "",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {"title": "加载Qwen Image"}
+  },
+  "198": {
+    "inputs": {
+      "model": ["197", 0],
+      "lora_name": "",
+      "strength_model": 1
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {"title": "Qwen Lightning LoRA"}
+  },
+  "199": {
+    "inputs": {
+      "model": ["198", 0],
+      "shift": 3.1
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {"title": "Qwen采样设置"}
+  }
+}

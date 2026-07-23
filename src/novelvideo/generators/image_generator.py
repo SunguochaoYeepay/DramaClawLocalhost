@@ -24,14 +24,14 @@ from novelvideo.config import (
     get_style_preset,
     normalize_character_image_selection,
 )
+from novelvideo.ports import get_usage_meter
+from novelvideo.shared.billing_errors import is_insufficient_credits_error
 
 
 def _is_comfyui_selection(selection_key: str) -> bool:
     """检查 selection key 是否对应 ComfyUI provider。"""
     entry = IMAGE_GENERATION_SELECTIONS.get(selection_key)
     return bool(entry and entry.get("provider") == "comfyui")
-from novelvideo.ports import get_usage_meter
-from novelvideo.shared.billing_errors import is_insufficient_credits_error
 
 
 def _provider_request_id_from_response(response: httpx.Response, result: dict[str, Any]) -> str:
@@ -1110,7 +1110,7 @@ def create_image_generator(use_mock: bool = False):
         from novelvideo.generators.comfyui_image import ComfyUIImageGenerator
 
         print(f"[create_image_generator] Using ComfyUI backend (selection={default_sel})")
-        return ComfyUIImageGenerator()
+        return ComfyUIImageGenerator(model=default_sel)
 
     try:
         return VolcengineImageGenerator()
@@ -1209,12 +1209,12 @@ async def generate_character_reference_unified(
             return []
 
     if model in IMAGE_GENERATION_SELECTIONS:
-        # ComfyUI provider: 使用本地 ComfyUI FLUX2 生成器
+        # ComfyUI provider: 按 selection 使用本地 FLUX2 或 Qwen Image
         if _is_comfyui_selection(model):
             try:
                 from novelvideo.generators.comfyui_image import ComfyUIImageGenerator
 
-                generator = ComfyUIImageGenerator()
+                generator = ComfyUIImageGenerator(model=model)
                 paths = await generator.generate_character_reference(
                     character_name=character_name,
                     appearance_prompt=appearance_prompt,
@@ -1388,12 +1388,12 @@ async def generate_identity_image_unified(
             return False
 
     if model in IMAGE_GENERATION_SELECTIONS:
-        # ComfyUI provider: 使用本地 ComfyUI FLUX2 生成器
+        # ComfyUI provider: 按 selection 使用本地 FLUX2 或 Qwen Image
         if _is_comfyui_selection(model):
             try:
                 from novelvideo.generators.comfyui_image import ComfyUIImageGenerator
 
-                generator = ComfyUIImageGenerator()
+                generator = ComfyUIImageGenerator(model=model)
 
                 if dry_run:
                     return {

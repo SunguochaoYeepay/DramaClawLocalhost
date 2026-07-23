@@ -86,7 +86,13 @@ def _hermes_cli_path() -> Path:
     resolved = shutil.which("hermes")
     if resolved:
         return Path(resolved)
-    return Path.home() / ".local" / "bin" / "hermes"
+    fallback = Path.home() / ".local" / "bin" / "hermes"
+    if os.name == "nt":
+        # uv tool install on Windows produces hermes.exe; the bare name never exists.
+        exe = fallback.with_suffix(".exe")
+        if exe.exists():
+            return exe
+    return fallback
 
 
 def is_hermes_backend_available() -> bool:
@@ -390,6 +396,42 @@ class HermesPool:
             "SUPERTALE_AGENT_TOKEN_EXPIRES_AT": str(token.exp),
             "SUPERTALE_API_URL": self._api_url,
         }
+        if os.name == "nt":
+            # Windows: the strict env above is missing variables the OS needs
+            # to even start a process tree. Without USERPROFILE/LOCALAPPDATA,
+            # hermes.exe crashes at import ("Could not determine home
+            # directory") and the parent sees ConnectionResetError
+            # ("Connection lost") on the worker's stdin. The Unix-style PATH
+            # also breaks any tool the worker shells out to. Inherit the
+            # required system variables from the API process instead.
+            for key in (
+                "PATH",
+                "PATHEXT",
+                "SystemRoot",
+                "COMSPEC",
+                "USERPROFILE",
+                "HOMEDRIVE",
+                "HOMEPATH",
+                "APPDATA",
+                "LOCALAPPDATA",
+                "TEMP",
+                "TMP",
+                "NUMBER_OF_PROCESSORS",
+                "OS",
+                "PROCESSOR_ARCHITECTURE",
+            ):
+                value = os.environ.get(key)
+                if value:
+                    env[key] = value
+        # Hermes probes the workspace for git context while building the
+        # system prompt (agent/coding_context.py::_git). The worker home lives
+        # under this repo, and on Windows a wrapped git binary (e.g. Git
+        # cmd/git.exe) leaves a grandchild holding the probe's pipe handles,
+        # so subprocess.run hangs forever in communicate() even past its 2.5s
+        # timeout — the whole turn then stalls until STREAM_READ_TIMEOUT.
+        # Ceiling git discovery at the state dir: the workspace is never a
+        # repo, every probe exits instantly with "not a git repository".
+        env.setdefault("GIT_CEILING_DIRECTORIES", str(home.parents[1] if len(home.parents) > 1 else home.parent))
         if project_id:
             env["DRAMACLAW_PROJECT_ID"] = project_id
             env["DRAMACLAW_PROJECT"] = project_id

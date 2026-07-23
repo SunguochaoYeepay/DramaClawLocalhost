@@ -5742,24 +5742,12 @@ async def test_freezone_image_models_returns_selection_keys(
     )
 
     assert result["ok"] is True
-    assert result["data"] == [
-        {
-            "id": "newapi_gpt_image2",
-            "providerId": "newapi",
-            "provider": "newapi",
-            "apiModel": "newapi_gpt_image2",
-            "api_model": "newapi_gpt_image2",
-            "label": "LingShan-G2",
-        },
-        {
-            "id": "newapi_nanobanana2",
-            "providerId": "newapi",
-            "provider": "newapi",
-            "apiModel": "newapi_nanobanana2",
-            "api_model": "newapi_nanobanana2",
-            "label": "LingShan-NB-2",
-        },
-    ]
+    by_id = {item["id"]: item for item in result["data"]}
+    assert "comfyui_flux2" in by_id
+    assert by_id["comfyui_flux2"]["provider"] == "comfyui"
+    assert "comfyui_qwen_image" in by_id
+    assert by_id["comfyui_qwen_image"]["provider"] == "comfyui"
+    assert by_id["comfyui_qwen_image"]["apiModel"] == "comfyui_qwen_image"
 
 
 @pytest.mark.asyncio

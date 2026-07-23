@@ -2807,6 +2807,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         },
         "ltx23": {
             "input_image": "98",
+            "image_resize": "167:102",
             "frame_count": "167:146",  # PrimitiveInt.value
             "positive_prompt": "167:164",  # TextGenerateLTX2Prompt.prompt
             "negative_prompt": "167:159",  # CLIPTextEncode.text
@@ -2900,6 +2901,14 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         elif workflow_key == "fp8_flf":
             workflow[node_map["width"]]["inputs"]["value"] = width
             workflow[node_map["height"]]["inputs"]["value"] = height
+        return width, height
+
+    def _apply_ltx23_dimensions(self, workflow: dict, aspect_ratio: str) -> tuple[int, int]:
+        """Apply the requested canvas to the LTX 2.3 image preprocessor."""
+        width, height = self._director_dimensions(aspect_ratio, self.resolution)
+        inputs = workflow[self.NODE_MAPPING["ltx23"]["image_resize"]]["inputs"]
+        inputs["resize_type.width"] = width
+        inputs["resize_type.height"] = height
         return width, height
 
     @staticmethod
@@ -3245,6 +3254,10 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 log(f"画布: {wan_width}x{wan_height}")
 
             # 设置输入图片（根据工作流类型）
+            if workflow_key == "ltx23":
+                ltx_width, ltx_height = self._apply_ltx23_dimensions(workflow, aspect_ratio)
+                log(f"LTX canvas: {ltx_width}x{ltx_height}")
+
             if workflow_key == "fp8_flf":
                 # FLF 模式：设置首尾帧
                 workflow[node_map["first_image"]]["inputs"]["image"] = first_image_filename

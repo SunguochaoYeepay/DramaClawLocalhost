@@ -890,6 +890,34 @@ COMFYUI_FLUX2_SAMPLER = os.environ.get("COMFYUI_FLUX2_SAMPLER", "euler")
 COMFYUI_FLUX2_SCHEDULER = os.environ.get("COMFYUI_FLUX2_SCHEDULER", "simple")
 COMFYUI_FLUX2_DENOISE = float(os.environ.get("COMFYUI_FLUX2_DENOISE", "1"))
 
+# Qwen Image / Qwen Image Edit 模型文件名（可在 .env 中覆盖）
+COMFYUI_QWEN_CLIP = os.environ.get(
+    "COMFYUI_QWEN_CLIP", "qwen_2.5_vl_7b_fp8_scaled.safetensors"
+)
+COMFYUI_QWEN_VAE = os.environ.get("COMFYUI_QWEN_VAE", "qwen_image_vae.safetensors")
+COMFYUI_QWEN_UNET = os.environ.get(
+    "COMFYUI_QWEN_UNET", "qwen_image_fp8_e4m3fn.safetensors"
+)
+COMFYUI_QWEN_EDIT_UNET = os.environ.get(
+    "COMFYUI_QWEN_EDIT_UNET", "qwen_image_edit_2509_fp8_e4m3fn.safetensors"
+)
+COMFYUI_QWEN_LORA = os.environ.get(
+    "COMFYUI_QWEN_LORA", "Qwen-Image-Lightning-8steps-V1.0.safetensors"
+)
+COMFYUI_QWEN_EDIT_LORA = os.environ.get(
+    "COMFYUI_QWEN_EDIT_LORA",
+    "Qwen-Image-Edit-2509-Lightning-4steps-V1.0-bf16.safetensors",
+)
+COMFYUI_QWEN_STEPS = int(os.environ.get("COMFYUI_QWEN_STEPS", "8"))
+COMFYUI_QWEN_EDIT_STEPS = int(os.environ.get("COMFYUI_QWEN_EDIT_STEPS", "4"))
+COMFYUI_QWEN_CFG = float(os.environ.get("COMFYUI_QWEN_CFG", "1"))
+COMFYUI_QWEN_EDIT_CFG = float(os.environ.get("COMFYUI_QWEN_EDIT_CFG", "1"))
+COMFYUI_QWEN_SAMPLER = os.environ.get("COMFYUI_QWEN_SAMPLER", "euler")
+COMFYUI_QWEN_SCHEDULER = os.environ.get("COMFYUI_QWEN_SCHEDULER", "simple")
+COMFYUI_QWEN_SHIFT = float(os.environ.get("COMFYUI_QWEN_SHIFT", "3.1"))
+COMFYUI_QWEN_EDIT_SHIFT = float(os.environ.get("COMFYUI_QWEN_EDIT_SHIFT", "3"))
+COMFYUI_QWEN_DENOISE = float(os.environ.get("COMFYUI_QWEN_DENOISE", "1"))
+
 # 默认视频分辨率（竖屏）
 VIDEO_RESOLUTION = os.environ.get("VIDEO_RESOLUTION", "720x1280")
 
@@ -1033,6 +1061,11 @@ IMAGE_GENERATION_SELECTIONS: dict[str, dict[str, str]] = {
         "provider": "comfyui",
         "model": "flux2-klein",
     },
+    "comfyui_qwen_image": {
+        "label": "ComfyUI Qwen Image (Local)",
+        "provider": "comfyui",
+        "model": "qwen-image",
+    },
 }
 
 VISIBLE_IMAGE_GENERATION_SELECTION_KEYS = (
@@ -1041,6 +1074,7 @@ VISIBLE_IMAGE_GENERATION_SELECTION_KEYS = (
     "newapi_gpt_image2",
     "newapi_nanobanana2",
     "comfyui_flux2",
+    "comfyui_qwen_image",
 )
 
 LEGACY_IMAGE_GENERATION_SELECTION_ALIASES = {

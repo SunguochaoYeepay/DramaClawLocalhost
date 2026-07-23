@@ -633,6 +633,15 @@ HAPPYHORSE_SUPPORTED_MODES = ("first_frame", "multimodal_reference")
 GROK_VIDEO_RESOLUTION_OPTIONS = ("720p", "480p")
 GROK_VIDEO_RATIO_OPTIONS = ("16:9", "9:16", "1:1", "2:3", "3:2")
 GROK_VIDEO_SUPPORTED_MODES = ("first_frame", "multimodal_reference")
+LOCAL_WAN_RESOLUTION_OPTIONS = ("480p", "720p", "1080p")
+LOCAL_WAN_RATIO_OPTIONS = ("16:9", "9:16", "1:1", "4:3", "3:4", "21:9")
+LOCAL_LTX_RESOLUTION_OPTIONS = ("720p", "1080p")
+LOCAL_DYNAMIC_CANVAS_BACKENDS = {
+    "comfyui",
+    "ltx23",
+    "ltx23_director",
+    "ltx23_director_fast",
+}
 
 
 def _seedance2_model_from_backend(video_backend: str | None) -> str:
@@ -684,6 +693,26 @@ def _grok_video_resolution_for_backend(resolution: str | None) -> str:
 def _grok_video_ratio_for_backend(ratio: str | None) -> str:
     text = str(ratio or "").strip()
     return text if text in GROK_VIDEO_RATIO_OPTIONS else "16:9"
+
+
+def _local_wan_resolution(resolution: str | None) -> str:
+    normalized = _seedance2_api_resolution(resolution)
+    return normalized if normalized in LOCAL_WAN_RESOLUTION_OPTIONS else "720p"
+
+
+def _local_wan_ratio(ratio: str | None) -> str:
+    text = str(ratio or "").strip()
+    return text if text in LOCAL_WAN_RATIO_OPTIONS else "9:16"
+
+
+def _local_comfy_resolution(video_backend: str, resolution: str | None) -> str:
+    options = (
+        LOCAL_WAN_RESOLUTION_OPTIONS
+        if video_backend == "comfyui"
+        else LOCAL_LTX_RESOLUTION_OPTIONS
+    )
+    normalized = _seedance2_api_resolution(resolution)
+    return normalized if normalized in options else "720p"
 
 
 def _seedance2_initial_prompt(beat: dict[str, Any], video_mode: str) -> str:
@@ -1598,7 +1627,42 @@ def _api_video_backend_options() -> list[VideoBackendOption]:
             reference_audio_max=0,
         ),
     ]
+    local_options.extend(
+        [
+            VideoBackendOption(
+                value="ltx23_director",
+                label="LTX 2.3 Director (本地 ComfyUI)",
+                is_default="ltx23_director" == default_backend,
+                dialogue_only=False,
+                min_duration=3,
+                max_duration=11,
+                supported_modes=["first_frame"],
+                reference_image_max=1,
+                reference_video_max=0,
+                reference_audio_max=0,
+            ),
+            VideoBackendOption(
+                value="ltx23_director_fast",
+                label="LTX 2.3 Director 性能版 (本地 ComfyUI)",
+                is_default="ltx23_director_fast" == default_backend,
+                dialogue_only=False,
+                min_duration=3,
+                max_duration=11,
+                supported_modes=["first_frame"],
+                reference_image_max=1,
+                reference_video_max=0,
+                reference_audio_max=0,
+            ),
+        ]
+    )
     backend_options.extend(local_options)
+    for option in local_options:
+        if option.value == "comfyui":
+            option.resolution_options = list(LOCAL_WAN_RESOLUTION_OPTIONS)
+            option.ratio_options = list(LOCAL_WAN_RATIO_OPTIONS)
+        elif option.value in {"ltx23", "ltx23_director", "ltx23_director_fast"}:
+            option.resolution_options = list(LOCAL_LTX_RESOLUTION_OPTIONS)
+            option.ratio_options = list(LOCAL_WAN_RATIO_OPTIONS)
 
     return backend_options
 
@@ -4359,7 +4423,11 @@ async def generate_single_video(
                 pass
         if audio_duration:
             video_duration = max(float(video_duration), float(math.ceil(float(audio_duration))))
-        if "resolution" in body.model_fields_set:
+        if body.video_backend in LOCAL_DYNAMIC_CANVAS_BACKENDS:
+            single_video_resolution = _local_comfy_resolution(
+                body.video_backend, body.resolution
+            )
+        elif "resolution" in body.model_fields_set:
             single_video_resolution = _seedance2_resolution_for_backend(
                 body.video_backend, body.resolution
             )
@@ -4387,6 +4455,9 @@ async def generate_single_video(
     if is_grok_video:
         config["ratio"] = _grok_video_ratio_for_backend(grok_video_ratio)
         config["references"] = grok_video_references
+    elif body.video_backend in LOCAL_DYNAMIC_CANVAS_BACKENDS:
+        config["resolution"] = _local_comfy_resolution(body.video_backend, body.resolution)
+        config["ratio"] = _local_wan_ratio(body.ratio)
 
     if ctx is not None:
         queued = await get_task_backend().enqueue_project_task(

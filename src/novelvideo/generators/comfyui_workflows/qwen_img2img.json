@@ -1,0 +1,182 @@
+{
+  "76": {
+    "inputs": {
+      "base64_data": "",
+      "image_output": "Preview",
+      "save_prefix": "ComfyUI_Qwen_Ref1"
+    },
+    "class_type": "easy loadImageBase64",
+    "_meta": {"title": "加载参考图1"}
+  },
+  "112": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 1,
+      "resolution_steps": 64,
+      "image": ["76", 0]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {"title": "缩放参考图1"}
+  },
+  "164": {
+    "inputs": {
+      "base64_data": "",
+      "image_output": "Preview",
+      "save_prefix": "ComfyUI_Qwen_Ref2"
+    },
+    "class_type": "easy loadImageBase64",
+    "_meta": {"title": "加载参考图2"}
+  },
+  "165": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 1,
+      "resolution_steps": 64,
+      "image": ["164", 0]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {"title": "缩放参考图2"}
+  },
+  "179": {
+    "inputs": {
+      "base64_data": "",
+      "image_output": "Preview",
+      "save_prefix": "ComfyUI_Qwen_Ref3"
+    },
+    "class_type": "easy loadImageBase64",
+    "_meta": {"title": "加载参考图3"}
+  },
+  "180": {
+    "inputs": {
+      "upscale_method": "lanczos",
+      "megapixels": 1,
+      "resolution_steps": 64,
+      "image": ["179", 0]
+    },
+    "class_type": "ImageScaleToTotalPixels",
+    "_meta": {"title": "缩放参考图3"}
+  },
+  "104": {
+    "inputs": {
+      "samples": ["146", 0],
+      "vae": ["110", 0]
+    },
+    "class_type": "VAEDecode",
+    "_meta": {"title": "VAE解码"}
+  },
+  "107": {
+    "inputs": {
+      "clip_name": "",
+      "type": "qwen_image",
+      "device": "default"
+    },
+    "class_type": "CLIPLoader",
+    "_meta": {"title": "加载Qwen文本编码器"}
+  },
+  "108": {
+    "inputs": {
+      "prompt": "",
+      "clip": ["107", 0],
+      "vae": ["110", 0],
+      "image1": ["112", 0],
+      "image2": ["165", 0],
+      "image3": ["180", 0]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {"title": "Qwen Edit 正向提示词"}
+  },
+  "109": {
+    "inputs": {
+      "prompt": "",
+      "clip": ["107", 0],
+      "vae": ["110", 0],
+      "image1": ["112", 0],
+      "image2": ["165", 0],
+      "image3": ["180", 0]
+    },
+    "class_type": "TextEncodeQwenImageEditPlus",
+    "_meta": {"title": "Qwen Edit 负向提示词"}
+  },
+  "110": {
+    "inputs": {"vae_name": ""},
+    "class_type": "VAELoader",
+    "_meta": {"title": "加载Qwen VAE"}
+  },
+  "116": {
+    "inputs": {
+      "pixels": ["112", 0],
+      "vae": ["110", 0]
+    },
+    "class_type": "VAEEncode",
+    "_meta": {"title": "编码主参考图"}
+  },
+  "128": {
+    "inputs": {
+      "samples": ["116", 0],
+      "upscale_method": "nearest-exact",
+      "width": 1280,
+      "height": 720,
+      "crop": "disabled"
+    },
+    "class_type": "LatentUpscale",
+    "_meta": {"title": "设置输出尺寸"}
+  },
+  "146": {
+    "inputs": {
+      "seed": 0,
+      "steps": 4,
+      "cfg": 1,
+      "sampler_name": "euler",
+      "scheduler": "simple",
+      "denoise": 1,
+      "model": ["200", 0],
+      "positive": ["108", 0],
+      "negative": ["109", 0],
+      "latent_image": ["128", 0]
+    },
+    "class_type": "KSampler",
+    "_meta": {"title": "Qwen Edit采样器"}
+  },
+  "195": {
+    "inputs": {
+      "filename_prefix": "ComfyUI_Qwen_Edit",
+      "images": ["104", 0]
+    },
+    "class_type": "SaveImage",
+    "_meta": {"title": "保存图像"}
+  },
+  "197": {
+    "inputs": {
+      "unet_name": "",
+      "weight_dtype": "default"
+    },
+    "class_type": "UNETLoader",
+    "_meta": {"title": "加载Qwen Image Edit"}
+  },
+  "198": {
+    "inputs": {
+      "model": ["197", 0],
+      "lora_name": "",
+      "strength_model": 1
+    },
+    "class_type": "LoraLoaderModelOnly",
+    "_meta": {"title": "Qwen Edit Lightning LoRA"}
+  },
+  "199": {
+    "inputs": {
+      "model": ["198", 0],
+      "shift": 3
+    },
+    "class_type": "ModelSamplingAuraFlow",
+    "_meta": {"title": "Qwen Edit采样设置"}
+  },
+  "200": {
+    "inputs": {
+      "model": ["199", 0],
+      "strength": 1,
+      "pre_cfg": false
+    },
+    "class_type": "CFGNorm",
+    "_meta": {"title": "Qwen Edit CFG归一化"}
+  }
+}
