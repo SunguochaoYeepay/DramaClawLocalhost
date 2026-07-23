@@ -318,7 +318,7 @@ class HuimengiTaskClient:
         base_url: str | None = None,
         timeout: float = 60.0,
     ):
-        self.api_key = api_key or os.environ.get("HUIMENGI_API_KEY")
+        self.api_key = str(api_key or os.environ.get("HUIMENGI_API_KEY") or "").strip()
         self.base_url = (
             base_url or os.environ.get("HUIMENGI_BASE_URL") or HUIMENGI_BASE_URL
         ).rstrip("/")

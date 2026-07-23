@@ -127,7 +127,7 @@ export default defineConfig(({ mode }) => {
     server: {
       host: true,
       port: 5173,
-      allowedHosts: ["dramaclaw.vip.cpolar.cn"],
+      allowedHosts: ["dramaclaw.vip.cpolar.cn", "dramaclaw.cpolar.top"],
       proxy: {
         "/api/v1": {
           target: apiTarget,

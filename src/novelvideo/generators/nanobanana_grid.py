@@ -2969,6 +2969,13 @@ async def _call_openrouter_image_api(
     """
     import httpx
 
+    # Never let an empty credential reach httpx.  httpx rejects the resulting
+    # `Authorization: Bearer ` header as an invalid protocol header before the
+    # request is sent, which hides the actual configuration problem.
+    api_key = str(api_key or "").strip()
+    if not api_key:
+        return None, "", "OPENROUTER_API_KEY is missing"
+
     base_url = "https://openrouter.ai/api/v1"
 
     # 构建 content 数组（按 OpenRouter 官方建议：文本在前，图片在后）
@@ -3114,6 +3121,7 @@ async def _call_openai_image_api(
     except ImportError:
         return None, "", "openai SDK not installed; install openai>=2.14.0"
 
+    api_key = str(api_key or "").strip()
     if not api_key:
         return None, "", "OPENAI_API_KEY is missing"
 
@@ -3290,6 +3298,7 @@ async def _call_newapi_image_api(
     """Call newAPI's OpenAI-compatible Images API."""
     import httpx
 
+    api_key = str(api_key or "").strip()
     if not api_key:
         return None, "", "DramaClawAPI API key is missing"
 

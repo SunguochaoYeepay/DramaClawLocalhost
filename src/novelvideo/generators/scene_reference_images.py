@@ -682,7 +682,10 @@ async def generate_scene_reference_image(
             base_url=base_url,
         )
     elif provider in {"huimeng", "huimengi"}:
-        api_key = HUIMENGI_API_KEY or ""
+        # Read the environment at execution time as well as the import-time
+        # config value.  This keeps a long-running worker from using a stale
+        # empty value after the local .env/settings were updated.
+        api_key = str(os.environ.get("HUIMENGI_API_KEY") or HUIMENGI_API_KEY or "").strip()
         selected_model = _scene_image_model(kind, provider, model)
         image_bytes, _text, error = await _call_huimeng_image_api(
             api_key=api_key,
