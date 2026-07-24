@@ -234,22 +234,40 @@ async def save_seedance2_uploaded_asset(
     filename: str,
     content: bytes,
     content_type: str = "",
+    role: str = "reference",
 ) -> Path | None:
     media_kind = _seedance2_uploaded_media_kind(filename, content_type)
     if not media_kind or not content:
         return None
 
     beat_num = int(beat.get("beat_number") or 0)
-    upload_dir = (
-        Path(project_dir)
-        / "seedance2_uploads"
-        / f"ep{episode:03d}"
-        / f"beat_{beat_num:02d}"
-        / media_kind
-    )
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    target = _next_available_upload_path(upload_dir, filename)
+    if role == "last_frame":
+        if media_kind != "images":
+            return None
+        paths = PathResolver(project_dir, episode)
+        target = paths.video_input_frame(beat_num, slot="last_frame")
+        target.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        upload_dir = (
+            Path(project_dir)
+            / "seedance2_uploads"
+            / f"ep{episode:03d}"
+            / f"beat_{beat_num:02d}"
+            / media_kind
+        )
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        target = _next_available_upload_path(upload_dir, filename)
     target.write_bytes(bytes(content))
+
+    if role == "last_frame":
+        if validate_seedance2_reference_image(target):
+            target.unlink(missing_ok=True)
+            return None
+        paths.video_input_frame_meta(beat_num, slot="last_frame").write_text(
+            '{"version": 1, "uploaded": true}',
+            encoding="utf-8",
+        )
+        return target
 
     config = parse_seedance2_config(beat.get("seedance2_config_json"))
     path_value = str(target)

@@ -1266,6 +1266,27 @@ def _seedance2_status_response(
         _seedance2_asset_status_payload(asset, project_ctx=project_ctx, output_dir=output_dir)
         for asset in assets
     ]
+    local_last_frame = paths.video_input_frame(beat_num, slot="last_frame")
+    if local_last_frame.exists() and not any(item.get("key") == "last_frame" for item in asset_items):
+        from novelvideo.seedance2_i2v.assets import Seedance2ResolvedAsset
+
+        asset_items.append(
+            _seedance2_asset_status_payload(
+                Seedance2ResolvedAsset(
+                    key="last_frame",
+                    label="上传尾帧",
+                    media_type="image",
+                    path=local_last_frame,
+                    exists=True,
+                    selected=False,
+                    request_field="",
+                    reference_label="尾帧",
+                    required=False,
+                ),
+                project_ctx=project_ctx,
+                output_dir=output_dir,
+            )
+        )
     try:
         from novelvideo.seedance2_i2v.models import parse_seedance2_config
 
@@ -1354,6 +1375,7 @@ async def upload_seedance2_asset(
     episode_num: int,
     beat_num: int,
     file: UploadFile = File(...),
+    role: str = Form(default="reference"),
     user: dict = Depends(get_api_user),
 ):
     """Upload a manual Seedance 2.0 reference asset."""
@@ -1376,6 +1398,7 @@ async def upload_seedance2_asset(
         filename=file.filename or "seedance2_asset",
         content=content,
         content_type=file.content_type or "",
+        role=str(role or "reference").strip().lower(),
     )
     if target is None:
         return {"ok": False, "error": "unsupported or empty Seedance2 reference asset"}
@@ -4425,6 +4448,31 @@ async def generate_single_video(
                 pass
         if audio_duration:
             video_duration = max(float(video_duration), float(math.ceil(float(audio_duration))))
+        if body.video_backend in LOCAL_DYNAMIC_CANVAS_BACKENDS and body.mode:
+            requested_mode = str(body.mode).strip()
+            if requested_mode == "first_frame":
+                video_mode = "first_frame"
+                last_frame_path = None
+            elif requested_mode == "first_last_frame":
+                video_mode = "keyframe"
+                uploaded_last_frame = paths.video_input_frame(
+                    beat_num,
+                    slot="last_frame",
+                )
+                if uploaded_last_frame.exists():
+                    last_frame_path = str(uploaded_last_frame)
+                elif last_frame_path is None:
+                    next_frame = paths.first_frame_for_video(
+                        beat_num + 1,
+                        use_director_render=bool(body.use_director_render),
+                    )
+                    if next_frame.exists():
+                        last_frame_path = str(next_frame)
+                if last_frame_path is None:
+                    return {
+                        "ok": False,
+                        "error": "首尾帧模式需要上传尾帧，或先生成下一个镜头的首帧",
+                    }
         if body.video_backend in LOCAL_DYNAMIC_CANVAS_BACKENDS:
             single_video_resolution = _local_comfy_resolution(
                 body.video_backend, body.resolution

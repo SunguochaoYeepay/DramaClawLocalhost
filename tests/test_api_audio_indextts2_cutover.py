@@ -602,6 +602,60 @@ async def test_seedance15_single_video_enqueues_requested_ratio(monkeypatch, tmp
 
 
 @pytest.mark.asyncio
+async def test_local_comfy_first_last_mode_enqueues_uploaded_last_frame(monkeypatch, tmp_path):
+    from novelvideo.api.routes import generation
+    from novelvideo.api.schemas import SingleVideoRequest
+    from novelvideo.utils.path_resolver import PathResolver
+
+    calls = []
+    store = _FakeSeedance2Store(
+        [
+            {
+                "beat_number": 2,
+                "video_mode": "first_frame",
+                "video_prompt": "move from the first frame to the last frame",
+            }
+        ]
+    )
+    paths = PathResolver(tmp_path, 3)
+    frame = paths.first_frame_for_video(2)
+    frame.parent.mkdir(parents=True, exist_ok=True)
+    frame.write_bytes(b"frame")
+    last_frame = paths.video_input_frame(2, slot="last_frame")
+    last_frame.parent.mkdir(parents=True, exist_ok=True)
+    last_frame.write_bytes(b"last-frame")
+
+    async def fake_audio_duration(*_args, **_kwargs):
+        return None
+
+    _patch_generation_celery(monkeypatch, generation, tmp_path, store)
+    monkeypatch.setattr(
+        generation,
+        "get_task_backend",
+        lambda: SimpleNamespace(enqueue_project_task=_fake_enqueue(calls)),
+    )
+    monkeypatch.setattr(generation, "_api_audio_duration_seconds", fake_audio_duration)
+
+    response = await generation.generate_single_video(
+        project="demo",
+        episode_num=3,
+        beat_num=2,
+        body=SingleVideoRequest(
+            video_backend="comfyui",
+            mode="first_last_frame",
+            duration=5,
+            ratio="16:9",
+        ),
+        user={"username": "alice"},
+    )
+
+    assert response["ok"] is True
+    config = calls[0]["payload"]["config"]
+    assert config["video_mode"] == "keyframe"
+    assert config["last_frame_path"] == str(last_frame)
+
+
+@pytest.mark.asyncio
 async def test_happyhorse_single_video_enqueues_prepared_references(monkeypatch, tmp_path):
     from novelvideo.api.routes import generation
     from novelvideo.api.schemas import SingleVideoRequest

@@ -305,6 +305,7 @@ export function VideoPane({
   const seedance2PromptCost = useGenerationCreditCost("feature", "seedance2_prompt");
   const now = useNow();
   const seedance2UploadInputRef = useRef<HTMLInputElement>(null);
+  const localLastFrameUploadInputRef = useRef<HTMLInputElement>(null);
   const [regenConfirm, setRegenConfirm] = useState(false);
   const [seedance2CropIntent, setSeedance2CropIntent] =
     useState<Seedance2CropIntent | null>(null);
@@ -388,6 +389,7 @@ export function VideoPane({
     showSeedance2Config ||
     showHappyHorseConfig ||
     showGrokVideoConfig ||
+    showComfyUIConfig ||
     isSeedanceReferenceCropBackend(defaultBackend);
   const legacyPromptField: "video_prompt" | "keyframe_prompt" =
     beat.video_mode === "keyframe" ? "keyframe_prompt" : "video_prompt";
@@ -508,6 +510,9 @@ export function VideoPane({
   const seedance2StatusData =
     seedance2Status.data?.ok === true ? seedance2Status.data.data : null;
   const seedance2AssetItems = seedance2StatusData?.assets.items ?? [];
+  const localLastFrameAsset = seedance2AssetItems.find(
+    (asset) => asset.key === "last_frame" && asset.media_type === "image",
+  );
   const modelReferenceAssetItems = useMemo(
     () =>
       showHappyHorseConfig || showGrokVideoConfig
@@ -1348,6 +1353,22 @@ export function VideoPane({
       const res = await uploadSeedance2Asset.mutateAsync({
         beatNum: beat.beat_number,
         file,
+      });
+      if (isErrorResponse(res)) {
+        toast.error(res.error || t("common.error"));
+        return;
+      }
+      toast.success(t("episode.workbench.video.seedance2AssetUploaded"));
+    } catch {
+      toast.error(t("common.error"));
+    }
+  };
+  const handleLocalLastFrameUpload = async (file: File) => {
+    try {
+      const res = await uploadSeedance2Asset.mutateAsync({
+        beatNum: beat.beat_number,
+        file,
+        role: "last_frame",
       });
       if (isErrorResponse(res)) {
         toast.error(res.error || t("common.error"));
@@ -2794,7 +2815,7 @@ export function VideoPane({
 
           {/* 参考图 + 提示词 */}
           <div className="rounded-[10px] border border-white/[0.055] bg-white/[0.012] p-3">
-            <div className="grid gap-3 md:grid-cols-[auto_1fr]">
+            <div className="grid gap-3 md:grid-cols-[auto_auto_1fr]">
               {/* 参考图（首帧） */}
               <div className="flex flex-col items-center gap-1.5">
                 <span className="text-[11px] text-muted-foreground/78">
@@ -2818,6 +2839,52 @@ export function VideoPane({
               </div>
 
               {/* 提示词编辑区 */}
+              {hasFirstLastFrameSupport && seedance2Draft.mode === "first_last_frame" && (
+                <div className="flex flex-col items-center gap-1.5">
+                  <span className="text-[11px] text-muted-foreground/78">尾帧</span>
+                  {localLastFrameAsset?.exists !== false &&
+                  (localLastFrameAsset?.url || localLastFrameAsset?.path) ? (
+                    <button
+                      type="button"
+                      className="group relative h-24 w-32 overflow-hidden rounded-md border border-white/[0.075]"
+                      onClick={() => localLastFrameUploadInputRef.current?.click()}
+                      title="更换尾帧"
+                    >
+                      <img
+                        src={resolveMediaUrl(
+                          localLastFrameAsset.url || localLastFrameAsset.path,
+                        ) ?? ""}
+                        alt="Last frame reference"
+                        className="h-full w-full object-cover"
+                      />
+                      <span className="absolute inset-x-0 bottom-0 bg-black/65 py-1 text-[10px] text-white/90 opacity-0 transition-opacity group-hover:opacity-100">
+                        更换尾帧
+                      </span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="flex h-24 w-32 flex-col items-center justify-center gap-1 rounded-md border border-dashed border-white/[0.1] bg-white/[0.015] text-[10px] text-muted-foreground/70 hover:border-primary/45 hover:text-foreground"
+                      onClick={() => localLastFrameUploadInputRef.current?.click()}
+                    >
+                      <Upload className="size-4" />
+                      上传尾帧
+                    </button>
+                  )}
+                  <input
+                    ref={localLastFrameUploadInputRef}
+                    type="file"
+                    className="hidden"
+                    accept="image/*"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) void handleLocalLastFrameUpload(file);
+                      event.target.value = "";
+                    }}
+                  />
+                </div>
+              )}
+
               <div className="min-w-0 space-y-2">
                 <div className="flex flex-wrap items-center gap-2">
                   <Label

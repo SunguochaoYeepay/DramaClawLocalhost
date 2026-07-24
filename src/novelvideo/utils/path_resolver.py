@@ -513,6 +513,8 @@ class PathResolver:
             meta = json.loads(meta_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return None
+        if meta.get("uploaded") is True:
+            return frame_path
         if (
             str(meta.get("source_path") or "") == str(expected["source_path"])
             and int(meta.get("source_mtime_ns") or -1) == expected["source_mtime_ns"]

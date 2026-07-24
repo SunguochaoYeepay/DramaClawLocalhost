@@ -451,9 +451,18 @@ export function useSeedance2BeatStatus(
 export function useUploadSeedance2Asset(project: string, episode: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ beatNum, file }: { beatNum: number; file: File }) => {
+    mutationFn: async ({
+      beatNum,
+      file,
+      role = "reference",
+    }: {
+      beatNum: number;
+      file: File;
+      role?: "reference" | "last_frame";
+    }) => {
       const formData = new FormData();
       formData.append("file", file, file.name);
+      formData.append("role", role);
       return api
         .post(
           p`api/v1/projects/${project}/episodes/${episode}/beats/${beatNum}/seedance2/assets/upload`,

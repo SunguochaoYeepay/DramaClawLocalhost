@@ -734,6 +734,44 @@ def test_first_last_frame_mode_uses_matching_video_input_overrides(tmp_path):
     assert by_key["last_frame"].crop_source_path == last
 
 
+@pytest.mark.asyncio
+async def test_uploaded_last_frame_is_used_without_a_next_beat(tmp_path):
+    from novelvideo.seedance2_i2v.assets import (
+        build_seedance2_project_assets,
+        selected_reference_paths,
+    )
+    from novelvideo.seedance2_i2v.panel_service import save_seedance2_uploaded_asset
+    from novelvideo.utils.path_resolver import PathResolver
+
+    project_dir = tmp_path / "project"
+    paths = PathResolver(project_dir, 1)
+    first = paths.frame(2)
+    upload_source = tmp_path / "tail.png"
+    _write_png(first)
+    _write_png(upload_source, width=720, height=1280)
+
+    target = await save_seedance2_uploaded_asset(
+        store=object(),
+        episode=1,
+        beat={"beat_number": 2},
+        project_dir=project_dir,
+        filename="tail.png",
+        content=upload_source.read_bytes(),
+        content_type="image/png",
+        role="last_frame",
+    )
+
+    assert target == paths.video_input_frame(2, slot="last_frame")
+    assets = build_seedance2_project_assets(
+        project_output=project_dir,
+        episode=1,
+        beat={"beat_number": 2},
+        next_beat=None,
+        mode=Seedance2I2VMode.FIRST_LAST_FRAME,
+    )
+    assert selected_reference_paths(assets, "last_frame_image") == [str(target)]
+
+
 async def test_crop_seedance2_asset_to_first_frame_writes_video_input_override(
     tmp_path,
     monkeypatch,

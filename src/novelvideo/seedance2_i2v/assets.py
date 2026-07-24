@@ -989,7 +989,7 @@ def build_seedance2_project_assets(
             key="last_frame",
             label=f"尾帧 render · Beat {next_beat_num or beat_num + 1}",
             path=last_frame_path,
-            selected=bool(next_beat_num),
+            selected=bool(next_beat_num) or last_frame_path.exists(),
             request_field="last_frame_image",
             crop_source_path=last_frame_source,
         )
