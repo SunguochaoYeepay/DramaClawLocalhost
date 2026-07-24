@@ -6808,43 +6808,6 @@ CRITICAL: Keep exact composition from sketch. Only add color, texture, and light
                 if error_detail:
                     print(f"[DramaClawAPI Render] 失败: {error_detail}")
                 return None
-            elif self.provider == "comfyui":
-                # Local Qwen/Flux render: the sliced sketch must be the first
-                # reference image so the img2img workflow preserves blocking.
-                from novelvideo.generators.comfyui_image import ComfyUIImageGenerator
-                from PIL import Image
-
-                reference_paths = [sketch_path, *(character_refs or [])]
-                reference_paths = [
-                    path for path in reference_paths if path and os.path.exists(path)
-                ][:3]
-                if not reference_paths:
-                    print("[ComfyUI Render] No sketch/reference image was found")
-                    return None
-
-                with Image.open(sketch_path) as sketch_image:
-                    target_width, target_height = sketch_image.size
-
-                comfyui_gen = ComfyUIImageGenerator(model=self.model)
-                print(
-                    f"[ComfyUI Render] {comfyui_gen.model_name}: "
-                    f"sketch={sketch_path}, refs={len(reference_paths)}, "
-                    f"size={target_width}x{target_height}"
-                )
-                comfy_result = await comfyui_gen.generate_with_references(
-                    prompt=prompt,
-                    reference_images=reference_paths,
-                    output_path=output_path,
-                    width=target_width,
-                    height=target_height,
-                )
-                if comfy_result.success and comfy_result.image_path:
-                    return comfy_result.image_path
-                print(
-                    f"[ComfyUI Render] {comfyui_gen.model_name} failed: "
-                    f"{comfy_result.error or 'no image returned'}"
-                )
-                return None
             else:
                 # ===== Google 直连分支 =====
                 from google import genai
