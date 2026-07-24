@@ -782,6 +782,8 @@ def _merge_seedance2_request_config(
         merged["generate_audio_user_set"] = True
     if "human_review" in incoming or "human_review" in config_overrides:
         merged["human_review_user_set"] = True
+    if "ratio" in incoming or "ratio" in config_overrides:
+        merged["ratio_user_set"] = True
 
     saved_json = dump_seedance2_config(merged)
     beat["seedance2_config_json"] = saved_json
@@ -4458,6 +4460,11 @@ async def generate_single_video(
     elif body.video_backend in LOCAL_DYNAMIC_CANVAS_BACKENDS:
         config["resolution"] = _local_comfy_resolution(body.video_backend, body.resolution)
         config["ratio"] = _local_wan_ratio(body.ratio)
+    elif not is_seedance2 and not is_happyhorse:
+        # Seedance 1.x/1.5 does not use seedance2_config_json, so keep its
+        # aspect ratio explicit instead of letting the runner fall back to the
+        # historical portrait default.
+        config["ratio"] = str(body.ratio or "16:9")
 
     if ctx is not None:
         queued = await get_task_backend().enqueue_project_task(

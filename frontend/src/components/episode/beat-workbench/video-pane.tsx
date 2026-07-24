@@ -612,24 +612,49 @@ export function VideoPane({
       beat.beat_number,
       serializeSeedance2Config(seedance2Config, seedance2Config),
     );
-  }, [beat.beat_number, seedance2Config]);
+  }, [beat.beat_number, defaultBackend, seedance2Config]);
   useEffect(() => {
     if (!isDynamicCanvasComfyBackend) return;
     const current = seedance2DraftRef.current;
-    const resolution = localWanResolutionOptions.includes(current.resolution)
-      ? current.resolution
+    const localConfig =
+      current.raw.local_video_config &&
+      typeof current.raw.local_video_config === "object" &&
+      !Array.isArray(current.raw.local_video_config)
+        ? (current.raw.local_video_config as Record<string, unknown>)
+        : {};
+    const requestedResolution = normalizeSeedance2Resolution(
+      localConfig.resolution ?? current.raw.resolution,
+    );
+    const resolution = localWanResolutionOptions.includes(requestedResolution)
+      ? requestedResolution
       : "720p";
-    const ratio = localWanRatioOptions.includes(current.ratio as LocalWanRatio)
-      ? current.ratio
+    const requestedRatio = normalizeSeedance2Ratio(
+      localConfig.ratio ??
+        (current.raw.ratio_user_set !== true ? current.raw.ratio : undefined),
+      seedance2DefaultRatioForProjectAspect(spec.renderAspect),
+    );
+    const ratio = localWanRatioOptions.includes(requestedRatio as LocalWanRatio)
+      ? requestedRatio
       : seedance2DefaultRatioForProjectAspect(spec.renderAspect);
-    if (current.resolution === resolution && current.ratio === ratio) return;
-    const next = { ...current, resolution, ratio };
+    const duration = clampDuration(
+      localConfig.duration ?? current.duration,
+      seedance2DurationBounds,
+    );
+    const mode = normalizeSeedance2Mode(localConfig.mode ?? current.mode);
+    if (
+      current.resolution === resolution &&
+      current.ratio === ratio &&
+      current.duration === duration &&
+      current.mode === mode
+    ) return;
+    const next = { ...current, resolution, ratio, duration, mode };
     seedance2DraftRef.current = next;
     setSeedance2Draft(next);
   }, [
     isDynamicCanvasComfyBackend,
     localWanRatioOptions,
     localWanResolutionOptions,
+    seedance2DurationBounds,
     spec.renderAspect,
   ]);
   useEffect(() => {
@@ -840,6 +865,20 @@ export function VideoPane({
       const res = await regenerate.mutateAsync({
         beatNum: beat.beat_number,
         videoBackend: defaultBackend,
+        ...(showSeedance2Config
+          ? {
+              resolution: seedance2DraftRef.current.resolution,
+              duration: seedance2DraftRef.current.duration,
+              ratio: seedance2DraftRef.current.ratio,
+              mode: seedance2DraftRef.current.mode,
+              seedance2ConfigJson: JSON.stringify(
+                serializeSeedance2Config(
+                  seedance2DraftRef.current,
+                  seedance2Config,
+                ),
+              ),
+            }
+          : {}),
         ...(showHappyHorseConfig && happyHorseDraft
           ? {
               resolution: happyHorseDraft.resolution,
@@ -859,7 +898,11 @@ export function VideoPane({
             }
           : {}),
         ...(isSd15ProConfig
-          ? { resolution: sd15Resolution, duration: sd15Duration }
+          ? {
+              resolution: sd15Resolution,
+              duration: sd15Duration,
+              ratio: seedance2DefaultRatioForProjectAspect(spec.renderAspect),
+            }
           : {}),
         // ComfyUI 本地模型传递 duration 和 mode
         ...(showComfyUIConfig
@@ -889,7 +932,9 @@ export function VideoPane({
     draft: Seedance2ConfigDraft,
     options: { silent?: boolean; suppressSuccess?: boolean } = {},
   ) => {
-    const nextConfig = showGrokVideoConfig
+    const nextConfig = isDynamicCanvasComfyBackend
+      ? serializeLocalVideoConfig(draft, seedance2Config)
+      : showGrokVideoConfig
       ? serializeGrokVideoConfig(draft, seedance2Config)
       : showHappyHorseConfig
       ? serializeHappyHorseConfig(draft, seedance2Config)
@@ -938,7 +983,9 @@ export function VideoPane({
   ]);
   useEffect(() => {
     if (!(showPromptConfig || isDynamicCanvasComfyBackend) || !seedance2Dirty) return;
-    const nextConfig = showGrokVideoConfig
+    const nextConfig = isDynamicCanvasComfyBackend
+      ? serializeLocalVideoConfig(seedance2Draft, seedance2Config)
+      : showGrokVideoConfig
       ? serializeGrokVideoConfig(seedance2Draft, seedance2Config)
       : showHappyHorseConfig
       ? serializeHappyHorseConfig(seedance2Draft, seedance2Config)
@@ -3472,7 +3519,13 @@ function defaultSeedance2Config(
     mode_user_set: modeUserSet,
     duration: clampDuration(raw.duration),
     resolution: normalizeSeedance2Resolution(raw.resolution),
-    ratio: normalizeSeedance2Ratio(raw.ratio, defaultRatio),
+    // Before local ComfyUI exposed its own ratio control, its autosave wrote
+    // the ratio into this shared config without recording ownership. Treat
+    // those legacy values as unset so HuiMeng follows the project aspect.
+    ratio: normalizeSeedance2Ratio(
+      raw.ratio_user_set === true ? raw.ratio : undefined,
+      defaultRatio,
+    ),
     generate_audio_user_set: false,
     generate_audio: true,
     return_last_frame: raw.return_last_frame === true,
@@ -3889,6 +3942,7 @@ function serializeSeedance2Config(
     duration: draft.duration,
     resolution: draft.resolution,
     ratio: draft.ratio,
+    ratio_user_set: true,
     generate_audio: true,
     generate_audio_user_set: false,
     return_last_frame: draft.return_last_frame,
@@ -3910,6 +3964,21 @@ function serializeSeedance2Config(
           ? "manual"
           : ""
         : draft.prompt_source,
+  };
+}
+
+function serializeLocalVideoConfig(
+  draft: Seedance2ConfigDraft,
+  previous: Seedance2ConfigDraft,
+): Record<string, unknown> {
+  return {
+    ...previous.raw,
+    local_video_config: {
+      duration: draft.duration,
+      resolution: draft.resolution,
+      ratio: draft.ratio,
+      mode: draft.mode,
+    },
   };
 }
 

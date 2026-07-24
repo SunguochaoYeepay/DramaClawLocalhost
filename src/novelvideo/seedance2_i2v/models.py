@@ -28,6 +28,10 @@ class Seedance2VideoConfig(BaseModel):
     duration: int = 4
     resolution: str = "720p"
     ratio: str = "9:16"
+    # Distinguishes an explicitly selected HuiMeng ratio from legacy/local
+    # ComfyUI values that were previously stored in this shared config.
+    ratio_user_set: bool = False
+    local_video_config: dict[str, Any] = Field(default_factory=dict)
     generate_audio: bool = True
     generate_audio_user_set: bool = False
     return_last_frame: bool = False

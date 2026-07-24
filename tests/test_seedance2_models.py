@@ -52,6 +52,16 @@ def test_parse_seedance2_config_preserves_scene_optimize():
     assert config.scene_optimize == "anime"
 
 
+def test_seedance2_ratio_user_set_marker_round_trips():
+    dumped = dump_seedance2_config(
+        {"ratio": "16:9", "ratio_user_set": True}
+    )
+    config = parse_seedance2_config(dumped)
+
+    assert config.ratio == "16:9"
+    assert config.ratio_user_set is True
+
+
 def test_dump_seedance2_config_round_trips_normalized_config():
     dumped = dump_seedance2_config(
         {

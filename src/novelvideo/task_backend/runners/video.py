@@ -168,7 +168,7 @@ async def _run_single_video_async(envelope: dict[str, Any], ctx: ProjectContext)
         "image_path": frame_path,
         "prompt": prompt,
         "output_path": str(video_path),
-        "aspect_ratio": str(config.get("ratio") or "9:16"),
+        "aspect_ratio": str(config.get("ratio") or "16:9"),
         "duration": video_duration,
         "on_log": on_log,
         "on_progress": on_progress,

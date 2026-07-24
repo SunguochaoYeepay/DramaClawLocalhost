@@ -537,6 +537,7 @@ async def test_seedance2_single_video_applies_inline_request_config_controls(mon
     assert merged_config.mode == Seedance2I2VMode.MULTIMODAL_REFERENCE
     assert merged_config.duration == 9
     assert merged_config.ratio == "16:9"
+    assert merged_config.ratio_user_set is True
     assert merged_config.generate_audio is False
     assert merged_config.generate_audio_user_set is True
     assert merged_config.human_review is False
@@ -547,6 +548,57 @@ async def test_seedance2_single_video_applies_inline_request_config_controls(mon
         calls[0]["payload"]["config"]["seedance2_config"]
         == prepare_calls[0]["beat"]["seedance2_config_json"]
     )
+
+
+@pytest.mark.asyncio
+async def test_seedance15_single_video_enqueues_requested_ratio(monkeypatch, tmp_path):
+    from novelvideo.api.routes import generation
+    from novelvideo.api.schemas import SingleVideoRequest
+
+    calls = []
+    store = _FakeSeedance2Store(
+        [
+            {
+                "beat_number": 2,
+                "video_mode": "first_frame",
+                "video_prompt": "wide camera motion",
+                "audio_type": "dialogue",
+            }
+        ]
+    )
+    frame = tmp_path / "frames" / "ep003" / "beat_02.png"
+    frame.parent.mkdir(parents=True)
+    frame.write_bytes(b"frame")
+
+    async def fake_audio_duration(*_args, **_kwargs):
+        return None
+
+    _patch_generation_celery(monkeypatch, generation, tmp_path, store)
+    monkeypatch.setattr(
+        generation,
+        "get_task_backend",
+        lambda: SimpleNamespace(enqueue_project_task=_fake_enqueue(calls)),
+    )
+    monkeypatch.setattr(generation, "_api_audio_duration_seconds", fake_audio_duration)
+
+    response = await generation.generate_single_video(
+        project="demo",
+        episode_num=3,
+        beat_num=2,
+        body=SingleVideoRequest(
+            video_backend="newapi_seedance-1.5-pro",
+            resolution="720p",
+            duration=8,
+            ratio="16:9",
+        ),
+        user={"username": "alice"},
+    )
+
+    assert response["ok"] is True
+    config = calls[0]["payload"]["config"]
+    assert config["ratio"] == "16:9"
+    assert config["resolution"] == "720p"
+    assert config["video_duration"] == 8
 
 
 @pytest.mark.asyncio

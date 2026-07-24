@@ -613,6 +613,7 @@ function makeBeat(overrides: Partial<Beat> = {}): Beat {
       duration: 5,
       resolution: "720p",
       ratio: "9:16",
+      ratio_user_set: true,
       generate_audio: false,
       return_last_frame: false,
       human_review: false,
@@ -923,6 +924,50 @@ describe("VideoPane Seedance2 inspector", () => {
     expect(config).toMatchObject({
       final_prompt: "draft prompt used for generation",
       duration: 8,
+    });
+  });
+
+  it("uses the landscape project ratio instead of an unowned legacy local ratio", async () => {
+    const user = userEvent.setup();
+    useAspectRatioStore.getState().setOrientation("demo", "landscape");
+    renderPane(
+      makeBeat({
+        seedance2_config_json: JSON.stringify({
+          mode: "multimodal_reference",
+          duration: 5,
+          resolution: "720p",
+          ratio: "9:16",
+          final_prompt: "wide scene motion",
+        }),
+      }),
+    );
+
+    await user.click(screen.getAllByRole("button", { name: "重新生成" })[0]);
+    await user.click(screen.getByRole("button", { name: "确认" }));
+
+    await waitFor(() => expect(regenerateMock).toHaveBeenCalledTimes(1));
+    const request = regenerateMock.mock.calls[0][0];
+    expect(request.ratio).toBe("16:9");
+    expect(JSON.parse(request.seedance2ConfigJson)).toMatchObject({
+      ratio: "16:9",
+      ratio_user_set: true,
+    });
+  });
+
+  it("passes the project ratio when regenerating Seedance 1.5 Pro", async () => {
+    const user = userEvent.setup();
+    useAspectRatioStore.getState().setOrientation("demo", "landscape");
+    renderPane(makeBeat({ audio_type: "dialogue" }), {
+      defaultBackend: "newapi_seedance-1.5-pro",
+    });
+
+    await user.click(screen.getByRole("button", { name: "重新生成" }));
+    await user.click(screen.getByRole("button", { name: "确认" }));
+
+    await waitFor(() => expect(regenerateMock).toHaveBeenCalledTimes(1));
+    expect(regenerateMock.mock.calls[0][0]).toMatchObject({
+      videoBackend: "newapi_seedance-1.5-pro",
+      ratio: "16:9",
     });
   });
 
