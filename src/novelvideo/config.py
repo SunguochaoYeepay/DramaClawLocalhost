@@ -888,7 +888,9 @@ COMFYUI_FLUX2_STEPS = int(os.environ.get("COMFYUI_FLUX2_STEPS", "6"))
 COMFYUI_FLUX2_CFG = float(os.environ.get("COMFYUI_FLUX2_CFG", "1"))
 COMFYUI_FLUX2_SAMPLER = os.environ.get("COMFYUI_FLUX2_SAMPLER", "euler")
 COMFYUI_FLUX2_SCHEDULER = os.environ.get("COMFYUI_FLUX2_SCHEDULER", "simple")
-COMFYUI_FLUX2_DENOISE = float(os.environ.get("COMFYUI_FLUX2_DENOISE", "1"))
+# Reference renders must retain part of the input latent.  A value of 1.0
+# starts from pure noise and makes Flux behave almost like text-to-image.
+COMFYUI_FLUX2_DENOISE = float(os.environ.get("COMFYUI_FLUX2_DENOISE", "0.7"))
 
 # Qwen Image / Qwen Image Edit 模型文件名（可在 .env 中覆盖）
 COMFYUI_QWEN_CLIP = os.environ.get(
@@ -916,7 +918,9 @@ COMFYUI_QWEN_SAMPLER = os.environ.get("COMFYUI_QWEN_SAMPLER", "euler")
 COMFYUI_QWEN_SCHEDULER = os.environ.get("COMFYUI_QWEN_SCHEDULER", "simple")
 COMFYUI_QWEN_SHIFT = float(os.environ.get("COMFYUI_QWEN_SHIFT", "3.1"))
 COMFYUI_QWEN_EDIT_SHIFT = float(os.environ.get("COMFYUI_QWEN_EDIT_SHIFT", "3"))
-COMFYUI_QWEN_DENOISE = float(os.environ.get("COMFYUI_QWEN_DENOISE", "1"))
+# Qwen Edit still needs enough denoise for colorization, but 1.0 discards the
+# sketch structure in practice.  Keep the input latent as the default.
+COMFYUI_QWEN_DENOISE = float(os.environ.get("COMFYUI_QWEN_DENOISE", "0.65"))
 
 # 默认视频分辨率（竖屏）
 VIDEO_RESOLUTION = os.environ.get("VIDEO_RESOLUTION", "720x1280")

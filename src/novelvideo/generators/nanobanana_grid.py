@@ -4248,7 +4248,12 @@ class NanoBananaGridGenerator:
             # 道具在草图阶段只保留名称和 marker 颜色，不传道具参考图，避免最终
             # 材质/三视图干扰 blocking。
             if not sketch and previous_grid_path and os.path.exists(previous_grid_path):
-                previous_grid_image = self._load_image_as_part(previous_grid_path)
+                # Keep the line-art sketch lossless for ComfyUI; a second JPEG
+                # compression can erase thin geometry lines before sampling.
+                previous_grid_image = self._load_image_as_part(
+                    previous_grid_path,
+                    compress_quality=0 if self.provider == "comfyui" else 60,
+                )
                 if previous_grid_image:
                     contents.append(previous_grid_image)
                     submitted_refs.append(
@@ -4474,6 +4479,43 @@ class NanoBananaGridGenerator:
                 comfyui_gen = ComfyUIImageGenerator(model=self.model)
                 prompt_text, ref_bytes_list = self._extract_ref_bytes_from_contents(contents)
                 ref_paths = self._write_ref_bytes_to_temp_files(ref_bytes_list)
+                # Record the exact bytes that will be injected into ComfyUI.
+                # The source-path audit alone cannot prove that a Part was
+                # decoded successfully and kept in the expected order.
+                comfy_ref_audit = []
+                for ref_index, ref_path in enumerate(ref_paths):
+                    try:
+                        with open(ref_path, "rb") as ref_file:
+                            ref_data = ref_file.read()
+                        comfy_ref_audit.append(
+                            {
+                                "index": ref_index,
+                                "bytes": len(ref_data),
+                                "sha256": hashlib.sha256(ref_data).hexdigest(),
+                                "source_kind": (
+                                    submitted_refs[ref_index].get("kind")
+                                    if ref_index < len(submitted_refs)
+                                    else None
+                                ),
+                                "source_path": (
+                                    submitted_refs[ref_index].get("path")
+                                    if ref_index < len(submitted_refs)
+                                    else None
+                                ),
+                            }
+                        )
+                    except OSError:
+                        continue
+                if comfy_ref_audit:
+                    print(
+                        "[ComfyUI] 实际注入参考图: "
+                        + "; ".join(
+                            f"ref[{item['index']}]={item['source_kind']} "
+                            f"{item['bytes']}B sha256={item['sha256'][:12]}"
+                            for item in comfy_ref_audit
+                        ),
+                        flush=True,
+                    )
                 try:
                     w, h = self._parse_dimensions(aspect_ratio, image_size)
                     print(
@@ -5483,7 +5525,10 @@ class NanoBananaGridGenerator:
         contents = [prompt]
 
         if not sketch and previous_grid_path and os.path.exists(previous_grid_path):
-            previous_grid_image = self._load_image_as_part(previous_grid_path)
+            previous_grid_image = self._load_image_as_part(
+                previous_grid_path,
+                compress_quality=0 if self.provider == "comfyui" else 60,
+            )
             if previous_grid_image:
                 contents.append(previous_grid_image)
 
