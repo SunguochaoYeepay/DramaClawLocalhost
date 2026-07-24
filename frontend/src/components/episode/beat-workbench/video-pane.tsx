@@ -16,6 +16,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
   Download,
+  ExternalLink,
   Film,
   ChevronDown,
   Image as ImageIcon,
@@ -63,6 +64,7 @@ import { queryKeys } from "@/lib/query-keys";
 import { normalizeMentionSeparatorSpaces } from "@/lib/mention-markers";
 import { useGenerationCreditCost } from "@/lib/queries/generation-credit-cost";
 import { CreditCostInline } from "@/components/credit-cost-inline";
+import { openPresetProjectionInMyCanvas } from "@/features/freezone/openPresetProjection";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -307,6 +309,7 @@ export function VideoPane({
   const seedance2UploadInputRef = useRef<HTMLInputElement>(null);
   const localLastFrameUploadInputRef = useRef<HTMLInputElement>(null);
   const [regenConfirm, setRegenConfirm] = useState(false);
+  const [freezonePending, setFreezonePending] = useState(false);
   const [seedance2CropIntent, setSeedance2CropIntent] =
     useState<Seedance2CropIntent | null>(null);
   const [seedance2TrimAsset, setSeedance2TrimAsset] =
@@ -1498,6 +1501,24 @@ export function VideoPane({
     }
   };
 
+  const handleOpenVideoFreezone = async () => {
+    if (freezonePending) return;
+    setFreezonePending(true);
+    try {
+      await openPresetProjectionInMyCanvas(project, {
+        scope: "beat",
+        episode,
+        beat: beat.beat_number,
+        primary_slot: "render",
+      });
+      toast.success(t("episode.workbench.render.freezoneOpened"));
+    } catch {
+      toast.error(t("episode.workbench.render.freezoneOpenFailed"));
+    } finally {
+      setFreezonePending(false);
+    }
+  };
+
   return (
     <div className={VIDEO_GRID_CLASS}>
       {/* Left: video player — fixed-aspect container keeps layout stable when
@@ -1535,6 +1556,22 @@ export function VideoPane({
           >
             <Download className="size-3.5" />
           </a>
+        )}
+        {videoDownloadUrl && (
+          <button
+            type="button"
+            onClick={() => void handleOpenVideoFreezone()}
+            disabled={freezonePending}
+            aria-label={t("episode.workbench.render.openFreezone")}
+            title={t("episode.workbench.render.openFreezoneTip")}
+            className="absolute right-11 top-2 z-10 inline-flex size-7 items-center justify-center rounded-[7px] border border-white/[0.12] bg-black/55 text-foreground/85 backdrop-blur-sm transition hover:border-white/[0.22] hover:bg-black/70 hover:text-foreground disabled:cursor-wait disabled:opacity-60"
+          >
+            {freezonePending ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <ExternalLink className="size-3.5" />
+            )}
+          </button>
         )}
         {videoActive && (
           <div
