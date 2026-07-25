@@ -310,6 +310,8 @@ export function VideoPane({
   const localLastFrameUploadInputRef = useRef<HTMLInputElement>(null);
   const [regenConfirm, setRegenConfirm] = useState(false);
   const [freezonePending, setFreezonePending] = useState(false);
+  const [uploadedLocalLastFrame, setUploadedLocalLastFrame] =
+    useState<Seedance2AssetItem | null>(null);
   const [seedance2CropIntent, setSeedance2CropIntent] =
     useState<Seedance2CropIntent | null>(null);
   const [seedance2TrimAsset, setSeedance2TrimAsset] =
@@ -508,14 +510,24 @@ export function VideoPane({
     project,
     episode,
     beat.beat_number,
-    showReferenceDetails,
+    // The local ComfyUI panel only needs first/last-frame upload controls.
+    // Its full Seedance status endpoint performs expensive project-wide
+    // preparation; querying it for every beat can starve the API when the
+    // episode list mounts many VideoPane instances at once.
+    showReferenceDetails && !showComfyUIConfig,
   );
   const seedance2StatusData =
     seedance2Status.data?.ok === true ? seedance2Status.data.data : null;
   const seedance2AssetItems = seedance2StatusData?.assets.items ?? [];
-  const localLastFrameAsset = seedance2AssetItems.find(
-    (asset) => asset.key === "last_frame" && asset.media_type === "image",
-  );
+  const localLastFrameAsset =
+    uploadedLocalLastFrame ??
+    seedance2AssetItems.find(
+      (asset) => asset.key === "last_frame" && asset.media_type === "image",
+    ) ??
+    null;
+  useEffect(() => {
+    setUploadedLocalLastFrame(null);
+  }, [beat.beat_number, project, episode]);
   const modelReferenceAssetItems = useMemo(
     () =>
       showHappyHorseConfig || showGrokVideoConfig
@@ -1377,6 +1389,10 @@ export function VideoPane({
         toast.error(res.error || t("common.error"));
         return;
       }
+      const uploadedAsset = res.data.assets.items.find(
+        (asset) => asset.key === "last_frame" && asset.media_type === "image",
+      );
+      setUploadedLocalLastFrame(uploadedAsset ?? null);
       toast.success(t("episode.workbench.video.seedance2AssetUploaded"));
     } catch {
       toast.error(t("common.error"));
