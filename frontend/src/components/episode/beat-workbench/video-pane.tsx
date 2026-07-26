@@ -660,7 +660,15 @@ export function VideoPane({
       localConfig.duration ?? current.duration,
       seedance2DurationBounds,
     );
-    const mode = normalizeSeedance2Mode(localConfig.mode ?? current.mode);
+    // Wan2.2 only supports first-frame and first-last-frame inputs. The
+    // shared Seedance config defaults to multimodal_reference when no local
+    // config exists, so never let that provider-only value overwrite the
+    // local panel selection during a beat/config refresh.
+    const requestedMode = localConfig.mode ?? current.mode;
+    const mode: Seedance2ConfigDraft["mode"] =
+      requestedMode === "first_last_frame" || requestedMode === "first_frame"
+        ? requestedMode
+        : "first_frame";
     if (
       current.resolution === resolution &&
       current.ratio === ratio &&

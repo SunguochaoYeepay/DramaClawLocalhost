@@ -234,6 +234,18 @@ vi.mock("@/lib/queries/video", () => ({
           max_duration: 15,
         },
         {
+          value: "comfyui",
+          label: "Wan2.2 (本地 ComfyUI)",
+          is_default: false,
+          is_seedance2: false,
+          dialogue_only: false,
+          min_duration: 2,
+          max_duration: 10,
+          supported_modes: ["first_frame", "first_last_frame"],
+          resolution_options: ["480p", "720p", "1080p"],
+          ratio_options: ["16:9", "9:16", "1:1", "4:3", "3:4", "21:9"],
+        },
+        {
           value: "newapi_seedance-2.0-fast",
           label: "Seedance2.0 Fast",
           is_default: false,
@@ -1586,6 +1598,34 @@ describe("VideoPane Seedance2 inspector", () => {
     const config = JSON.parse(payload.data.seedance2_config_json);
     expect(config.mode).toBe("first_last_frame");
     expect(config.mode_user_set).toBe(true);
+  });
+
+  it("keeps Wan2.2 in first-last-frame mode instead of falling back to multimodal", async () => {
+    const user = userEvent.setup();
+    renderPane(
+      makeBeat({
+        seedance2_config_json: JSON.stringify({
+          mode: "multimodal_reference",
+          local_video_config: {
+            duration: 5,
+            resolution: "720p",
+            ratio: "16:9",
+          },
+        }),
+      }),
+      { defaultBackend: "comfyui" },
+    );
+
+    const modeTrigger = screen.getAllByRole("combobox")[0];
+    await waitFor(() => expect(modeTrigger).toHaveTextContent("首帧模式"));
+    await user.click(modeTrigger);
+    await user.click(await screen.findByRole("option", { name: "首尾帧模式" }));
+    await waitForSeedance2Autosave();
+
+    const payload = updateBeatMock.mock.calls[0][0];
+    const config = JSON.parse(payload.data.seedance2_config_json);
+    expect(config.local_video_config.mode).toBe("first_last_frame");
+    expect(modeTrigger).toHaveTextContent("首尾帧模式");
   });
 
   it("does not render manual Seedance2 save actions", () => {
