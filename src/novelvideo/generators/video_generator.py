@@ -3322,6 +3322,8 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                     timeline["global_prompt"] = prompt or ""
                     timeline["retake_global_prompt"] = ""
                     timeline["retakePrompt"] = ""
+                    timeline["normalStartFrame"] = 0
+                    timeline["normalDurationFrames"] = frames
                     timeline["segments"] = []
                     for index, image_filename in enumerate(director_reference_filenames):
                         segment_start = sum(segment_lengths[:index])
@@ -3338,6 +3340,15 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                             "length": segment_length,
                             "normalDurationFrames": segment_length,
                             "prompt": prompt or "",
+                            # In the official Director node an end frame is
+                            # inserted at the final frame of its segment. The
+                            # last reference therefore anchors the end of a
+                            # multi-image timeline instead of merely becoming
+                            # another guide at the segment start.
+                            "isEndFrame": (
+                                len(director_reference_filenames) > 1
+                                and index == len(director_reference_filenames) - 1
+                            ),
                         }
                         timeline["segments"].append(segment)
                     director_inputs["timeline_data"] = json.dumps(timeline, ensure_ascii=False)
