@@ -3411,7 +3411,22 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 node_progress: dict[str, float] = {}  # 各节点最近一次进度
 
                 while True:
-                    out = await ws.recv()
+                    # Some ComfyUI custom nodes finish writing the output but
+                    # never emit the final ``executing: {node: null}`` event.
+                    # Keep the socket as the primary progress channel, then
+                    # periodically consult history so the API task cannot stay
+                    # in "generating" after the video has already completed.
+                    try:
+                        out = await asyncio.wait_for(ws.recv(), timeout=20)
+                    except asyncio.TimeoutError:
+                        history = await self._get_history(prompt_id)
+                        if prompt_id in history:
+                            ws_completed = True
+                            progress(0.95)
+                            log("ComfyUI 已完成（通过任务历史确认）")
+                            break
+                        log("等待 ComfyUI 状态更新...")
+                        continue
                     if isinstance(out, str):
                         message = json.loads(out)
                         msg_type = message.get("type")
