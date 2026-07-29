@@ -3303,11 +3303,49 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                     base_segment_frames + (1 if index < remainder else 0)
                     for index in range(segment_count)
                 ]
-                director_inputs["local_prompts"] = " | ".join([prompt or ""] * segment_count)
+                # Prompt Relay consumes one prompt for every timeline range.
+                # Give it transition-aware wording instead of repeating an
+                # isolated still-image prompt for every keyframe.
+                base_prompt = (prompt or "").replace("|", ",")
+                if segment_count == 1:
+                    director_segment_prompts = [base_prompt]
+                else:
+                    director_segment_prompts = []
+                    for index in range(segment_count):
+                        current_ref = index + 1
+                        if index == 0:
+                            direction = (
+                                f"Begin from reference image {current_ref}. "
+                                f"Create continuous motion toward reference image {current_ref + 1}; "
+                                "do not cut or freeze on a still image."
+                            )
+                        elif index == segment_count - 1:
+                            direction = (
+                                f"Continue naturally from reference image {current_ref - 1} "
+                                f"and arrive at reference image {current_ref} as the final frame. "
+                                "Keep motion smooth with no slideshow-style cut."
+                            )
+                        else:
+                            direction = (
+                                f"Continue from reference image {current_ref} "
+                                f"and transition naturally toward reference image {current_ref + 1}. "
+                                "Maintain continuous camera and character motion; do not cut or freeze."
+                            )
+                        director_segment_prompts.append(
+                            "\n".join(part for part in (base_prompt, direction) if part)
+                        )
+                director_inputs["local_prompts"] = " | ".join(director_segment_prompts)
                 director_inputs["segment_lengths"] = ",".join(
                     str(length) for length in segment_lengths
                 )
-                director_inputs["guide_strength"] = ",".join(["1.0"] * segment_count)
+                # Endpoints need strong identity anchors. Middle stills are
+                # softer guides, leaving the model room to synthesize motion
+                # between them instead of jumping from slide to slide.
+                director_guide_strengths = [
+                    "1.0" if index in {0, segment_count - 1} else "0.65"
+                    for index in range(segment_count)
+                ]
+                director_inputs["guide_strength"] = ",".join(director_guide_strengths)
                 try:
                     timeline = json.loads(director_inputs.get("timeline_data") or "{}")
                     timeline["mainTrackEnabled"] = True
@@ -3339,7 +3377,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                             "start": segment_start,
                             "length": segment_length,
                             "normalDurationFrames": segment_length,
-                            "prompt": prompt or "",
+                            "prompt": director_segment_prompts[index],
                             # In the official Director node an end frame is
                             # inserted at the final frame of its segment. The
                             # last reference therefore anchors the end of a
