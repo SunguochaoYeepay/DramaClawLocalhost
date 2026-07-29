@@ -226,6 +226,7 @@ from novelvideo.freezone.video_node import (
     get_video_camera_template,
     get_video_camera_templates,
     is_freezone_happyhorse_backend,
+    is_freezone_ltx_director_backend,
     is_freezone_seedance2_backend,
     load_video_character_library,
     sync_mainline_assets_into_library,
@@ -6966,10 +6967,11 @@ async def freezone_video_i2v(
         len(source_paths) > 1
         and not is_freezone_seedance2_backend(backend)
         and not is_freezone_happyhorse_backend(backend)
+        and not is_freezone_ltx_director_backend(backend)
     ):
         raise HTTPException(
             400,
-            "multiple image references currently only support Seedance 2.0 or HappyHorse models",
+            "multiple image references currently only support Seedance 2.0, HappyHorse, or LTX 2.3 Director models",
         )
 
     # HappyHorse 的「图片参考」(r2v) 与「图生视频」(首帧 i2v) 是两种上游模式，
@@ -7057,7 +7059,11 @@ async def freezone_video_keyframes(
     reference_items = [
         {"type": "image", "path": primary_first_path, "role": "首帧" if first_path else "尾帧参考"}
     ]
-    if is_freezone_seedance2_backend(backend) and last_path and first_path:
+    if (
+        (is_freezone_seedance2_backend(backend) or is_freezone_ltx_director_backend(backend))
+        and last_path
+        and first_path
+    ):
         reference_items.append({"type": "image", "path": last_path, "role": "尾帧"})
 
     final_prompt = build_freezone_keyframe_video_prompt(

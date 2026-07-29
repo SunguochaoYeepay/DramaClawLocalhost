@@ -23,6 +23,7 @@ from novelvideo.freezone.video_node import (
     get_freezone_video_model_options,
     get_video_camera_template,
     is_freezone_happyhorse_backend,
+    is_freezone_ltx_director_backend,
     is_freezone_seedance2_backend,
     load_video_character_library,
     normalize_video_aspect_ratio,
@@ -201,6 +202,13 @@ def test_resolve_freezone_video_backend_accepts_id_and_label() -> None:
     assert resolve_freezone_video_backend("seedance_fast") == "newapi_seedance-1.0-pro-fast"
     assert resolve_freezone_video_backend("Seedance 1.5 有声") == "newapi_seedance-1.5-pro"
     assert resolve_freezone_video_backend(None) == "newapi_seedance-2.0-fast"
+
+
+def test_ltx_director_backends_are_identified_for_multi_image_timeline_input() -> None:
+    assert is_freezone_ltx_director_backend("ltx23_director") is True
+    assert is_freezone_ltx_director_backend("ltx23_director_fast") is True
+    assert is_freezone_ltx_director_backend("ltx23") is False
+    assert is_freezone_ltx_director_backend("comfyui") is False
 
 
 def test_seedance2_backend_detection_accepts_newapi_and_legacy_values() -> None:

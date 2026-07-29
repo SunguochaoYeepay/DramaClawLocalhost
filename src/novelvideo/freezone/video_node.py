@@ -82,22 +82,25 @@ VIDEO_CAMERA_TEMPLATES: list[dict[str, str]] = [
 ]
 
 LEGACY_FREEZONE_VIDEO_BACKEND_ALIASES: dict[str, str] = {
-    "huimeng_seedance20_fast": "newapi_seedance-2.0-fast",
-    "huimeng_seedance-2.0-fast": "newapi_seedance-2.0-fast",
+    # These ids were emitted by older canvas versions, but they have always
+    # meant the direct HuiMeng provider. Keep them on HuiMeng instead of
+    # sending them to a generic NewAPI gateway.
+    "huimeng_seedance20_fast": "huimeng_seedance-2.0-fast",
+    "huimeng_seedance-2.0-fast": "huimeng_seedance-2.0-fast",
     "seedance_2": "newapi_seedance-2.0-fast",
-    "huimeng_seedance10_fast": "newapi_seedance-1.0-pro-fast",
-    "huimeng_seedance-1.0-pro-fast": "newapi_seedance-1.0-pro-fast",
+    "huimeng_seedance10_fast": "huimeng_seedance-1.0-pro-fast",
+    "huimeng_seedance-1.0-pro-fast": "huimeng_seedance-1.0-pro-fast",
     "seedance_fast": "newapi_seedance-1.0-pro-fast",
-    "huimeng_seedance15_pro": "newapi_seedance-1.5-pro",
-    "huimeng_seedance-1.5-pro": "newapi_seedance-1.5-pro",
+    "huimeng_seedance15_pro": "huimeng_seedance-1.5-pro",
+    "huimeng_seedance-1.5-pro": "huimeng_seedance-1.5-pro",
     "seedance_pro": "newapi_seedance-1.5-pro",
     "seedance_pro_silent": "newapi_seedance-1.5-pro",
 }
 
 LEGACY_FREEZONE_VIDEO_LABEL_ALIASES: dict[str, str] = {
-    "huimeng seedance 2.0 fast": "newapi_seedance-2.0-fast",
-    "huimeng seedance 1.0 pro fast": "newapi_seedance-1.0-pro-fast",
-    "huimeng seedance 1.5 pro": "newapi_seedance-1.5-pro",
+    "huimeng seedance 2.0 fast": "huimeng_seedance-2.0-fast",
+    "huimeng seedance 1.0 pro fast": "huimeng_seedance-1.0-pro-fast",
+    "huimeng seedance 1.5 pro": "huimeng_seedance-1.5-pro",
     "seedance 1.0 fast": "newapi_seedance-1.0-pro-fast",
     "seedance 1.5 有声": "newapi_seedance-1.5-pro",
     "seedance 1.5 无声": "newapi_seedance-1.5-pro",
@@ -379,24 +382,28 @@ def get_freezone_video_model_options() -> list[dict[str, Any]]:
 
 
 def get_freezone_video_model_names() -> list[str]:
-    return list(_freezone_newapi_video_options().keys())
+    return [str(item["id"]) for item in get_freezone_video_model_options()]
 
 
 def resolve_freezone_video_backend(model: str | None) -> str:
     text = str(model or "").strip()
+    from novelvideo.generators.huimengi import huimeng_video_backend_options
+
+    direct_options = huimeng_video_backend_options()
     options = _freezone_newapi_video_options()
     if not text:
-        return (
-            FREEZONE_DEFAULT_VIDEO_BACKEND
-            if FREEZONE_DEFAULT_VIDEO_BACKEND in options
-            else next(iter(options))
-        )
+        return FREEZONE_DEFAULT_VIDEO_BACKEND
+    if text in direct_options:
+        return text
+    folded = text.casefold()
+    for backend, label in direct_options.items():
+        if label.casefold() == folded:
+            return backend
     if text in options:
         return text
     if text in FREEZONE_DISABLED_VIDEO_BACKENDS:
         raise ValueError(f"unknown video model: {text}")
 
-    folded = text.casefold()
     for backend, label in options.items():
         if label.casefold() == folded:
             return backend
@@ -442,7 +449,14 @@ def is_freezone_happyhorse_backend(backend: str | None) -> bool:
     from novelvideo.generators.video_generator import parse_newapi_video_backend
 
     model = parse_newapi_video_backend(backend) or _freezone_video_model_from_backend(backend)
-    return model == "happyhorse-1.0"
+    return model in {"happyhorse-1.0", "happyhorse-1.1"}
+
+
+def is_freezone_ltx_director_backend(backend: str | None) -> bool:
+    return str(backend or "").strip() in {
+        "ltx23_director",
+        "ltx23_director_fast",
+    }
 
 
 def _coarse_mark_region(mark: dict[str, Any]) -> str:

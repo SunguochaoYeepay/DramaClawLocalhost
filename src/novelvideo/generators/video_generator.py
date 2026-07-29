@@ -3126,8 +3126,15 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             if on_progress:
                 on_progress(value)
 
-        # 判断是否使用 FLF 模式
-        use_flf_mode = last_frame_path is not None
+        # Wan 2.2 has a dedicated first/last-frame workflow. Director does not:
+        # its equivalent is a timeline with the first and last images as two
+        # segments. Do not let a Director request select the Wan workflow and
+        # then apply the Director fast profile to it.
+        is_ltx23_director = self.workflow_type in {
+            "ltx23_director",
+            "ltx23_director_fast",
+        }
+        use_flf_mode = last_frame_path is not None and not is_ltx23_director
 
         # 选择工作流
         if use_flf_mode:
@@ -3185,21 +3192,26 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         client_id = str(uuid.uuid4())
         first_image_filename = f"first_{client_id}.png"
         last_image_filename = f"last_{client_id}.png" if use_flf_mode else None
-        director_refs = [
-            ref for ref in (kwargs.get("references") or [])
-            if getattr(ref, "type", "image") == "image"
-            and getattr(ref, "path", None)
-            and os.path.abspath(ref.path) != os.path.abspath(image_path)
-        ]
-        director_reference_filenames = [first_image_filename] + [
-            f"ref_{client_id}_{index}.png" for index, _ in enumerate(director_refs, 1)
-        ]
-        director_refs = [
-            ref for ref in (kwargs.get("references") or [])
-            if getattr(ref, "type", "image") == "image"
-            and getattr(ref, "path", None)
-            and os.path.abspath(ref.path) != os.path.abspath(image_path)
-        ]
+        director_refs = []
+        director_ref_paths = {os.path.abspath(image_path)}
+        for ref in kwargs.get("references") or []:
+            ref_path = getattr(ref, "path", None)
+            if getattr(ref, "type", "image") != "image" or not ref_path:
+                continue
+            normalized_path = os.path.abspath(ref_path)
+            if normalized_path in director_ref_paths:
+                continue
+            director_ref_paths.add(normalized_path)
+            director_refs.append(ref)
+
+        # Keyframe requests historically passed the last image separately for
+        # Wan FLF. Include it in a Director timeline too, even for old callers
+        # that did not also put it in ``references``.
+        if is_ltx23_director and last_frame_path:
+            normalized_last_path = os.path.abspath(last_frame_path)
+            if normalized_last_path not in director_ref_paths:
+                director_ref_paths.add(normalized_last_path)
+                director_refs.append(ShotReference("image", last_frame_path, "last frame"))
         director_reference_filenames = [first_image_filename] + [
             f"ref_{client_id}_{index}.png" for index, _ in enumerate(director_refs, 1)
         ]
