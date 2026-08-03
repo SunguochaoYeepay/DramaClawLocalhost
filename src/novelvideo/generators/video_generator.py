@@ -2774,6 +2774,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
     LTX23_I2V_WORKFLOW_PATH = Path(__file__).parent / "ltx2-3-I2V.json"
     LTX23_DIRECTOR_WORKFLOW_PATH = Path(__file__).parent / "ltx2-3-director.json"
     MINIMAX_H3_I2V_WORKFLOW_PATH = Path(__file__).parent / "minimax-h3-I2V.json"
+    MINIMAX_H3_R2V_WORKFLOW_PATH = Path(__file__).parent / "minimax-h3-R2V.json"
 
     # 节点映射配置（不同工作流的节点 ID）
     NODE_MAPPING = {
@@ -2829,6 +2830,13 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             "duration": "105:111",
             "positive_prompt": "105:104",
             "seed": "105:15",
+            "video_output": "92",
+        },
+        "minimax_h3_r2v": {
+            "dimensions": "115",
+            "duration": "132",
+            "positive_prompt": "136",
+            "seed": "129",
             "video_output": "92",
         },
     }
@@ -3023,6 +3031,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             ("ltx23", self.LTX23_I2V_WORKFLOW_PATH),
             ("ltx23_director", self.LTX23_DIRECTOR_WORKFLOW_PATH),
             ("minimax_h3", self.MINIMAX_H3_I2V_WORKFLOW_PATH),
+            ("minimax_h3_r2v", self.MINIMAX_H3_R2V_WORKFLOW_PATH),
         ]:
             if path.exists():
                 with open(path, "r", encoding="utf-8") as f:
@@ -3164,6 +3173,21 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             "ltx23_director_fast",
         }
         is_minimax_h3 = self.workflow_type == "minimax_h3"
+        h3_reference_paths: list[str] = []
+        if is_minimax_h3 and not last_frame_path:
+            seen_h3_reference_paths = {os.path.abspath(image_path)}
+            for ref in kwargs.get("references") or []:
+                ref_path = getattr(ref, "path", None)
+                if getattr(ref, "type", "image") != "image" or not ref_path:
+                    continue
+                normalized_path = os.path.abspath(ref_path)
+                if normalized_path in seen_h3_reference_paths:
+                    continue
+                seen_h3_reference_paths.add(normalized_path)
+                h3_reference_paths.append(ref_path)
+                if len(h3_reference_paths) >= 8:
+                    break
+        use_h3_reference_mode = bool(h3_reference_paths)
         use_flf_mode = last_frame_path is not None and not is_ltx23_director and not is_minimax_h3
 
         # 选择工作流
@@ -3171,8 +3195,14 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             workflow_key = "fp8_flf"
             mode_desc = "FLF (首尾帧过渡)"
         elif is_minimax_h3:
-            workflow_key = "minimax_h3"
-            mode_desc = "MiniMax H3 First/Last Frame" if last_frame_path else "MiniMax H3 I2V"
+            workflow_key = "minimax_h3_r2v" if use_h3_reference_mode else "minimax_h3"
+            mode_desc = (
+                "MiniMax H3 Multi-Reference"
+                if use_h3_reference_mode
+                else "MiniMax H3 First/Last Frame"
+                if last_frame_path
+                else "MiniMax H3 I2V"
+            )
         elif self.workflow_type in {"ltx23", "ltx23_director", "ltx23_director_fast"}:
             workflow_key = "ltx23"
             mode_desc = "LTX 2.3 I2V"
@@ -3200,6 +3230,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 "ltx23": self.LTX23_I2V_WORKFLOW_PATH,
                 "ltx23_director": self.LTX23_DIRECTOR_WORKFLOW_PATH,
                 "minimax_h3": self.MINIMAX_H3_I2V_WORKFLOW_PATH,
+                "minimax_h3_r2v": self.MINIMAX_H3_R2V_WORKFLOW_PATH,
             }.get(workflow_key, "unknown")
             return VideoGenResult(
                 status=VideoGenStatus.FAILED,
@@ -3249,6 +3280,9 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         director_reference_filenames = [first_image_filename] + [
             f"ref_{client_id}_{index}.png" for index, _ in enumerate(director_refs, 1)
         ]
+        h3_reference_filenames = [first_image_filename] + [
+            f"h3_ref_{client_id}_{index}.png" for index, _ in enumerate(h3_reference_paths, 1)
+        ]
 
         # FLF 模式固定帧数
         if use_flf_mode:
@@ -3275,6 +3309,11 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                     with open(ref.path, "rb") as f:
                         await self._upload_image(f.read(), filename)
                     log(f"参考图已上传: {filename}")
+            elif workflow_key == "minimax_h3_r2v":
+                for path, filename in zip(h3_reference_paths, h3_reference_filenames[1:]):
+                    with open(path, "rb") as f:
+                        await self._upload_image(f.read(), filename)
+                    log(f"H3 参考图已上传: {filename}")
 
             # FLF 模式：上传尾帧
             if use_flf_mode or (is_minimax_h3 and last_frame_path):
@@ -3299,7 +3338,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 )
                 log(f"画布: {wan_width}x{wan_height}")
 
-            if workflow_key == "minimax_h3":
+            if workflow_key in {"minimax_h3", "minimax_h3_r2v"}:
                 self._apply_minimax_h3_dimensions(workflow, aspect_ratio)
 
             # 设置输入图片（根据工作流类型）
@@ -3318,6 +3357,21 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                     workflow[node_map["last_image"]]["inputs"]["image"] = last_image_filename
                 else:
                     workflow[node_map["positive_prompt"]]["inputs"].pop("last_frame", None)
+            elif workflow_key == "minimax_h3_r2v":
+                r2v_inputs = workflow[node_map["positive_prompt"]]["inputs"]
+                r2v_inputs["ref_image_size"] = "match"
+                for key in list(r2v_inputs):
+                    if key.startswith("ref_images.ref_image_"):
+                        del r2v_inputs[key]
+                for index, filename in enumerate(h3_reference_filenames):
+                    node_id = f"h3_reference_image_{index}"
+                    workflow[node_id] = {
+                        "inputs": {"image": filename},
+                        "class_type": "LoadImage",
+                        "_meta": {"title": f"H3 Reference {index + 1}"},
+                    }
+                    r2v_inputs[f"ref_images.ref_image_{index}"] = [node_id, 0]
+                workflow[node_map["duration"]]["inputs"]["value"] = min(15, max(5, float(duration)))
             elif workflow_key == "ltx23":
                 # LTX 2.3 I2V 模式
                 workflow[node_map["input_image"]]["inputs"]["image"] = first_image_filename
@@ -3456,6 +3510,19 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             # 设置提示词（LTX23 用 "prompt" 字段，其余用 "text"）
             if workflow_key in {"ltx23", "minimax_h3"}:
                 workflow[node_map["positive_prompt"]]["inputs"]["prompt"] = prompt or ""
+            elif workflow_key == "minimax_h3_r2v":
+                picture_tags = ", ".join(
+                    f"<Picture {index}>" for index in range(1, len(h3_reference_filenames) + 1)
+                )
+                h3_prompt = "\n".join(
+                    part
+                    for part in (
+                        prompt or "",
+                        f"Use {picture_tags} as visual references. Keep their identities and visual details consistent.",
+                    )
+                    if part
+                )
+                workflow[node_map["positive_prompt"]]["inputs"]["prompt"] = h3_prompt
             elif workflow_key != "ltx23_director":
                 workflow[node_map["positive_prompt"]]["inputs"]["text"] = prompt or ""
             # 负向提示词保持默认（已在模板中设置）

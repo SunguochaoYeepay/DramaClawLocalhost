@@ -1647,8 +1647,8 @@ def _api_video_backend_options() -> list[VideoBackendOption]:
             max_duration=15,
             resolution_options=None,
             ratio_options=None,
-            supported_modes=["first_frame", "first_last_frame"],
-            reference_image_max=1,
+            supported_modes=["first_frame", "first_last_frame", "multimodal_reference"],
+            reference_image_max=9,
             reference_video_max=0,
             reference_audio_max=0,
         ),
@@ -4525,11 +4525,14 @@ async def generate_single_video(
     elif body.video_backend in LOCAL_DYNAMIC_CANVAS_BACKENDS:
         config["resolution"] = _local_comfy_resolution(body.video_backend, body.resolution)
         config["ratio"] = _local_wan_ratio(body.ratio)
-        if body.video_backend in {"ltx23_director", "ltx23_director_fast"}:
+        if body.video_backend in {"ltx23_director", "ltx23_director_fast", "minimax_h3"}:
             allowed_root = Path(output_dir).resolve()
-            director_references: list[dict[str, str]] = []
+            local_references: list[dict[str, str]] = []
             seen_paths: set[Path] = set()
-            for raw_path in body.director_reference_image_paths[:8]:
+            # H3 accepts nine reference images total. The beat first frame is
+            # always included as Picture 1, leaving eight extra selections.
+            reference_limit = 8
+            for raw_path in body.director_reference_image_paths[:reference_limit]:
                 candidate = Path(str(raw_path or "").strip())
                 if not candidate.is_absolute():
                     candidate = allowed_root / candidate
@@ -4537,17 +4540,21 @@ async def generate_single_video(
                     candidate = candidate.resolve(strict=True)
                     candidate.relative_to(allowed_root)
                 except (OSError, ValueError):
-                    return {"ok": False, "error": "Director 参考图必须位于当前项目中"}
+                    return {"ok": False, "error": "本地视频参考图必须位于当前项目中"}
                 if candidate in seen_paths:
                     continue
                 if candidate.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
-                    return {"ok": False, "error": "Director 仅支持 PNG、JPG、JPEG 或 WEBP 参考图"}
+                    return {"ok": False, "error": "本地视频仅支持 PNG、JPG、JPEG 或 WEBP 参考图"}
                 seen_paths.add(candidate)
-                director_references.append(
-                    {"type": "image", "path": str(candidate), "role": "director_timeline"}
+                local_references.append(
+                    {
+                        "type": "image",
+                        "path": str(candidate),
+                        "role": "h3_reference" if body.video_backend == "minimax_h3" else "director_timeline",
+                    }
                 )
-            if director_references:
-                config["references"] = director_references
+            if local_references:
+                config["references"] = local_references
     elif not is_seedance2 and not is_happyhorse:
         # Seedance 1.x/1.5 does not use seedance2_config_json, so keep its
         # aspect ratio explicit instead of letting the runner fall back to the

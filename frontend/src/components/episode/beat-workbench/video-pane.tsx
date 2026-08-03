@@ -378,6 +378,8 @@ export function VideoPane({
   const isDynamicCanvasComfyBackend = isComfyUILocalBackend;
   const isLtxDirectorBackend =
     defaultBackend === "ltx23_director" || defaultBackend === "ltx23_director_fast";
+  const isH3ReferenceBackend = defaultBackend === "minimax_h3";
+  const supportsLocalMultiImageReferences = isLtxDirectorBackend || isH3ReferenceBackend;
   // 判断是否支持参考图模式（有 supported_modes 且包含 first_frame）
   const hasReferenceModeSupport =
     selectedBackend?.supported_modes?.includes("first_frame") === true;
@@ -518,7 +520,7 @@ export function VideoPane({
     // Its full Seedance status endpoint performs expensive project-wide
     // preparation; querying it for every beat can starve the API when the
     // episode list mounts many VideoPane instances at once.
-    showReferenceDetails && (!showComfyUIConfig || isLtxDirectorBackend),
+    showReferenceDetails && (!showComfyUIConfig || supportsLocalMultiImageReferences),
   );
   const seedance2StatusData =
     seedance2Status.data?.ok === true ? seedance2Status.data.data : null;
@@ -955,7 +957,7 @@ export function VideoPane({
           ? {
               duration: seedance2DraftRef.current.duration,
               mode: seedance2DraftRef.current.mode,
-              ...(isLtxDirectorBackend
+              ...(supportsLocalMultiImageReferences
                 ? { directorReferenceImagePaths }
                 : {}),
               ...(isDynamicCanvasComfyBackend
@@ -2920,14 +2922,18 @@ export function VideoPane({
                 )}
               </div>
 
-              {isLtxDirectorBackend && (
+              {supportsLocalMultiImageReferences && (
                 <div className="min-w-0 space-y-2 md:col-span-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <Label className="text-[11px] text-muted-foreground/78">
-                      Director 时间线参考图（可选，最多 8 张）
+                      {isH3ReferenceBackend
+                        ? "H3 多图参考（可选，最多 8 张）"
+                        : "Director 时间线参考图（可选，最多 8 张）"}
                     </Label>
                     <span className="text-[10px] text-muted-foreground/60">
-                      首帧固定为第一个片段；所选图片依次进入后续片段。
+                      {isH3ReferenceBackend
+                        ? "首帧与所选图片会作为 H3 的 <Picture n> 参考图输入。"
+                        : "首帧固定为第一个片段；所选图片依次进入后续片段。"}
                     </span>
                     <Button
                       type="button"
@@ -3000,7 +3006,9 @@ export function VideoPane({
                       })}
                     </div>
                   ) : (
-                    <p className="text-xs text-muted-foreground/65">上传或生成图片后，可在这里加入 Director 时间线。</p>
+                  <p className="text-xs text-muted-foreground/65">
+                    上传或生成图片后，可在这里加入{isH3ReferenceBackend ? " H3 多图参考" : " Director 时间线"}。
+                  </p>
                   )}
                 </div>
               )}

@@ -1,6 +1,14 @@
 import copy
+import json
 
-from novelvideo.generators.video_generator import ComfyUIVideoGenerator, create_video_generator
+import pytest
+
+import novelvideo.generators.video_generator as video_generator_module
+from novelvideo.generators.video_generator import (
+    ComfyUIVideoGenerator,
+    ShotReference,
+    create_video_generator,
+)
 
 
 def test_wan_dimensions_use_requested_portrait_ratio():
@@ -95,6 +103,69 @@ def test_minimax_h3_workflow_is_registered_with_first_and_last_frame_inputs():
     assert workflow["115"]["inputs"]["aspect_ratio"] == "3:4 (Portrait Standard)"
     assert create_video_generator("minimax_h3").workflow_type == "minimax_h3"
     backend = next(option for option in _api_video_backend_options() if option.value == "minimax_h3")
-    assert backend.supported_modes == ["first_frame", "first_last_frame"]
+    assert backend.supported_modes == ["first_frame", "first_last_frame", "multimodal_reference"]
+    assert backend.reference_image_max == 9
     assert backend.min_duration == 5
     assert backend.max_duration == 15
+
+
+@pytest.mark.asyncio
+async def test_minimax_h3_multiple_images_use_reference_workflow(monkeypatch, tmp_path):
+    first_image = tmp_path / "first.png"
+    reference_image = tmp_path / "reference.png"
+    output = tmp_path / "result.mp4"
+    first_image.write_bytes(b"first")
+    reference_image.write_bytes(b"reference")
+    generator = ComfyUIVideoGenerator(workflow_type="minimax_h3")
+    captured: dict[str, object] = {}
+    uploaded: list[str] = []
+
+    async def fake_upload(_data, filename, **_kwargs):
+        uploaded.append(filename)
+        return {"name": filename}
+
+    async def fake_queue(workflow, _client_id):
+        captured["workflow"] = workflow
+        return {"prompt_id": "h3-test"}
+
+    async def fake_history(_prompt_id):
+        return {"h3-test": {"outputs": {"92": {"images": [{"filename": "result.mp4"}]}}}}
+
+    async def fake_download(_filename, _subfolder=""):
+        return b"video"
+
+    class FakeWebSocket:
+        async def recv(self):
+            return json.dumps({"type": "executing", "data": {"prompt_id": "h3-test", "node": None}})
+
+        async def close(self):
+            return None
+
+    async def fake_connect(*_args, **_kwargs):
+        return FakeWebSocket()
+
+    monkeypatch.setattr(generator, "_upload_image", fake_upload)
+    monkeypatch.setattr(generator, "_queue_prompt", fake_queue)
+    monkeypatch.setattr(generator, "_get_history", fake_history)
+    monkeypatch.setattr(generator, "_download_video", fake_download)
+    monkeypatch.setattr(video_generator_module.websockets, "connect", fake_connect)
+
+    result = await generator.generate(
+        image_path=str(first_image),
+        prompt="A continuous cinematic shot",
+        output_path=str(output),
+        duration=5,
+        references=[ShotReference("image", str(reference_image), "H3 reference")],
+    )
+
+    workflow = captured["workflow"]
+    h3_inputs = workflow["136"]["inputs"]
+    assert result.status.value == "done"
+    assert output.read_bytes() == b"video"
+    assert uploaded[0].startswith("first_")
+    assert uploaded[1].startswith("h3_ref_")
+    assert workflow["136"]["class_type"] == "MiniMaxH3ReferenceToVideo"
+    assert h3_inputs["ref_images.ref_image_0"] == ["h3_reference_image_0", 0]
+    assert h3_inputs["ref_images.ref_image_1"] == ["h3_reference_image_1", 0]
+    assert "<Picture 1>" in h3_inputs["prompt"]
+    assert "<Picture 2>" in h3_inputs["prompt"]
