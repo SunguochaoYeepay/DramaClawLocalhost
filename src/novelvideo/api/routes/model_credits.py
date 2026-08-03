@@ -235,7 +235,9 @@ def _generation_credit_cost_model(kind: str, value: str) -> str:
 
         return INDEXTTS2_RECORD_MODEL.strip()
     if kind == "freezone_audio_music":
-        return "LingShan-MU-11"
+        from novelvideo.config import HUIMENG_MUSIC_MODEL
+
+        return str(HUIMENG_MUSIC_MODEL or "suno-5.5").strip() or "suno-5.5"
     if kind == "freezone_image_reverse_prompt":
         from novelvideo.freezone.vision_gateway import resolve_freezone_vision_model
 

@@ -372,6 +372,11 @@ async def run_indextts2_beat_audio_generation(
     result.total_targets = len(target_beats)
     force_redo = normalized_mode in {"redo_selected", "redo_all"}
 
+    if generator is None:
+        from novelvideo.generators.indextts2_fal import IndexTTS2FalClient
+
+        generator = IndexTTS2FalClient()
+
     await _maybe_call(log_callback, f"IndexTTS2 audio task started: {len(target_beats)} beats")
 
     for index, beat in enumerate(target_beats, start=1):

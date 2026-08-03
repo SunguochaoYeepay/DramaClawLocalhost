@@ -1963,7 +1963,7 @@ export async function submitFreezoneAudioSpeech(
 
 /**
  * 文本生成音乐请求。除 input 外全部可选，不传走后端默认。
- * model / response_format / output_format 不需要前端传（走后端默认 LingShan-MU-11 / mp3 /
+ * model / response_format / output_format 不需要前端传（走后端默认 HuiMeng Suno 5.5 / mp3 /
  * mp3_44100_128），故不在此暴露。
  */
 export interface FreezoneAudioMusicPayload {

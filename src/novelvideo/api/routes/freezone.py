@@ -7551,6 +7551,8 @@ async def freezone_audio_eleven_music(
         raise HTTPException(400, "input is required")
     if len(prompt) > 4100:
         raise HTTPException(400, "input must be <= 4100 characters")
+    if str(body.model or "").strip().lower().startswith("suno-") and len(prompt) > 200:
+        raise HTTPException(400, "HuiMeng Suno input must be <= 200 characters")
 
     try:
         job_id = _new_job_id()

@@ -71,6 +71,7 @@ import {
   extractMainlineContextsFromNode,
   type MainlineContext,
 } from "@/features/freezone/context/mainlineContext";
+import { removableProjectionKeyForNode } from "@/features/freezone/projections";
 import { deriveNodeDropInfo } from "@/stores/assetDropStore";
 
 import {
@@ -533,12 +534,7 @@ export const NodeActionToolbar = memo(
       () => Boolean(deriveNodeDropInfo(node)?.sourceUrl),
       [node],
     );
-    const protectedProjectionKey =
-      isProtectedProjectionGroupNode(node) &&
-      typeof node.data.projection_key === "string" &&
-      node.data.projection_key.trim()
-        ? node.data.projection_key.trim()
-        : null;
+    const protectedProjectionKey = removableProjectionKeyForNode(node);
     const projectionStatus = useCanvasProjectionStatus(protectedProjectionKey);
     const projectionIsStale = projectionStatus?.stale === true;
     const extractableBeatContext = useMemo(() => beatContextFromNode(node), [node]);

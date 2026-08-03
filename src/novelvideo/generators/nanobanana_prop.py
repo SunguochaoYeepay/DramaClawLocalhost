@@ -30,6 +30,7 @@ from novelvideo.config import (
 )
 from novelvideo.shared.billing_errors import is_insufficient_credits_error
 from novelvideo.generators.nanobanana_grid import (
+    _call_huimeng_image_api,
     _call_newapi_image_api,
     _call_openai_image_api,
     clamp_image_size,
@@ -148,8 +149,14 @@ async def generate_prop_reference(
     if style is None:
         style = IMAGE_DEFAULT_STYLE
 
-    config = get_grid_generation_config()
     selected_provider, selected_model = _prop_reference_image_source(model)
+    # A project-level source selection must also choose that provider's key.
+    # Previously a HuiMeng selection retained the unrelated default config.
+    config = (
+        get_grid_generation_config(selection_override=model)
+        if selected_provider
+        else get_grid_generation_config()
+    )
     prop_provider = (PROP_REF_IMAGE_PROVIDER or "").strip().lower()
     provider = (
         selected_provider
@@ -175,6 +182,8 @@ async def generate_prop_reference(
             key_name = "OPENAI_API_KEY"
         elif provider == "newapi":
             key_name = "NEWAPI_API_KEY"
+        elif provider == "huimeng":
+            key_name = "HUIMENGI_API_KEY"
         else:
             key_name = "GOOGLE_AI_API_KEY"
         print(f"[PropRefGen] API key not set. Set {key_name} environment variable.")
@@ -214,6 +223,14 @@ async def generate_prop_reference(
                 model=model,
                 base_url=base_url,
                 quality=config.get("openai_image_quality", "medium"),
+            )
+        elif provider == "huimeng":
+            result_path = await _generate_via_huimeng(
+                prompt=prompt,
+                output_path=output_path,
+                api_key=api_key,
+                model=model,
+                quality=config.get("huimeng_image_quality", "medium"),
             )
         else:
             result_path = await _generate_via_google(
@@ -348,6 +365,35 @@ async def _generate_via_openai(
         return output_path
 
     print(f"[PropRefGen] OpenAI 生成失败: {error_text or 'No response'}")
+    return None
+
+
+async def _generate_via_huimeng(
+    prompt: str,
+    output_path: str,
+    api_key: str,
+    model: str,
+    quality: str = "medium",
+) -> Optional[str]:
+    """Generate a prop reference image through HuiMeng's task API."""
+    image_bytes, _text_content, error_text = await _call_huimeng_image_api(
+        api_key=api_key,
+        model=model,
+        prompt=prompt,
+        image_config={
+            "aspect_ratio": PROP_REF_ASPECT_RATIO,
+            "image_size": PROP_REF_IMAGE_SIZE,
+            "huimeng_image_quality": quality,
+        },
+    )
+
+    if image_bytes:
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        with open(output_path, "wb") as f:
+            f.write(image_bytes)
+        return output_path
+
+    print(f"[PropRefGen] HuiMeng 生成失败: {error_text or 'No response'}")
     return None
 
 

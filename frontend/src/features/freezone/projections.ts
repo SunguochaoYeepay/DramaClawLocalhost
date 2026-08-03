@@ -68,6 +68,19 @@ export function projectionLabelForPresetRequest(
   return `${kind} · ${assetId}`;
 }
 
+/** Returns the owning projection for a system-managed canvas node, if any. */
+export function removableProjectionKeyForNode(node: CanvasNode): string | null {
+  const data = node.data as {
+    projection_key?: unknown;
+    user_spawned?: unknown;
+  };
+  if (data.user_spawned === true || typeof data.projection_key !== "string") {
+    return null;
+  }
+  const key = data.projection_key.trim();
+  return key || null;
+}
+
 export function shouldProjectPresetIntoPersonalCanvas({
   personalCanvasId,
   request,

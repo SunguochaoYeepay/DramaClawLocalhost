@@ -22,6 +22,10 @@ def _get_default_video_backend() -> str:
     return os.environ.get("VIDEO_BACKEND", "huimeng_seedance-2.0-fast")
 
 
+def _get_default_huimeng_music_model() -> str:
+    return os.environ.get("HUIMENG_MUSIC_MODEL", "suno-5.5").strip() or "suno-5.5"
+
+
 # ── 通用响应 ──────────────────────────────────────────────────────────────────
 
 
@@ -365,6 +369,9 @@ class SingleVideoRequest(BaseModel):
     audio_setting: Optional[str] = None
     prompt_guidance: Optional[str] = None
     text_overlay: Optional[dict[str, Any]] = None
+    # Additional image segments for the local LTX 2.3 Director workflows.
+    # The primary frame remains the first timeline segment.
+    director_reference_image_paths: list[str] = Field(default_factory=list)
 
 
 # ── 风格 ──────────────────────────────────────────────────────────────────────
@@ -1524,7 +1531,10 @@ class FreezoneAudioMusicRequest(BaseModel):
         description="音乐描述 prompt。",
         examples=["cinematic rain-soaked suspense music"],
     )
-    model: str = Field(default="LingShan-MU-11", description="音乐模型，默认 LingShan-MU-11。")
+    model: str = Field(
+        default_factory=_get_default_huimeng_music_model,
+        description="音乐模型，默认 HuiMeng Suno 5.5。",
+    )
     response_format: Literal["mp3", "opus", "pcm", "ulaw", "alaw"] = Field(
         default="mp3",
         description="音频返回格式。mp3 会自动映射为 mp3_44100_128。",

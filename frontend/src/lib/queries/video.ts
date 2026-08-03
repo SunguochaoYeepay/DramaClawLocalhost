@@ -694,6 +694,7 @@ export function useRegenerateBeatVideo(project: string, episode: number) {
       mode,
       seedance2ConfigJson,
       audioSetting,
+      directorReferenceImagePaths,
     }: {
       beatNum: number;
       videoBackend?: string;
@@ -705,6 +706,7 @@ export function useRegenerateBeatVideo(project: string, episode: number) {
       mode?: string;
       seedance2ConfigJson?: string;
       audioSetting?: string;
+      directorReferenceImagePaths?: string[];
     }) =>
       jsonWithBackendError<TaskResponse | ErrorResponse>(
         api.post(
@@ -721,6 +723,9 @@ export function useRegenerateBeatVideo(project: string, episode: number) {
                 ? { seedance2_config_json: seedance2ConfigJson }
                 : {}),
               ...(audioSetting !== undefined ? { audio_setting: audioSetting } : {}),
+              ...(directorReferenceImagePaths !== undefined
+                ? { director_reference_image_paths: directorReferenceImagePaths }
+                : {}),
             },
             throwHttpErrors: false,
           },

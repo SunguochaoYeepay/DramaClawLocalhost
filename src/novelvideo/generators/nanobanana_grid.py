@@ -2661,8 +2661,8 @@ async def generate_text_to_image(
 ) -> Path:
     """Generate one image from a prompt only — no reference images.
 
-    Routes through the same 4 providers as `generate_reference_edit_image`
-    (google / openrouter / huimeng / openai). Use `config` to override the
+    Routes through the same providers as `generate_reference_edit_image`
+    (google / openrouter / huimeng / openai / newapi / comfyui). Use `config` to override the
     provider/model picked from env defaults.
     """
     return await _generate_image(
@@ -2789,6 +2789,34 @@ async def _generate_image(
         )
         if not image_bytes:
             raise ValueError(f"DramaClawAPI image generation failed: {error_detail or 'empty image'}")
+    elif generator.provider == "comfyui":
+        from novelvideo.generators.comfyui_image import ComfyUIImageGenerator
+
+        width, height = generator._parse_dimensions(aspect_ratio, image_size)
+        comfyui_gen = ComfyUIImageGenerator(model=generator.model)
+        if ref_paths:
+            result = await comfyui_gen.generate_with_references(
+                prompt=prompt,
+                reference_images=ref_paths,
+                output_path=output_path,
+                width=width,
+                height=height,
+            )
+        else:
+            result = await comfyui_gen.generate(
+                prompt=prompt,
+                output_path=output_path,
+                width=width,
+                height=height,
+            )
+        if not result or not result.success:
+            error_detail = result.error if result else "empty response"
+            raise ValueError(f"ComfyUI image generation failed: {error_detail}")
+
+        output = Path(output_path)
+        if not output.exists():
+            raise ValueError("ComfyUI image generation produced no output file")
+        return output
     else:
         from google import genai
         from google.genai import types

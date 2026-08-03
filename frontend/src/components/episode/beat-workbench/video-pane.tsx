@@ -312,6 +312,7 @@ export function VideoPane({
   const [freezonePending, setFreezonePending] = useState(false);
   const [uploadedLocalLastFrame, setUploadedLocalLastFrame] =
     useState<Seedance2AssetItem | null>(null);
+  const [directorReferenceImagePaths, setDirectorReferenceImagePaths] = useState<string[]>([]);
   const [seedance2CropIntent, setSeedance2CropIntent] =
     useState<Seedance2CropIntent | null>(null);
   const [seedance2TrimAsset, setSeedance2TrimAsset] =
@@ -374,6 +375,8 @@ export function VideoPane({
     defaultBackend === "ltx23_director" ||
     defaultBackend === "ltx23_director_fast";
   const isDynamicCanvasComfyBackend = isComfyUILocalBackend;
+  const isLtxDirectorBackend =
+    defaultBackend === "ltx23_director" || defaultBackend === "ltx23_director_fast";
   // 判断是否支持参考图模式（有 supported_modes 且包含 first_frame）
   const hasReferenceModeSupport =
     selectedBackend?.supported_modes?.includes("first_frame") === true;
@@ -514,7 +517,7 @@ export function VideoPane({
     // Its full Seedance status endpoint performs expensive project-wide
     // preparation; querying it for every beat can starve the API when the
     // episode list mounts many VideoPane instances at once.
-    showReferenceDetails && !showComfyUIConfig,
+    showReferenceDetails && (!showComfyUIConfig || isLtxDirectorBackend),
   );
   const seedance2StatusData =
     seedance2Status.data?.ok === true ? seedance2Status.data.data : null;
@@ -528,6 +531,9 @@ export function VideoPane({
   useEffect(() => {
     setUploadedLocalLastFrame(null);
   }, [beat.beat_number, project, episode]);
+  useEffect(() => {
+    setDirectorReferenceImagePaths([]);
+  }, [beat.beat_number, defaultBackend]);
   const modelReferenceAssetItems = useMemo(
     () =>
       showHappyHorseConfig || showGrokVideoConfig
@@ -557,6 +563,17 @@ export function VideoPane({
       return imageAssets.filter((asset) => asset.key === "first_frame");
     },
     [seedance2AssetItems, showGrokVideoConfig, showHappyHorseConfig, showSeedance2Config, showComfyUIConfig, hasFirstLastFrameSupport],
+  );
+  const directorReferenceImageItems = useMemo(
+    () =>
+      seedance2AssetItems.filter(
+        (asset) =>
+          asset.media_type === "image" &&
+          asset.key !== "first_frame" &&
+          asset.exists !== false &&
+          Boolean(asset.abs_path || asset.path),
+      ),
+    [seedance2AssetItems],
   );
   const seedance2ReferenceOptions = useMemo(
     () =>
@@ -937,6 +954,9 @@ export function VideoPane({
           ? {
               duration: seedance2DraftRef.current.duration,
               mode: seedance2DraftRef.current.mode,
+              ...(isLtxDirectorBackend
+                ? { directorReferenceImagePaths }
+                : {}),
               ...(isDynamicCanvasComfyBackend
                 ? {
                     resolution: seedance2DraftRef.current.resolution,
@@ -2898,6 +2918,91 @@ export function VideoPane({
                   </div>
                 )}
               </div>
+
+              {isLtxDirectorBackend && (
+                <div className="min-w-0 space-y-2 md:col-span-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Label className="text-[11px] text-muted-foreground/78">
+                      Director 时间线参考图（可选，最多 8 张）
+                    </Label>
+                    <span className="text-[10px] text-muted-foreground/60">
+                      首帧固定为第一个片段；所选图片依次进入后续片段。
+                    </span>
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="outline"
+                      disabled={uploadSeedance2Asset.isPending}
+                      onClick={() => seedance2UploadInputRef.current?.click()}
+                      className="ml-auto"
+                    >
+                      {uploadSeedance2Asset.isPending ? (
+                        <Loader2 className="size-3 animate-spin" />
+                      ) : (
+                        <Upload className="size-3" />
+                      )}
+                      添加图片
+                    </Button>
+                    <input
+                      ref={seedance2UploadInputRef}
+                      type="file"
+                      className="hidden"
+                      accept="image/*"
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) void handleSeedance2AssetUpload(file);
+                        event.target.value = "";
+                      }}
+                    />
+                  </div>
+                  {directorReferenceImageItems.length > 0 ? (
+                    <div className="grid grid-cols-[repeat(auto-fill,minmax(6.75rem,6.75rem))] gap-2">
+                      {directorReferenceImageItems.map((asset) => {
+                        const path = asset.abs_path || asset.path || "";
+                        const selected = directorReferenceImagePaths.includes(path);
+                        const disabled = !selected && directorReferenceImagePaths.length >= 8;
+                        const imageSrc = resolveMediaUrl(asset.url || asset.path);
+                        return (
+                          <label
+                            key={asset.key}
+                            className={cn(
+                              "relative block cursor-pointer overflow-hidden rounded-md border bg-white/[0.015]",
+                              selected ? "border-primary ring-1 ring-primary/60" : "border-white/[0.075]",
+                              disabled && "cursor-not-allowed opacity-50",
+                            )}
+                            style={{ aspectRatio: ratioToCss(spec.sketchAspect) }}
+                          >
+                            {imageSrc ? (
+                              <img src={imageSrc} alt={asset.label} className="absolute inset-0 h-full w-full object-cover" />
+                            ) : (
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <ImageIcon className="size-5 text-muted-foreground/60" />
+                              </div>
+                            )}
+                            <span className="absolute inset-x-0 bottom-0 truncate bg-black/70 px-1.5 py-1 text-[10px] text-white/90">
+                              {asset.label}
+                            </span>
+                            <Checkbox
+                              checked={selected}
+                              disabled={disabled}
+                              onCheckedChange={(checked) => {
+                                setDirectorReferenceImagePaths((current) =>
+                                  checked
+                                    ? [...current, path]
+                                    : current.filter((item) => item !== path),
+                                );
+                              }}
+                              className="absolute right-1.5 top-1.5 bg-black/65"
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground/65">上传或生成图片后，可在这里加入 Director 时间线。</p>
+                  )}
+                </div>
+              )}
 
               {/* 提示词编辑区 */}
               {hasFirstLastFrameSupport && seedance2Draft.mode === "first_last_frame" && (

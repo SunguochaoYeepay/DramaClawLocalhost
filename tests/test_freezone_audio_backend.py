@@ -44,8 +44,10 @@ class FakeTTSGenerator:
 def _isolate_settings_db(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setattr(config, "STATE_DIR", str(tmp_path / "state"))
     monkeypatch.setenv("ST_EDITION", "ce")
-    monkeypatch.delenv("ST_CONTROL_PLANE_DSN", raising=False)
+    # Keep dotenv loading from restoring this machine's control-plane setting.
+    monkeypatch.setenv("ST_CONTROL_PLANE_DSN", "")
     monkeypatch.delenv("MODEL_GATEWAY_MODE", raising=False)
+    monkeypatch.setenv("MODEL_GATEWAY_FROM_ENV", "0")
 
 
 class FakeProjectStore:
@@ -358,7 +360,95 @@ async def test_freezone_audio_speech_drama_first_person_uses_project_narrator(
 
 
 @pytest.mark.asyncio
-async def test_freezone_audio_eleven_music_uses_newapi_music_metadata(
+async def test_freezone_audio_eleven_music_defaults_to_huimeng_suno(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict] = []
+
+    async def fake_write_huimeng_music(**kwargs):
+        calls.append(kwargs)
+        output_path = Path(kwargs["output_path"])
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_bytes(b"music")
+
+    monkeypatch.setattr(audio_node, "_write_huimeng_music", fake_write_huimeng_music)
+    monkeypatch.setattr(audio_node, "_duration_ms", lambda _path: 0)
+
+    result = await audio_node.generate_freezone_audio_eleven_music(
+        project_dir=tmp_path,
+        job_id="music-1",
+        prompt="Mysterious original soundtrack, rainforest.",
+        music_length_ms=30_000,
+        force_instrumental=True,
+        respect_sections_durations=True,
+        output_format="mp3_44100_128",
+    )
+
+    assert result.model == "suno-5.5"
+    assert result.duration_ms == 30_000
+    assert result.voice_source == "suno-5.5"
+    assert calls == [
+        {
+            "output_path": freezone_audio_eleven_music_output_path(tmp_path, "music-1"),
+            "model": "suno-5.5",
+            "prompt": "Mysterious original soundtrack, rainforest.",
+            "job_id": "music-1",
+        }
+    ]
+
+
+@pytest.mark.asyncio
+async def test_huimeng_music_submits_suno_contract_and_downloads_audio(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from novelvideo.generators import huimengi
+
+    calls: list[dict] = []
+
+    class FakeHuimengClient:
+        def __init__(self, **kwargs):
+            calls.append({"init": kwargs})
+
+        async def submit_task(self, **kwargs):
+            calls.append({"submit": kwargs})
+            return {"task_id": "task-suno-1"}
+
+        async def wait_for_completion(self, task_id, **kwargs):
+            calls.append({"wait": {"task_id": task_id, **kwargs}})
+            return {"result": {"audio_url": "https://media.example/suno.mp3"}}
+
+    monkeypatch.setattr(config, "HUIMENGI_API_KEY", "test-key")
+    monkeypatch.setattr(huimengi, "HuimengiTaskClient", FakeHuimengClient)
+    with respx.mock(assert_all_called=True) as router:
+        router.get("https://media.example/suno.mp3").mock(
+            return_value=Response(
+                200,
+                content=b"ID3fake-mp3",
+                headers={"content-type": "audio/mpeg"},
+            )
+        )
+        output_path = tmp_path / "suno.mp3"
+        await audio_node._write_huimeng_music(
+            output_path=output_path,
+            model="suno-5.5",
+            prompt="instrumental rain ambience",
+            job_id="job-suno-1",
+        )
+
+    assert output_path.read_bytes() == b"ID3fake-mp3"
+    assert calls[1] == {
+        "submit": {
+            "model": "suno-5.5",
+            "params": {"prompt": "instrumental rain ambience", "customMode": False},
+            "idempotency_key": "freezone-music-job-suno-1",
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_freezone_audio_eleven_music_uses_newapi_for_explicit_lingshan(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -372,35 +462,18 @@ async def test_freezone_audio_eleven_music_uses_newapi_music_metadata(
 
     monkeypatch.setattr(audio_node, "_write_newapi_audio_speech", fake_write_newapi_audio_speech)
     monkeypatch.setattr(audio_node, "_duration_ms", lambda _path: 0)
+    monkeypatch.setattr(audio_node, "_ensure_newapi_music_gateway_supported", lambda _model: None)
 
     result = await audio_node.generate_freezone_audio_eleven_music(
         project_dir=tmp_path,
-        job_id="music-1",
+        job_id="lingshan-1",
         prompt="Mysterious original soundtrack, rainforest.",
-        music_length_ms=30_000,
-        force_instrumental=True,
-        respect_sections_durations=True,
-        output_format="mp3_44100_128",
+        model="LingShan-MU-11",
     )
 
     assert result.model == "LingShan-MU-11"
-    assert result.duration_ms == 30_000
-    assert result.voice_source == "LingShan-MU-11"
-    assert calls == [
-        {
-            "output_path": freezone_audio_eleven_music_output_path(tmp_path, "music-1"),
-            "model": "LingShan-MU-11",
-            "input_text": "Mysterious original soundtrack, rainforest.",
-            "response_format": "mp3",
-            "metadata": {
-                "music_length_ms": 30_000,
-                "force_instrumental": True,
-                "respect_sections_durations": True,
-                "output_format": "mp3_44100_128",
-            },
-            "timeout_seconds": 900.0,
-        }
-    ]
+    assert calls[0]["model"] == "LingShan-MU-11"
+    assert calls[0]["metadata"]["music_length_ms"] == 30_000
 
 
 @pytest.mark.asyncio
@@ -411,4 +484,26 @@ async def test_freezone_audio_eleven_music_rejects_out_of_range_length(tmp_path:
             job_id="music-short",
             prompt="short sting",
             music_length_ms=2999,
+        )
+
+
+@pytest.mark.asyncio
+async def test_freezone_audio_music_rejects_dashscope_compatible_gateway(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import novelvideo.config as config
+
+    monkeypatch.setattr(
+        config,
+        "get_newapi_runtime_credentials",
+        lambda: ("dashscope-key", "https://dashscope.aliyuncs.com/compatible-mode/v1"),
+    )
+
+    with pytest.raises(RuntimeError, match="DashScope Qwen"):
+        await audio_node.generate_freezone_audio_eleven_music(
+            project_dir=tmp_path,
+            job_id="dashscope-music",
+            prompt="instrumental ambient music",
+            model="LingShan-MU-11",
         )

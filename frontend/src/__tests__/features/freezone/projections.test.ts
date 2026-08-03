@@ -9,6 +9,7 @@ import {
   projectionLabelForPresetRequest,
   projectionMetadataWithRequest,
   projectionTargetForCanvasPanel,
+  removableProjectionKeyForNode,
   mergeProjectedCanvasWithLocalCanvas,
   normalizePresetProjectionRequest,
   shouldProjectPresetIntoPersonalCanvas,
@@ -59,6 +60,33 @@ describe("freezone projection helpers", () => {
     expect(projectionLabelForPresetRequest({ scope: "asset", asset_kind: "prop", asset_id: "paper_box" })).toBe(
       "prop · paper_box",
     );
+  });
+
+  it("identifies every system-managed projection node as removable by projection", () => {
+    expect(
+      removableProjectionKeyForNode({
+        id: "scene_note",
+        type: "textAnnotationNode",
+        position: { x: 0, y: 0 },
+        data: { preset_managed: true, projection_key: "asset:scene:hall" },
+      } as any),
+    ).toBe("asset:scene:hall");
+    expect(
+      removableProjectionKeyForNode({
+        id: "my_note",
+        type: "textAnnotationNode",
+        position: { x: 0, y: 0 },
+        data: { user_spawned: true, projection_key: "asset:scene:hall" },
+      } as any),
+    ).toBeNull();
+    expect(
+      removableProjectionKeyForNode({
+        id: "plain_note",
+        type: "textAnnotationNode",
+        position: { x: 0, y: 0 },
+        data: {},
+      } as any),
+    ).toBeNull();
   });
 
   it("always targets the current user's personal canvas for preset projection", () => {

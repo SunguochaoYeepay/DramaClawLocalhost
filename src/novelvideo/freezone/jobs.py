@@ -136,6 +136,24 @@ async def run_freezone_mask_edit(
     if not mask_p.exists():
         raise FileNotFoundError(f"mask not found: {mask_p}")
 
+    mask_prompt = (
+        f"{prompt}\n\n"
+        "Use Image 1 as the source image. Use Image 2 as the edit mask reference. "
+        "Only modify the masked/transparent marked region; preserve all unmasked source pixels, "
+        "composition, identity, lighting, and texture as much as possible."
+    ).strip()
+
+    if (provider or "").lower() == "comfyui":
+        return await _run_comfyui_gen(
+            out=out,
+            prompt=mask_prompt,
+            aspect_ratio=aspect_ratio,
+            image_size=image_size,
+            reference_paths=[str(base_p), str(mask_p)],
+            model=model,
+            quality=quality,
+        )
+
     from novelvideo.config import get_grid_generation_config
     from novelvideo.generators.nanobanana_grid import generate_reference_edit_image
     from novelvideo.utils.error_redaction import redact_secrets
@@ -146,12 +164,6 @@ async def run_freezone_mask_edit(
         image_size_override=image_size,
     )
     provider_name = str(cfg.get("provider") or provider or "newapi").strip().lower()
-    mask_prompt = (
-        f"{prompt}\n\n"
-        "Use Image 1 as the source image. Use Image 2 as the edit mask reference. "
-        "Only modify the masked/transparent marked region; preserve all unmasked source pixels, "
-        "composition, identity, lighting, and texture as much as possible."
-    ).strip()
     try:
         await generate_reference_edit_image(
             prompt=mask_prompt,
@@ -338,6 +350,19 @@ async def run_freezone_edit(
     refs: list[str] = [base_path]
     if extra_reference_paths:
         refs.extend(extra_reference_paths)
+
+    # Upscale is a reference-image edit. Local models must take the ComfyUI
+    # path rather than fall through to the cloud-editor implementation.
+    if (provider or "").lower() == "comfyui":
+        return await _run_comfyui_gen(
+            out=out,
+            prompt=prompt,
+            aspect_ratio=aspect_ratio,
+            image_size=image_size,
+            reference_paths=refs,
+            model=model,
+            quality=quality,
+        )
 
     from novelvideo.config import get_grid_generation_config
     from novelvideo.generators.nanobanana_grid import generate_reference_edit_image

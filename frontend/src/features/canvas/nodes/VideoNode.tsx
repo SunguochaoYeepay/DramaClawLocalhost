@@ -404,6 +404,13 @@ function isSeedance1xModel(modelId: string | null | undefined): boolean {
   return /seedance1\d/.test(normalized);
 }
 
+function isSeedance20VideoModel(modelId: string | null | undefined): boolean {
+  const normalized = String(modelId ?? "")
+    .replace(/[\s._-]/g, "")
+    .toLowerCase();
+  return normalized.includes("seedance20");
+}
+
 function isGrokVideoChannelModel(modelId: string | null | undefined): boolean {
   const normalized = String(modelId ?? "")
     .replace(/[\s._-]/g, "")
@@ -432,6 +439,9 @@ function isVideoModeSupportedByModel(
       mode === "imageReference" ||
       mode === "videoEdit"
     );
+  }
+  if (mode === "allReference") {
+    return isSeedance20VideoModel(modelId);
   }
   return mode !== "videoEdit";
 }
@@ -978,6 +988,20 @@ export const VideoNode = memo(
     // 统一的「图 / 视 / 音」上游引用条目，给 chips 行用。顺序按连接顺序
     // （与 referenceImages 同步），让 chip 编号 1/2/3... 跟可视顺序一致。
     // text 上游不进这一行 —— 上面已经单独渲染了「@文本 chip」。
+    useEffect(() => {
+      if (data.genMode == null) return;
+      if (isVideoModeSupportedByModel(data.genMode, selectedVideoModelId)) return;
+      updateNodeData(id, {
+        genMode: referenceImages.length > 0 ? "imageToVideo" : "textToVideo",
+      });
+    }, [
+      data.genMode,
+      id,
+      referenceImages.length,
+      selectedVideoModelId,
+      updateNodeData,
+    ]);
+
     const referenceMedia = useMemo<ReferenceMediaItem[]>(() => {
       const upstream = sortUpstreamByReferenceOrder(
         upstreamNodes,
@@ -1675,7 +1699,7 @@ export const VideoNode = memo(
     }, [id, processFile]);
 
     // First time an upstream image becomes available, flip the gen mode so the
-    // video actually consumes it. Default to `allReference`（全能参考）—— it
+    // video actually consumes it. Seedance 2.0 defaults to `allReference`（全能参考）—— it
     // accepts 1-9 images and is the more general entry point; the 首尾帧 keyframe
     // workflow stays reachable via the explicit empty-state CTA. Only fires while
     // data.genMode is undefined — once the user picks any tab we respect that.
@@ -1684,8 +1708,19 @@ export const VideoNode = memo(
       if (isHappyHorseModel) return;
       if (data.genMode != null) return;
       if (referenceImages.length === 0) return;
-      updateNodeData(id, { genMode: "allReference" });
-    }, [data.genMode, id, isHappyHorseModel, referenceImages.length, updateNodeData]);
+      updateNodeData(id, {
+        genMode: isSeedance20VideoModel(selectedVideoModelId)
+          ? "allReference"
+          : "imageToVideo",
+      });
+    }, [
+      data.genMode,
+      id,
+      isHappyHorseModel,
+      referenceImages.length,
+      selectedVideoModelId,
+      updateNodeData,
+    ]);
 
     // HappyHorse 的模式完全由上游节点类型决定（文档的 4 大功能一一对应），这里用
     // 一条统一状态机替代分散的兜底 effect，避免多个 effect 互相打架：
@@ -1734,10 +1769,23 @@ export const VideoNode = memo(
     useEffect(() => {
       const prev = prevHasAudioRef.current;
       prevHasAudioRef.current = hasAudioUpstream;
-      if (!prev && hasAudioUpstream && data.genMode !== "allReference" && !isHappyHorseModel) {
+      if (
+        !prev &&
+        hasAudioUpstream &&
+        data.genMode !== "allReference" &&
+        !isHappyHorseModel &&
+        isSeedance20VideoModel(selectedVideoModelId)
+      ) {
         updateNodeData(id, { genMode: "allReference" });
       }
-    }, [data.genMode, hasAudioUpstream, id, isHappyHorseModel, updateNodeData]);
+    }, [
+      data.genMode,
+      hasAudioUpstream,
+      id,
+      isHappyHorseModel,
+      selectedVideoModelId,
+      updateNodeData,
+    ]);
 
     // 上游接入视频素材时，只有「全能参考」能消费视频；其它模式（文生 / 图生 /
     // 首尾帧 / 图片参考）都会把视频丢弃。所以只要上游存在视频就强制切到
@@ -1746,9 +1794,17 @@ export const VideoNode = memo(
     useEffect(() => {
       if (upstreamCounts.videos === 0) return;
       if (isHappyHorseModel) return;
+      if (!isSeedance20VideoModel(selectedVideoModelId)) return;
       if (genMode === "allReference") return;
       updateNodeData(id, { genMode: "allReference" });
-    }, [upstreamCounts.videos, genMode, id, isHappyHorseModel, updateNodeData]);
+    }, [
+      upstreamCounts.videos,
+      genMode,
+      id,
+      isHappyHorseModel,
+      selectedVideoModelId,
+      updateNodeData,
+    ]);
 
     // 文生视频不接受任何素材引用。即便用户先手动选了 textToVideo 再接入
     // 图片/音频（此时上面两个自动切换 effect 都因 genMode 已显式而 bail），
@@ -1758,13 +1814,18 @@ export const VideoNode = memo(
       if (isHappyHorseModel) return;
       if (genMode !== "textToVideo") return;
       if (upstreamCounts.images === 0 && upstreamCounts.audios === 0) return;
-      updateNodeData(id, { genMode: "allReference" });
+      updateNodeData(id, {
+        genMode: isSeedance20VideoModel(selectedVideoModelId)
+          ? "allReference"
+          : "imageToVideo",
+      });
     }, [
       genMode,
       isHappyHorseModel,
       upstreamCounts.images,
       upstreamCounts.audios,
       id,
+      selectedVideoModelId,
       updateNodeData,
     ]);
 
@@ -1776,8 +1837,16 @@ export const VideoNode = memo(
       if (isHappyHorseModel) return;
       if (genMode !== "firstLastFrame") return;
       if (upstreamCounts.images <= 2) return;
+      if (!isSeedance20VideoModel(selectedVideoModelId)) return;
       updateNodeData(id, { genMode: "allReference" });
-    }, [genMode, isHappyHorseModel, upstreamCounts.images, id, updateNodeData]);
+    }, [
+      genMode,
+      isHappyHorseModel,
+      upstreamCounts.images,
+      id,
+      selectedVideoModelId,
+      updateNodeData,
+    ]);
 
     useEffect(
       () => () => {
@@ -3417,6 +3486,9 @@ function videoModeDisabledReason(
       default:
         return "HappyHorse 不支持该模式";
     }
+  }
+  if (mode === "allReference" && !isSeedance20VideoModel(modelId)) {
+    return "全能参考模式仅支持 Seedance 2.0；Wan2.2 请使用图生视频";
   }
   if (upstreamCounts.videos > 0 && mode !== "allReference") {
     return "上游含视频素材时只能用「全能参考」";

@@ -5,6 +5,9 @@ from __future__ import annotations
 import hashlib
 import os
 import subprocess
+import tempfile
+import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -101,7 +104,7 @@ class IndexTTS2FalClient:
     ``INDEXTTS2_PROVIDER=cosyvoice`` uses DashScope CosyVoice voice cloning.
     """
 
-    # Shared cache of enrolled CosyVoice voice IDs keyed by reference audio URL
+    # Shared cache of enrolled CosyVoice voice IDs keyed by reference audio hash.
     _cosyvoice_voice_cache: dict[str, str] = {}
 
     def __init__(
@@ -149,6 +152,8 @@ class IndexTTS2FalClient:
         )
         self._last_provider_request_id = ""
         self._last_provider_response_id = ""
+        self._cosyvoice_verified_voice_ids: set[str] = set()
+        self._cosyvoice_voice_errors: dict[str, str] = {}
 
     async def generate(
         self,
@@ -292,6 +297,7 @@ class IndexTTS2FalClient:
         try:
             import dashscope
             from dashscope.audio.tts_v2 import SpeechSynthesizer, ResultCallback
+            from novelvideo.config import COSYVOICE_BEAT_LANGUAGE
         except ImportError:
             return TTSResult(
                 success=False,
@@ -301,37 +307,11 @@ class IndexTTS2FalClient:
         dashscope.api_key = self.api_key
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # --- Step 1: resolve voice ID ---
-        voice_id = ""
-        preset = getattr(self, "_cosyvoice_preset_voice_id", "")
-        if preset:
-            voice_id = preset
-
-        if not voice_id:
-            voice_id = self._cosyvoice_voice_cache.get(audio_url, "")
-
-        if not voice_id:
-            public_url = await self._resolve_public_audio_url(audio_url)
-            if not public_url:
-                return TTSResult(
-                    success=False,
-                    error="CosyVoice 声音克隆需要公网可访问的参考音频 URL。"
-                    "请配置 CLOUDINARY_RELAY_* 或设置 COSYVOICE_BEAT_VOICE_ID。",
-                )
-            try:
-                voice_id = await self._enroll_cosyvoice_voice(public_url)
-            except Exception as exc:
-                detail = str(exc) or repr(exc)
-                return TTSResult(
-                    success=False,
-                    error=f"CosyVoice 声音注册失败: {detail}",
-                )
-            if not voice_id:
-                return TTSResult(
-                    success=False,
-                    error="CosyVoice 声音注册未返回 voice_id",
-                )
-            self._cosyvoice_voice_cache[audio_url] = voice_id
+        try:
+            voice_id = await self._resolve_cosyvoice_voice_id(audio_url)
+        except Exception as exc:
+            detail = str(exc) or repr(exc)
+            return TTSResult(success=False, error=f"CosyVoice 声音注册失败: {detail}")
 
         # --- Step 2: synthesize speech ---
         import threading
@@ -361,18 +341,30 @@ class IndexTTS2FalClient:
                     self.file.close()
                 self.completed.set()
 
-        callback = _FileCallback(output_path)
+        temp_path = output_path.with_name(
+            f".{output_path.name}.{uuid.uuid4().hex}.tmp"
+        )
+        callback = _FileCallback(temp_path)
         try:
             synthesizer = SpeechSynthesizer(
                 model=self.model,
                 voice=voice_id,
+                language_hints=[COSYVOICE_BEAT_LANGUAGE],
                 callback=callback,
             )
-            synthesizer.call(prompt)
-
             import asyncio
 
             loop = asyncio.get_event_loop()
+            def _synthesize() -> None:
+                if hasattr(synthesizer, "streaming_call") and hasattr(
+                    synthesizer, "streaming_complete"
+                ):
+                    synthesizer.streaming_call(prompt)
+                    synthesizer.streaming_complete(120000)
+                else:  # pragma: no cover - narrow compatibility fallback for test doubles
+                    synthesizer.call(prompt)
+
+            await loop.run_in_executor(None, _synthesize)
             completed = await loop.run_in_executor(
                 None, lambda: callback.completed.wait(timeout=120)
             )
@@ -384,8 +376,10 @@ class IndexTTS2FalClient:
             if callback.error_msg:
                 return TTSResult(success=False, error=f"CosyVoice: {callback.error_msg}")
 
-            if not output_path.exists() or output_path.stat().st_size <= 0:
+            if not temp_path.exists() or temp_path.stat().st_size <= 0:
                 return TTSResult(success=False, error="CosyVoice 未生成音频文件")
+
+            temp_path.replace(output_path)
 
             return TTSResult(
                 success=True,
@@ -397,10 +391,94 @@ class IndexTTS2FalClient:
                 raise
             detail = str(exc) or repr(exc) or exc.__class__.__name__
             return TTSResult(success=False, error=f"CosyVoice: {detail}")
+        finally:
+            if callback.file and not callback.file.closed:
+                callback.file.close()
+            temp_path.unlink(missing_ok=True)
 
     # ------------------------------------------------------------------
     # CosyVoice helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _cosyvoice_audio_cache_key(audio_url: str) -> str:
+        return hashlib.sha256(audio_url.encode("utf-8")).hexdigest()
+
+    async def _resolve_cosyvoice_voice_id(self, audio_url: str) -> str:
+        cache_key = self._cosyvoice_audio_cache_key(audio_url)
+        previous_error = self._cosyvoice_voice_errors.get(cache_key)
+        if previous_error:
+            raise RuntimeError(previous_error)
+
+        preset = str(getattr(self, "_cosyvoice_preset_voice_id", "") or "").strip()
+        if preset:
+            await self._ensure_cosyvoice_voice_ready(preset, wait=True)
+            return preset
+
+        cached = self._cosyvoice_voice_cache.get(cache_key, "")
+        if cached:
+            try:
+                await self._ensure_cosyvoice_voice_ready(cached, wait=True)
+                return cached
+            except Exception:
+                self._cosyvoice_voice_cache.pop(cache_key, None)
+                self._cosyvoice_verified_voice_ids.discard(cached)
+
+        public_url = await self._resolve_public_audio_url(audio_url)
+        if not public_url:
+            raise RuntimeError(
+                "声音克隆需要可访问的参考音频。请检查媒体中转配置。"
+            )
+
+        try:
+            voice_id = await self._enroll_cosyvoice_voice(public_url)
+            if not voice_id:
+                raise RuntimeError("声音注册未返回 voice_id")
+            await self._ensure_cosyvoice_voice_ready(voice_id, wait=True)
+        except Exception as exc:
+            detail = str(exc) or repr(exc)
+            self._cosyvoice_voice_errors[cache_key] = detail
+            raise
+
+        self._cosyvoice_voice_cache[cache_key] = voice_id
+        return voice_id
+
+    async def _ensure_cosyvoice_voice_ready(
+        self,
+        voice_id: str,
+        *,
+        wait: bool = False,
+    ) -> None:
+        if voice_id in self._cosyvoice_verified_voice_ids:
+            return
+
+        import asyncio
+
+        deadline = time.monotonic() + (90.0 if wait else 0.0)
+        while True:
+            status = await self._query_cosyvoice_voice_status(voice_id)
+            if status == "OK":
+                self._cosyvoice_verified_voice_ids.add(voice_id)
+                return
+            if status in {"UNDEPLOYED", "FAILED", "ERROR"}:
+                raise RuntimeError(f"克隆声线状态异常: {status}")
+            if not wait or time.monotonic() >= deadline:
+                raise RuntimeError(f"克隆声线尚未就绪: {status or 'UNKNOWN'}")
+            await asyncio.sleep(2.0)
+
+    async def _query_cosyvoice_voice_status(self, voice_id: str) -> str:
+        def _query() -> str:
+            from dashscope.audio.tts_v2 import VoiceEnrollmentService
+
+            detail = VoiceEnrollmentService().query_voice(voice_id)
+            if not isinstance(detail, dict):
+                return ""
+            return str(detail.get("status") or "").strip().upper()
+
+        import asyncio
+
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(None, _query)
 
     async def _enroll_cosyvoice_voice(self, audio_url: str) -> str:
         """Enroll a new CosyVoice voice from a public audio URL.
@@ -444,8 +522,9 @@ class IndexTTS2FalClient:
             raw_bytes = base64.b64decode(b64_data)
 
             mime = "audio/mpeg"
-            if ";" in header and "mime=" in header:
-                mime = header.split("mime=")[1].split(";")[0]
+            declared_mime = header.removeprefix("data:").split(";", 1)[0].strip()
+            if declared_mime:
+                mime = declared_mime
 
             ext = "mp3"
             if "wav" in mime:
@@ -453,23 +532,106 @@ class IndexTTS2FalClient:
             elif "ogg" in mime:
                 ext = "ogg"
 
-            import cloudinary.uploader
+            raw_bytes = self._prepare_cosyvoice_reference_audio(raw_bytes, ext)
+            ext = "wav"
+
+            # Resolve the same effective settings used by the media relay UI.
+            from novelvideo import config
+            from novelvideo.model_gateway_settings import get_effective_media_relay_config
+
+            relay_config = get_effective_media_relay_config(
+                env_provider=getattr(config, "MEDIA_RELAY_PROVIDER", ""),
+                env_cloud_name=getattr(config, "CLOUDINARY_RELAY_CLOUD_NAME", ""),
+                env_cloudinary_api_key=getattr(config, "CLOUDINARY_RELAY_API_KEY", ""),
+                env_cloudinary_api_secret=getattr(config, "CLOUDINARY_RELAY_API_SECRET", ""),
+                env_cloudinary_folder=getattr(config, "CLOUDINARY_RELAY_FOLDER", ""),
+            )
+            import httpx
 
             def _upload() -> dict:
-                return cloudinary.uploader.upload_raw(
-                    raw_bytes,
-                    resource_type="raw",
-                    folder="dramaclaw/voices",
-                    filename=f"voice_ref_{hashlib.md5(raw_bytes[:1024]).hexdigest()[:8]}.{ext}",
+                filename = (
+                    f"voice_ref_{hashlib.md5(raw_bytes[:1024]).hexdigest()[:8]}.{ext}"
                 )
+                folder = relay_config.cloudinary_folder or "dramaclaw/voices"
+                timestamp = int(time.time())
+                signed_params = {"folder": folder, "timestamp": timestamp}
+                signature_payload = "&".join(
+                    f"{key}={value}"
+                    for key, value in sorted(signed_params.items())
+                    if value is not None and value != ""
+                )
+                signature = hashlib.sha1(
+                    f"{signature_payload}{relay_config.cloudinary_api_secret}".encode(
+                        "utf-8"
+                    )
+                ).hexdigest()
+                url = (
+                    f"https://api.cloudinary.com/v1_1/"
+                    f"{relay_config.cloud_name}/raw/upload"
+                )
+                with httpx.Client(timeout=180.0) as client:
+                    response = client.post(
+                        url,
+                        data={
+                            **signed_params,
+                            "api_key": relay_config.cloudinary_api_key,
+                            "signature": signature,
+                        },
+                        files={
+                            "file": (
+                                filename,
+                                raw_bytes,
+                                "audio/wav",
+                            )
+                        },
+                    )
+                    response.raise_for_status()
+                    return response.json()
 
             import asyncio
 
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(None, _upload)
-            return result.get("secure_url", "")
+            return str(result.get("secure_url") or result.get("url") or "").strip()
         except Exception:
             return ""
+
+    @staticmethod
+    def _prepare_cosyvoice_reference_audio(raw_bytes: bytes, source_ext: str) -> bytes:
+        """Normalize clone input to a short 24 kHz mono PCM WAV."""
+        with tempfile.TemporaryDirectory(prefix="dramaclaw-cosyvoice-") as temp_dir:
+            temp_root = Path(temp_dir)
+            source_path = temp_root / f"reference.{source_ext or 'mp3'}"
+            output_path = temp_root / "normalized.wav"
+            source_path.write_bytes(raw_bytes)
+            completed = subprocess.run(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-v",
+                    "error",
+                    "-i",
+                    str(source_path),
+                    "-t",
+                    "30",
+                    "-ac",
+                    "1",
+                    "-ar",
+                    "24000",
+                    "-c:a",
+                    "pcm_s16le",
+                    str(output_path),
+                ],
+                capture_output=True,
+                text=True,
+            )
+            if completed.returncode != 0 or not output_path.exists():
+                detail = completed.stderr.strip() or "ffmpeg failed"
+                raise RuntimeError(f"参考音频转码失败: {detail}")
+            normalized = output_path.read_bytes()
+            if not normalized:
+                raise RuntimeError("参考音频转码结果为空")
+            return normalized
 
     async def _generate_via_newapi(
         self,

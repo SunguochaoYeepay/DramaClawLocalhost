@@ -189,7 +189,7 @@ async def test_generation_credit_cost_route_resolves_freezone_audio_music(monkey
         monkeypatch,
         model_credits,
         expected_kind="audio",
-        expected_model="LingShan-MU-11",
+        expected_model="suno-5.5",
         expected_params={},
         expected_quantity=30,
         cost=90,

@@ -449,6 +449,23 @@ def _newapi_audio_endpoint(base_url: str | None = None) -> str:
     return endpoint
 
 
+def _ensure_newapi_music_gateway_supported(model: str) -> None:
+    """Reject a DashScope chat-compatible gateway before submitting music."""
+    from novelvideo.config import get_newapi_runtime_credentials
+
+    _api_key, base_url = get_newapi_runtime_credentials()
+    normalized_url = str(base_url or "").strip().lower().rstrip("/")
+    if (
+        "dashscope.aliyuncs.com" in normalized_url
+        and "/compatible-mode" in normalized_url
+    ):
+        raise RuntimeError(
+            f"{model} 音乐生成需要支持 /audio/speech 的 NewAPI 音频网关；"
+            "当前配置的是 DashScope Qwen 兼容接口，它不提供该音乐端点。"
+            "请将 NewAPI 网关切换到已配置 LingShan-MU-11 音乐通道的服务。"
+        )
+
+
 def _audio_mime_type(response_format: str) -> str:
     fmt = str(response_format or "mp3").strip().lower()
     return {
@@ -582,6 +599,78 @@ async def _write_newapi_audio_speech(
         output_path.write_bytes(audio_response.content)
 
 
+def _huimeng_music_model() -> str:
+    from novelvideo.config import HUIMENG_MUSIC_MODEL
+
+    return str(HUIMENG_MUSIC_MODEL or "suno-5.5").strip() or "suno-5.5"
+
+
+def _is_huimeng_music_model(model: str) -> bool:
+    normalized = str(model or "").strip().lower()
+    return normalized == _huimeng_music_model().lower() or normalized.startswith("suno-")
+
+
+async def _write_huimeng_music(
+    *,
+    output_path: Path,
+    model: str,
+    prompt: str,
+    job_id: str,
+) -> None:
+    """Generate music with HuiMeng's async Suno task and download its audio result."""
+    import httpx
+
+    from novelvideo.config import HUIMENGI_API_KEY
+    from novelvideo.generators.huimengi import (
+        HuimengiTaskClient,
+        extract_huimeng_result_url,
+    )
+
+    clean_prompt = str(prompt or "").strip()
+    if len(clean_prompt) > 200:
+        raise ValueError("HuiMeng Suno prompt must be <= 200 characters")
+
+    client = HuimengiTaskClient(api_key=HUIMENGI_API_KEY, timeout=90.0)
+    submitted = await client.submit_task(
+        model=model,
+        params={"prompt": clean_prompt, "customMode": False},
+        idempotency_key=f"freezone-music-{job_id}",
+    )
+    task_id = str(submitted.get("task_id") or "").strip()
+    if not task_id:
+        raise RuntimeError("HuiMeng music submit response missing task_id")
+    task = await client.wait_for_completion(task_id, max_polls=450)
+    result = task.get("result") if isinstance(task.get("result"), dict) else task
+    audio_url = extract_huimeng_result_url(
+        result,
+        "audio_url",
+        "audio_urls",
+        "music_url",
+        "music_urls",
+        "url",
+        "urls",
+    )
+    if not audio_url or audio_url.startswith("data:"):
+        raise RuntimeError("HuiMeng music task completed without a downloadable audio URL")
+
+    async with httpx.AsyncClient(timeout=180.0, follow_redirects=True) as downloader:
+        response = await downloader.get(audio_url)
+        response.raise_for_status()
+    content = response.content
+    content_type = str(response.headers.get("content-type") or "").lower()
+    if not content:
+        raise RuntimeError("HuiMeng music download was empty")
+    if content_type.startswith("text/") or "json" in content_type or content.lstrip().startswith(
+        (b"{", b"[")
+    ):
+        raise RuntimeError(
+            "HuiMeng music download was not audio "
+            f"(content-type={content_type or 'unknown'})"
+        )
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_bytes(content)
+
+
 async def generate_freezone_audio_eleven_music(
     *,
     project_dir: Path,
@@ -592,9 +681,9 @@ async def generate_freezone_audio_eleven_music(
     respect_sections_durations: bool = True,
     output_format: str = "mp3_44100_128",
     response_format: str = "mp3",
-    model: str = "LingShan-MU-11",
+    model: str | None = None,
 ) -> FreezoneAudioSpeechResult:
-    """Generate standalone Freezone music through NewAPI's audio/speech endpoint."""
+    """Generate Freezone music through HuiMeng Suno or an explicit NewAPI model."""
     clean_prompt = str(prompt or "").strip()
     if not clean_prompt:
         raise ValueError("prompt is required")
@@ -614,7 +703,7 @@ async def generate_freezone_audio_eleven_music(
         "output_format": str(output_format or "mp3_44100_128").strip() or "mp3_44100_128",
     }
 
-    model_name = str(model or "LingShan-MU-11").strip() or "LingShan-MU-11"
+    model_name = str(model or _huimeng_music_model()).strip() or _huimeng_music_model()
     reservation_id = ""
     try:
         reservation_id = await _reserve_music_model_call(
@@ -622,16 +711,25 @@ async def generate_freezone_audio_eleven_music(
             music_length_ms=length,
             source="freezone_audio_music",
         )
-        await _write_newapi_audio_speech(
-            output_path=output_path,
-            model=model_name,
-            input_text=clean_prompt,
-            response_format=fmt,
-            metadata=metadata,
-            timeout_seconds=900.0,
-        )
+        if _is_huimeng_music_model(model_name):
+            await _write_huimeng_music(
+                output_path=output_path,
+                model=model_name,
+                prompt=clean_prompt,
+                job_id=job_id,
+            )
+        else:
+            _ensure_newapi_music_gateway_supported(model_name)
+            await _write_newapi_audio_speech(
+                output_path=output_path,
+                model=model_name,
+                input_text=clean_prompt,
+                response_format=fmt,
+                metadata=metadata,
+                timeout_seconds=900.0,
+            )
         if not output_path.exists() or output_path.stat().st_size <= 0:
-            raise RuntimeError("NewAPI music audio file was not created")
+            raise RuntimeError("music audio file was not created")
         await _confirm_music_model_call(model=model_name, reservation_id=reservation_id)
     except Exception as exc:
         await _refund_music_model_call(
