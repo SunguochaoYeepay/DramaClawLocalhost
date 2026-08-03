@@ -1,6 +1,6 @@
 import copy
 
-from novelvideo.generators.video_generator import ComfyUIVideoGenerator
+from novelvideo.generators.video_generator import ComfyUIVideoGenerator, create_video_generator
 
 
 def test_wan_dimensions_use_requested_portrait_ratio():
@@ -79,3 +79,22 @@ def test_ltx23_workflow_dimensions_follow_the_requested_canvas():
 
     assert workflow["167:102"]["inputs"]["resize_type.width"] == 1088
     assert workflow["167:102"]["inputs"]["resize_type.height"] == 1920
+
+
+def test_minimax_h3_workflow_is_registered_with_first_and_last_frame_inputs():
+    from novelvideo.api.routes.generation import _api_video_backend_options
+
+    generator = ComfyUIVideoGenerator(workflow_type="minimax_h3")
+    workflow = copy.deepcopy(generator._workflow_templates["minimax_h3"])
+
+    generator._apply_minimax_h3_dimensions(workflow, "3:4")
+
+    assert workflow["105:104"]["class_type"] == "MiniMaxH3ImageToVideo"
+    assert workflow["105:104"]["inputs"]["first_frame"] == ["114", 0]
+    assert workflow["105:104"]["inputs"]["last_frame"] == ["121", 0]
+    assert workflow["115"]["inputs"]["aspect_ratio"] == "3:4 (Portrait Standard)"
+    assert create_video_generator("minimax_h3").workflow_type == "minimax_h3"
+    backend = next(option for option in _api_video_backend_options() if option.value == "minimax_h3")
+    assert backend.supported_modes == ["first_frame", "first_last_frame"]
+    assert backend.min_duration == 5
+    assert backend.max_duration == 15

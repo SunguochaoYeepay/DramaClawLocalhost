@@ -131,6 +131,7 @@ class VideoBackend(Enum):
     LTX23 = "ltx23"  # Lightricks LTX-Video 2.3 22B
     LTX23_DIRECTOR = "ltx23_director"  # LTX 2.3 Director 工作流
     LTX23_DIRECTOR_FAST = "ltx23_director_fast"  # LTX 2.3 Director 性能工作流
+    MINIMAX_H3 = "minimax_h3"  # MiniMax H3 本地 ComfyUI
     GROK_720 = "grok_720"  # xAI Grok Imagine Video 720p
 
 
@@ -2772,6 +2773,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
     FP8_FLF_WORKFLOW_PATH = Path(__file__).parent / "wan2-2-FLF-LightX2V.json"
     LTX23_I2V_WORKFLOW_PATH = Path(__file__).parent / "ltx2-3-I2V.json"
     LTX23_DIRECTOR_WORKFLOW_PATH = Path(__file__).parent / "ltx2-3-director.json"
+    MINIMAX_H3_I2V_WORKFLOW_PATH = Path(__file__).parent / "minimax-h3-I2V.json"
 
     # 节点映射配置（不同工作流的节点 ID）
     NODE_MAPPING = {
@@ -2819,6 +2821,15 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             "director": "46",
             "seed": "28",
             "video_output": "30",
+        },
+        "minimax_h3": {
+            "first_image": "114",
+            "last_image": "121",
+            "dimensions": "115",
+            "duration": "105:111",
+            "positive_prompt": "105:104",
+            "seed": "105:15",
+            "video_output": "92",
         },
     }
 
@@ -2911,6 +2922,19 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         inputs["resize_type.height"] = height
         return width, height
 
+    def _apply_minimax_h3_dimensions(self, workflow: dict, aspect_ratio: str) -> None:
+        ratio_names = {
+            "16:9": "16:9 (Widescreen)",
+            "9:16": "9:16 (Portrait Widescreen)",
+            "1:1": "1:1 (Square)",
+            "4:3": "4:3 (Standard)",
+            "3:4": "3:4 (Portrait Standard)",
+            "21:9": "21:9 (Ultrawide)",
+        }
+        workflow[self.NODE_MAPPING["minimax_h3"]["dimensions"]]["inputs"]["aspect_ratio"] = ratio_names.get(
+            aspect_ratio, "16:9 (Widescreen)"
+        )
+
     @staticmethod
     def _apply_director_fast_profile(workflow: dict) -> None:
         """Use the local FP8 distilled model and skip the high-resolution pass."""
@@ -2985,6 +3009,8 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             workflow_path = self.FP8_I2V_WORKFLOW_PATH
         elif self.workflow_type in {"ltx23", "ltx23_director", "ltx23_director_fast"}:
             workflow_path = self.LTX23_I2V_WORKFLOW_PATH
+        elif self.workflow_type == "minimax_h3":
+            workflow_path = self.MINIMAX_H3_I2V_WORKFLOW_PATH
         else:
             workflow_path = self.GGUF_WORKFLOW_PATH
 
@@ -2996,6 +3022,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             ("fp8_flf", self.FP8_FLF_WORKFLOW_PATH),
             ("ltx23", self.LTX23_I2V_WORKFLOW_PATH),
             ("ltx23_director", self.LTX23_DIRECTOR_WORKFLOW_PATH),
+            ("minimax_h3", self.MINIMAX_H3_I2V_WORKFLOW_PATH),
         ]:
             if path.exists():
                 with open(path, "r", encoding="utf-8") as f:
@@ -3006,6 +3033,8 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             self._workflow_template = self._workflow_templates.get("ltx23")
         elif self.workflow_type in {"ltx23_director", "ltx23_director_fast"}:
             self._workflow_template = self._workflow_templates.get("ltx23_director")
+        elif self.workflow_type == "minimax_h3":
+            self._workflow_template = self._workflow_templates.get("minimax_h3")
         else:
             self._workflow_template = self._workflow_templates.get(
                 "fp8_i2v" if self.workflow_type == "fp8" else "gguf"
@@ -3134,12 +3163,16 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             "ltx23_director",
             "ltx23_director_fast",
         }
-        use_flf_mode = last_frame_path is not None and not is_ltx23_director
+        is_minimax_h3 = self.workflow_type == "minimax_h3"
+        use_flf_mode = last_frame_path is not None and not is_ltx23_director and not is_minimax_h3
 
         # 选择工作流
         if use_flf_mode:
             workflow_key = "fp8_flf"
             mode_desc = "FLF (首尾帧过渡)"
+        elif is_minimax_h3:
+            workflow_key = "minimax_h3"
+            mode_desc = "MiniMax H3 First/Last Frame" if last_frame_path else "MiniMax H3 I2V"
         elif self.workflow_type in {"ltx23", "ltx23_director", "ltx23_director_fast"}:
             workflow_key = "ltx23"
             mode_desc = "LTX 2.3 I2V"
@@ -3166,6 +3199,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 "fp8_flf": self.FP8_FLF_WORKFLOW_PATH,
                 "ltx23": self.LTX23_I2V_WORKFLOW_PATH,
                 "ltx23_director": self.LTX23_DIRECTOR_WORKFLOW_PATH,
+                "minimax_h3": self.MINIMAX_H3_I2V_WORKFLOW_PATH,
             }.get(workflow_key, "unknown")
             return VideoGenResult(
                 status=VideoGenStatus.FAILED,
@@ -3183,7 +3217,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             )
 
         # 检查尾帧图片（FLF 模式）
-        if use_flf_mode and not os.path.exists(last_frame_path):
+        if (use_flf_mode or (is_minimax_h3 and last_frame_path)) and not os.path.exists(last_frame_path):
             return VideoGenResult(
                 status=VideoGenStatus.FAILED,
                 error=f"尾帧图片不存在: {last_frame_path}",
@@ -3191,7 +3225,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
 
         client_id = str(uuid.uuid4())
         first_image_filename = f"first_{client_id}.png"
-        last_image_filename = f"last_{client_id}.png" if use_flf_mode else None
+        last_image_filename = f"last_{client_id}.png" if (use_flf_mode or (is_minimax_h3 and last_frame_path)) else None
         director_refs = []
         director_ref_paths = {os.path.abspath(image_path)}
         for ref in kwargs.get("references") or []:
@@ -3243,7 +3277,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                     log(f"参考图已上传: {filename}")
 
             # FLF 模式：上传尾帧
-            if use_flf_mode:
+            if use_flf_mode or (is_minimax_h3 and last_frame_path):
                 with open(last_frame_path, "rb") as f:
                     last_image_bytes = f.read()
                 await self._upload_image(last_image_bytes, last_image_filename)
@@ -3265,6 +3299,9 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 )
                 log(f"画布: {wan_width}x{wan_height}")
 
+            if workflow_key == "minimax_h3":
+                self._apply_minimax_h3_dimensions(workflow, aspect_ratio)
+
             # 设置输入图片（根据工作流类型）
             if workflow_key == "ltx23":
                 ltx_width, ltx_height = self._apply_ltx23_dimensions(workflow, aspect_ratio)
@@ -3274,6 +3311,13 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 # FLF 模式：设置首尾帧
                 workflow[node_map["first_image"]]["inputs"]["image"] = first_image_filename
                 workflow[node_map["last_image"]]["inputs"]["image"] = last_image_filename
+            elif workflow_key == "minimax_h3":
+                workflow[node_map["first_image"]]["inputs"]["image"] = first_image_filename
+                workflow[node_map["duration"]]["inputs"]["value"] = min(15, max(5, float(duration)))
+                if last_image_filename:
+                    workflow[node_map["last_image"]]["inputs"]["image"] = last_image_filename
+                else:
+                    workflow[node_map["positive_prompt"]]["inputs"].pop("last_frame", None)
             elif workflow_key == "ltx23":
                 # LTX 2.3 I2V 模式
                 workflow[node_map["input_image"]]["inputs"]["image"] = first_image_filename
@@ -3410,7 +3454,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 log(f"帧数: {frames} (duration={duration}s, fps={self.FPS})")
 
             # 设置提示词（LTX23 用 "prompt" 字段，其余用 "text"）
-            if workflow_key == "ltx23":
+            if workflow_key in {"ltx23", "minimax_h3"}:
                 workflow[node_map["positive_prompt"]]["inputs"]["prompt"] = prompt or ""
             elif workflow_key != "ltx23_director":
                 workflow[node_map["positive_prompt"]]["inputs"]["text"] = prompt or ""
@@ -4143,6 +4187,8 @@ def create_video_generator(
         return ComfyUIVideoGenerator(workflow_type="ltx23_director", **kwargs)
     elif backend_enum == VideoBackend.LTX23_DIRECTOR_FAST:
         return ComfyUIVideoGenerator(workflow_type="ltx23_director_fast", **kwargs)
+    elif backend_enum == VideoBackend.MINIMAX_H3:
+        return ComfyUIVideoGenerator(workflow_type="minimax_h3", **kwargs)
     elif backend_enum == VideoBackend.WAN26:
         return Wan26VideoGenerator(**kwargs)
     elif backend_enum == VideoBackend.GROK_720:

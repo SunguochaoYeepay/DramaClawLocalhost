@@ -209,7 +209,7 @@ def _video_backend_cost_model(backend: str) -> str:
         from novelvideo.generators.video_generator import GrokVideoGenerator
 
         return GrokVideoGenerator.MODEL
-    if backend_enum in {VideoBackend.COMFYUI, VideoBackend.LTX23}:
+    if backend_enum in {VideoBackend.COMFYUI, VideoBackend.LTX23, VideoBackend.MINIMAX_H3}:
         # 本地 ComfyUI 不消耗 API 额度
         return ""
 
@@ -398,6 +398,7 @@ async def get_generation_credit_cost(
             "ltx23",
             "ltx23_director",
             "ltx23_director_fast",
+            "minimax_h3",
         }:
             return {"ok": True, "data": {"cost": 0, "display": "0"}}
         raise HTTPException(status_code=400, detail="generation model is not configured")

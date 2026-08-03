@@ -641,6 +641,7 @@ LOCAL_DYNAMIC_CANVAS_BACKENDS = {
     "ltx23",
     "ltx23_director",
     "ltx23_director_fast",
+    "minimax_h3",
 }
 
 
@@ -1638,6 +1639,20 @@ def _api_video_backend_options() -> list[VideoBackendOption]:
             reference_audio_max=0,
         ),
         VideoBackendOption(
+            value="minimax_h3",
+            label="MiniMax H3 (本地 ComfyUI)",
+            is_default="minimax_h3" == default_backend,
+            dialogue_only=False,
+            min_duration=5,
+            max_duration=15,
+            resolution_options=None,
+            ratio_options=None,
+            supported_modes=["first_frame", "first_last_frame"],
+            reference_image_max=1,
+            reference_video_max=0,
+            reference_audio_max=0,
+        ),
+        VideoBackendOption(
             value="ltx23",
             label="LTX 2.3 22B (本地 ComfyUI)",
             is_default="ltx23" == default_backend,
@@ -1687,6 +1702,8 @@ def _api_video_backend_options() -> list[VideoBackendOption]:
             option.ratio_options = list(LOCAL_WAN_RATIO_OPTIONS)
         elif option.value in {"ltx23", "ltx23_director", "ltx23_director_fast"}:
             option.resolution_options = list(LOCAL_LTX_RESOLUTION_OPTIONS)
+            option.ratio_options = list(LOCAL_WAN_RATIO_OPTIONS)
+        elif option.value == "minimax_h3":
             option.ratio_options = list(LOCAL_WAN_RATIO_OPTIONS)
 
     return backend_options

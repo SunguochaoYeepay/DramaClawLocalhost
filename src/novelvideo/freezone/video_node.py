@@ -339,6 +339,13 @@ def get_freezone_video_model_options() -> list[dict[str, Any]]:
             10,
         ),
         (
+            "minimax_h3",
+            "MiniMax H3 (本地 ComfyUI)",
+            "minimax_h3",
+            5,
+            15,
+        ),
+        (
             "ltx23",
             "LTX 2.3 22B (本地 ComfyUI)",
             "ltx23",
@@ -426,6 +433,7 @@ def resolve_freezone_video_backend(model: str | None) -> str:
         "ltx23",
         "ltx23_director",
         "ltx23_director_fast",
+        "minimax_h3",
     }
     if text in LOCAL_COMFYUI_VIDEO_BACKENDS:
         return text

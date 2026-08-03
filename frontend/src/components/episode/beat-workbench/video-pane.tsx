@@ -373,7 +373,8 @@ export function VideoPane({
     defaultBackend === "comfyui" ||
     defaultBackend === "ltx23" ||
     defaultBackend === "ltx23_director" ||
-    defaultBackend === "ltx23_director_fast";
+    defaultBackend === "ltx23_director_fast" ||
+    defaultBackend === "minimax_h3";
   const isDynamicCanvasComfyBackend = isComfyUILocalBackend;
   const isLtxDirectorBackend =
     defaultBackend === "ltx23_director" || defaultBackend === "ltx23_director_fast";
