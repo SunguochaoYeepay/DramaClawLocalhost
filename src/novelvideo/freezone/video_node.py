@@ -467,6 +467,10 @@ def is_freezone_ltx_director_backend(backend: str | None) -> bool:
     }
 
 
+def is_freezone_minimax_h3_backend(backend: str | None) -> bool:
+    return str(backend or "").strip() == "minimax_h3"
+
+
 def _coarse_mark_region(mark: dict[str, Any]) -> str:
     px = mark.get("point_x")
     py = mark.get("point_y")

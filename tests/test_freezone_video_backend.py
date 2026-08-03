@@ -24,6 +24,7 @@ from novelvideo.freezone.video_node import (
     get_video_camera_template,
     is_freezone_happyhorse_backend,
     is_freezone_ltx_director_backend,
+    is_freezone_minimax_h3_backend,
     is_freezone_seedance2_backend,
     load_video_character_library,
     normalize_video_aspect_ratio,
@@ -209,6 +210,11 @@ def test_ltx_director_backends_are_identified_for_multi_image_timeline_input() -
     assert is_freezone_ltx_director_backend("ltx23_director_fast") is True
     assert is_freezone_ltx_director_backend("ltx23") is False
     assert is_freezone_ltx_director_backend("comfyui") is False
+
+
+def test_minimax_h3_backend_is_identified_for_multi_image_reference_input() -> None:
+    assert is_freezone_minimax_h3_backend("minimax_h3") is True
+    assert is_freezone_minimax_h3_backend("ltx23_director") is False
 
 
 def test_seedance2_backend_detection_accepts_newapi_and_legacy_values() -> None:

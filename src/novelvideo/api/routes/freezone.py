@@ -227,6 +227,7 @@ from novelvideo.freezone.video_node import (
     get_video_camera_templates,
     is_freezone_happyhorse_backend,
     is_freezone_ltx_director_backend,
+    is_freezone_minimax_h3_backend,
     is_freezone_seedance2_backend,
     load_video_character_library,
     sync_mainline_assets_into_library,
@@ -6968,10 +6969,11 @@ async def freezone_video_i2v(
         and not is_freezone_seedance2_backend(backend)
         and not is_freezone_happyhorse_backend(backend)
         and not is_freezone_ltx_director_backend(backend)
+        and not is_freezone_minimax_h3_backend(backend)
     ):
         raise HTTPException(
             400,
-            "multiple image references currently only support Seedance 2.0, HappyHorse, or LTX 2.3 Director models",
+            "multiple image references currently only support Seedance 2.0, HappyHorse, LTX 2.3 Director, or MiniMax H3 models",
         )
 
     # HappyHorse 的「图片参考」(r2v) 与「图生视频」(首帧 i2v) 是两种上游模式，
