@@ -6,6 +6,7 @@
 import asyncio
 import json
 import math
+import mimetypes
 import os
 import random
 import re
@@ -3053,12 +3054,30 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         self, image_bytes: bytes, filename: str, max_retries: int = 3
     ) -> dict:
         """上传图片到 ComfyUI input 文件夹，容忍隧道瞬时断线。"""
+        return await self._upload_file(
+            image_bytes, filename, content_type="image/png", max_retries=max_retries
+        )
+
+    async def _upload_file(
+        self,
+        content: bytes,
+        filename: str,
+        *,
+        content_type: str | None = None,
+        max_retries: int = 3,
+    ) -> dict:
+        """Upload a reference asset to ComfyUI's input directory."""
         for attempt in range(1, max_retries + 1):
             try:
                 async with aiohttp.ClientSession() as session:
                     data = aiohttp.FormData()
                     data.add_field(
-                        "image", image_bytes, filename=filename, content_type="image/png"
+                        "image",
+                        content,
+                        filename=filename,
+                        content_type=content_type
+                        or mimetypes.guess_type(filename)[0]
+                        or "application/octet-stream",
                     )
                     async with session.post(
                         f"{self.http_url}/upload/image",
@@ -3173,21 +3192,30 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             "ltx23_director_fast",
         }
         is_minimax_h3 = self.workflow_type == "minimax_h3"
-        h3_reference_paths: list[str] = []
+        h3_image_references: list[str] = []
+        h3_video_references: list[str] = []
+        h3_audio_references: list[str] = []
         if is_minimax_h3 and not last_frame_path:
-            seen_h3_reference_paths = {os.path.abspath(image_path)}
+            seen_h3_image_paths = {os.path.abspath(image_path)} if image_path else set()
             for ref in kwargs.get("references") or []:
                 ref_path = getattr(ref, "path", None)
-                if getattr(ref, "type", "image") != "image" or not ref_path:
+                ref_type = getattr(ref, "type", "image")
+                if not ref_path:
                     continue
-                normalized_path = os.path.abspath(ref_path)
-                if normalized_path in seen_h3_reference_paths:
-                    continue
-                seen_h3_reference_paths.add(normalized_path)
-                h3_reference_paths.append(ref_path)
-                if len(h3_reference_paths) >= 8:
-                    break
-        use_h3_reference_mode = bool(h3_reference_paths)
+                if ref_type == "image":
+                    normalized_path = os.path.abspath(ref_path)
+                    if normalized_path in seen_h3_image_paths or len(h3_image_references) >= 8:
+                        continue
+                    seen_h3_image_paths.add(normalized_path)
+                    h3_image_references.append(ref_path)
+                elif ref_type == "video" and len(h3_video_references) < 3:
+                    h3_video_references.append(ref_path)
+                elif ref_type == "audio" and len(h3_audio_references) < 3:
+                    h3_audio_references.append(ref_path)
+        h3_reference_image_paths = ([image_path] if image_path else []) + h3_image_references
+        use_h3_reference_mode = bool(
+            h3_reference_image_paths or h3_video_references or h3_audio_references
+        )
         use_flf_mode = last_frame_path is not None and not is_ltx23_director and not is_minimax_h3
 
         # 选择工作流
@@ -3240,11 +3268,16 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         # 获取节点映射
         node_map = self.NODE_MAPPING.get(workflow_key, {})
 
-        # 检查首帧图片
-        if not os.path.exists(image_path):
+        # H3 ReferenceToVideo can generate from video/audio references alone.
+        if image_path and not os.path.exists(image_path):
             return VideoGenResult(
                 status=VideoGenStatus.FAILED,
                 error=f"首帧图片不存在: {image_path}",
+            )
+        if not image_path and workflow_key != "minimax_h3_r2v":
+            return VideoGenResult(
+                status=VideoGenStatus.FAILED,
+                error="该视频工作流需要首帧图片",
             )
 
         # 检查尾帧图片（FLF 模式）
@@ -3255,10 +3288,10 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             )
 
         client_id = str(uuid.uuid4())
-        first_image_filename = f"first_{client_id}.png"
+        first_image_filename = f"first_{client_id}.png" if image_path else None
         last_image_filename = f"last_{client_id}.png" if (use_flf_mode or (is_minimax_h3 and last_frame_path)) else None
         director_refs = []
-        director_ref_paths = {os.path.abspath(image_path)}
+        director_ref_paths = {os.path.abspath(image_path)} if image_path else set()
         for ref in kwargs.get("references") or []:
             ref_path = getattr(ref, "path", None)
             if getattr(ref, "type", "image") != "image" or not ref_path:
@@ -3280,8 +3313,17 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         director_reference_filenames = [first_image_filename] + [
             f"ref_{client_id}_{index}.png" for index, _ in enumerate(director_refs, 1)
         ]
-        h3_reference_filenames = [first_image_filename] + [
-            f"h3_ref_{client_id}_{index}.png" for index, _ in enumerate(h3_reference_paths, 1)
+        h3_image_filenames = [
+            f"h3_image_{client_id}_{index}{Path(path).suffix or '.png'}"
+            for index, path in enumerate(h3_reference_image_paths, 1)
+        ]
+        h3_video_filenames = [
+            f"h3_video_{client_id}_{index}{Path(path).suffix or '.mp4'}"
+            for index, path in enumerate(h3_video_references, 1)
+        ]
+        h3_audio_filenames = [
+            f"h3_audio_{client_id}_{index}{Path(path).suffix or '.wav'}"
+            for index, path in enumerate(h3_audio_references, 1)
         ]
 
         # FLF 模式固定帧数
@@ -3299,21 +3341,30 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
 
         try:
             # 1. 读取并上传图片
-            log("上传图片到 ComfyUI...")
-            with open(image_path, "rb") as f:
-                first_image_bytes = f.read()
-            await self._upload_image(first_image_bytes, first_image_filename)
-            log(f"首帧已上传: {first_image_filename}")
+            if image_path and workflow_key != "minimax_h3_r2v":
+                log("上传图片到 ComfyUI...")
+                with open(image_path, "rb") as f:
+                    first_image_bytes = f.read()
+                await self._upload_image(first_image_bytes, first_image_filename)
+                log(f"首帧已上传: {first_image_filename}")
             if workflow_key == "ltx23_director":
                 for ref, filename in zip(director_refs, director_reference_filenames[1:]):
                     with open(ref.path, "rb") as f:
                         await self._upload_image(f.read(), filename)
                     log(f"参考图已上传: {filename}")
             elif workflow_key == "minimax_h3_r2v":
-                for path, filename in zip(h3_reference_paths, h3_reference_filenames[1:]):
+                for path, filename in zip(h3_reference_image_paths, h3_image_filenames):
                     with open(path, "rb") as f:
                         await self._upload_image(f.read(), filename)
                     log(f"H3 参考图已上传: {filename}")
+                for path, filename in zip(h3_video_references, h3_video_filenames):
+                    with open(path, "rb") as f:
+                        await self._upload_file(f.read(), filename)
+                    log(f"H3 参考视频已上传: {filename}")
+                for path, filename in zip(h3_audio_references, h3_audio_filenames):
+                    with open(path, "rb") as f:
+                        await self._upload_file(f.read(), filename)
+                    log(f"H3 参考音频已上传: {filename}")
 
             # FLF 模式：上传尾帧
             if use_flf_mode or (is_minimax_h3 and last_frame_path):
@@ -3361,9 +3412,14 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 r2v_inputs = workflow[node_map["positive_prompt"]]["inputs"]
                 r2v_inputs["ref_image_size"] = "match"
                 for key in list(r2v_inputs):
-                    if key.startswith("ref_images.ref_image_"):
+                    if key.startswith((
+                        "ref_images.ref_image_",
+                        "ref_videos.ref_video_",
+                        "ref_video_audios.ref_video_audio_",
+                        "ref_audios.ref_audio_",
+                    )):
                         del r2v_inputs[key]
-                for index, filename in enumerate(h3_reference_filenames):
+                for index, filename in enumerate(h3_image_filenames):
                     node_id = f"h3_reference_image_{index}"
                     workflow[node_id] = {
                         "inputs": {"image": filename},
@@ -3371,6 +3427,31 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                         "_meta": {"title": f"H3 Reference {index + 1}"},
                     }
                     r2v_inputs[f"ref_images.ref_image_{index}"] = [node_id, 0]
+                for index, filename in enumerate(h3_video_filenames):
+                    node_id = f"h3_reference_video_{index}"
+                    workflow[node_id] = {
+                        "inputs": {
+                            "video": filename,
+                            "force_rate": 24,
+                            "custom_width": 0,
+                            "custom_height": 0,
+                            "frame_load_cap": 360,
+                            "skip_first_frames": 0,
+                            "select_every_nth": 1,
+                        },
+                        "class_type": "VHS_LoadVideo",
+                        "_meta": {"title": f"H3 Video Reference {index + 1}"},
+                    }
+                    r2v_inputs[f"ref_videos.ref_video_{index}"] = [node_id, 0]
+                    r2v_inputs[f"ref_video_audios.ref_video_audio_{index}"] = [node_id, 2]
+                for index, filename in enumerate(h3_audio_filenames):
+                    node_id = f"h3_reference_audio_{index}"
+                    workflow[node_id] = {
+                        "inputs": {"audio": filename, "start_time": 0, "duration": 0},
+                        "class_type": "VHS_LoadAudioUpload",
+                        "_meta": {"title": f"H3 Audio Reference {index + 1}"},
+                    }
+                    r2v_inputs[f"ref_audios.ref_audio_{index}"] = [node_id, 0]
                 workflow[node_map["duration"]]["inputs"]["value"] = min(15, max(5, float(duration)))
             elif workflow_key == "ltx23":
                 # LTX 2.3 I2V 模式
@@ -3511,14 +3592,33 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             if workflow_key in {"ltx23", "minimax_h3"}:
                 workflow[node_map["positive_prompt"]]["inputs"]["prompt"] = prompt or ""
             elif workflow_key == "minimax_h3_r2v":
-                picture_tags = ", ".join(
-                    f"<Picture {index}>" for index in range(1, len(h3_reference_filenames) + 1)
-                )
+                reference_instructions = []
+                if h3_image_filenames:
+                    picture_tags = ", ".join(
+                        f"<Picture {index}>" for index in range(1, len(h3_image_filenames) + 1)
+                    )
+                    reference_instructions.append(
+                        f"Use {picture_tags} as visual references. Keep their identities and visual details consistent."
+                    )
+                if h3_video_filenames:
+                    video_tags = ", ".join(
+                        f"<Video {index}>" for index in range(1, len(h3_video_filenames) + 1)
+                    )
+                    reference_instructions.append(
+                        f"Use {video_tags} as motion and camera references."
+                    )
+                if h3_audio_filenames:
+                    audio_tags = ", ".join(
+                        f"<Audio {index}>" for index in range(1, len(h3_audio_filenames) + 1)
+                    )
+                    reference_instructions.append(
+                        f"Use {audio_tags} as audio references."
+                    )
                 h3_prompt = "\n".join(
                     part
                     for part in (
                         prompt or "",
-                        f"Use {picture_tags} as visual references. Keep their identities and visual details consistent.",
+                        *reference_instructions,
                     )
                     if part
                 )

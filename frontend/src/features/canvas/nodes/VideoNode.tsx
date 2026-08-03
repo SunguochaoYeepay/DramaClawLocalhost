@@ -411,6 +411,17 @@ function isSeedance20VideoModel(modelId: string | null | undefined): boolean {
   return normalized.includes("seedance20");
 }
 
+function isMiniMaxH3VideoModel(modelId: string | null | undefined): boolean {
+  const normalized = String(modelId ?? "")
+    .replace(/[\s._-]/g, "")
+    .toLowerCase();
+  return normalized.includes("minimaxh3");
+}
+
+function supportsOmniReferenceVideoModel(modelId: string | null | undefined): boolean {
+  return isSeedance20VideoModel(modelId) || isMiniMaxH3VideoModel(modelId);
+}
+
 function isGrokVideoChannelModel(modelId: string | null | undefined): boolean {
   const normalized = String(modelId ?? "")
     .replace(/[\s._-]/g, "")
@@ -441,7 +452,7 @@ function isVideoModeSupportedByModel(
     );
   }
   if (mode === "allReference") {
-    return isSeedance20VideoModel(modelId);
+    return supportsOmniReferenceVideoModel(modelId);
   }
   return mode !== "videoEdit";
 }
@@ -1709,7 +1720,7 @@ export const VideoNode = memo(
       if (data.genMode != null) return;
       if (referenceImages.length === 0) return;
       updateNodeData(id, {
-        genMode: isSeedance20VideoModel(selectedVideoModelId)
+        genMode: supportsOmniReferenceVideoModel(selectedVideoModelId)
           ? "allReference"
           : "imageToVideo",
       });
@@ -1774,7 +1785,7 @@ export const VideoNode = memo(
         hasAudioUpstream &&
         data.genMode !== "allReference" &&
         !isHappyHorseModel &&
-        isSeedance20VideoModel(selectedVideoModelId)
+        supportsOmniReferenceVideoModel(selectedVideoModelId)
       ) {
         updateNodeData(id, { genMode: "allReference" });
       }
@@ -1794,7 +1805,7 @@ export const VideoNode = memo(
     useEffect(() => {
       if (upstreamCounts.videos === 0) return;
       if (isHappyHorseModel) return;
-      if (!isSeedance20VideoModel(selectedVideoModelId)) return;
+      if (!supportsOmniReferenceVideoModel(selectedVideoModelId)) return;
       if (genMode === "allReference") return;
       updateNodeData(id, { genMode: "allReference" });
     }, [
@@ -1815,7 +1826,7 @@ export const VideoNode = memo(
       if (genMode !== "textToVideo") return;
       if (upstreamCounts.images === 0 && upstreamCounts.audios === 0) return;
       updateNodeData(id, {
-        genMode: isSeedance20VideoModel(selectedVideoModelId)
+        genMode: supportsOmniReferenceVideoModel(selectedVideoModelId)
           ? "allReference"
           : "imageToVideo",
       });
@@ -1837,7 +1848,7 @@ export const VideoNode = memo(
       if (isHappyHorseModel) return;
       if (genMode !== "firstLastFrame") return;
       if (upstreamCounts.images <= 2) return;
-      if (!isSeedance20VideoModel(selectedVideoModelId)) return;
+      if (!supportsOmniReferenceVideoModel(selectedVideoModelId)) return;
       updateNodeData(id, { genMode: "allReference" });
     }, [
       genMode,
@@ -3487,8 +3498,8 @@ function videoModeDisabledReason(
         return "HappyHorse 不支持该模式";
     }
   }
-  if (mode === "allReference" && !isSeedance20VideoModel(modelId)) {
-    return "全能参考模式仅支持 Seedance 2.0；Wan2.2 请使用图生视频";
+  if (mode === "allReference" && !supportsOmniReferenceVideoModel(modelId)) {
+    return "全能参考模式仅支持 Seedance 2.0 或 MiniMax H3；Wan2.2 请使用图生视频";
   }
   if (upstreamCounts.videos > 0 && mode !== "allReference") {
     return "上游含视频素材时只能用「全能参考」";

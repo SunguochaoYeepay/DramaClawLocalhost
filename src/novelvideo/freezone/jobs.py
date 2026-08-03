@@ -1267,7 +1267,10 @@ async def run_freezone_video_gen(
         for item in (reference_items or [])
         if str(item.get("path") or "").strip()
     ]
-    from novelvideo.freezone.video_node import is_freezone_seedance2_backend
+    from novelvideo.freezone.video_node import (
+        is_freezone_minimax_h3_backend,
+        is_freezone_seedance2_backend,
+    )
 
     video_gen = create_video_generator(
         backend=backend,
@@ -1292,6 +1295,7 @@ async def run_freezone_video_gen(
             and not str(backend).startswith("huimeng_")
             and not parse_newapi_video_backend(backend)
             and not is_freezone_seedance2_backend(backend)
+            and not is_freezone_minimax_h3_backend(backend)
         ):
             raise RuntimeError(f"backend {backend} requires a first-frame image reference")
         result = await video_gen.generate(

@@ -162,10 +162,72 @@ async def test_minimax_h3_multiple_images_use_reference_workflow(monkeypatch, tm
     h3_inputs = workflow["136"]["inputs"]
     assert result.status.value == "done"
     assert output.read_bytes() == b"video"
-    assert uploaded[0].startswith("first_")
-    assert uploaded[1].startswith("h3_ref_")
+    assert uploaded[0].startswith("h3_image_")
+    assert uploaded[1].startswith("h3_image_")
     assert workflow["136"]["class_type"] == "MiniMaxH3ReferenceToVideo"
     assert h3_inputs["ref_images.ref_image_0"] == ["h3_reference_image_0", 0]
     assert h3_inputs["ref_images.ref_image_1"] == ["h3_reference_image_1", 0]
     assert "<Picture 1>" in h3_inputs["prompt"]
     assert "<Picture 2>" in h3_inputs["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_minimax_h3_multimodal_references_use_official_input_slots(monkeypatch, tmp_path):
+    reference_video = tmp_path / "motion.mp4"
+    reference_audio = tmp_path / "sound.wav"
+    output = tmp_path / "result.mp4"
+    reference_video.write_bytes(b"video")
+    reference_audio.write_bytes(b"audio")
+    generator = ComfyUIVideoGenerator(workflow_type="minimax_h3")
+    captured: dict[str, object] = {}
+
+    async def fake_upload(_data, filename, **_kwargs):
+        return {"name": filename}
+
+    async def fake_queue(workflow, _client_id):
+        captured["workflow"] = workflow
+        return {"prompt_id": "h3-multimodal-test"}
+
+    async def fake_history(_prompt_id):
+        return {"h3-multimodal-test": {"outputs": {"92": {"images": [{"filename": "result.mp4"}]}}}}
+
+    async def fake_download(_filename, _subfolder=""):
+        return b"video"
+
+    class FakeWebSocket:
+        async def recv(self):
+            return json.dumps({"type": "executing", "data": {"prompt_id": "h3-multimodal-test", "node": None}})
+
+        async def close(self):
+            return None
+
+    async def fake_connect(*_args, **_kwargs):
+        return FakeWebSocket()
+
+    monkeypatch.setattr(generator, "_upload_file", fake_upload)
+    monkeypatch.setattr(generator, "_queue_prompt", fake_queue)
+    monkeypatch.setattr(generator, "_get_history", fake_history)
+    monkeypatch.setattr(generator, "_download_video", fake_download)
+    monkeypatch.setattr(video_generator_module.websockets, "connect", fake_connect)
+
+    result = await generator.generate(
+        image_path=None,
+        prompt="Follow the reference performance",
+        output_path=str(output),
+        duration=5,
+        references=[
+            ShotReference("video", str(reference_video), "motion"),
+            ShotReference("audio", str(reference_audio), "sound"),
+        ],
+    )
+
+    workflow = captured["workflow"]
+    h3_inputs = workflow["136"]["inputs"]
+    assert result.status.value == "done"
+    assert workflow["h3_reference_video_0"]["class_type"] == "VHS_LoadVideo"
+    assert workflow["h3_reference_audio_0"]["class_type"] == "VHS_LoadAudioUpload"
+    assert h3_inputs["ref_videos.ref_video_0"] == ["h3_reference_video_0", 0]
+    assert h3_inputs["ref_video_audios.ref_video_audio_0"] == ["h3_reference_video_0", 2]
+    assert h3_inputs["ref_audios.ref_audio_0"] == ["h3_reference_audio_0", 0]
+    assert "<Video 1>" in h3_inputs["prompt"]
+    assert "<Audio 1>" in h3_inputs["prompt"]
