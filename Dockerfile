@@ -1,9 +1,13 @@
 FROM python:3.12-slim
 
+ARG UV_PIP_INDEX_URL=https://pypi.org/simple
+ARG UV_INDEX_URL=https://pypi.org/simple
+ARG DEBIAN_MIRROR=deb.debian.org
+
 # 项目全程用 uv 管理(与 host 一致)。Dockerfile 也用 uv,使 uv.lock 锁版本 +
 # [[tool.uv.dependency-metadata]] override(da2 的 torch==2.5.0 冲突、sharp 的 gsplat)
 # 生效——pip 不认这些 override,会在 da2/world 解析冲突时 build 失败。
-RUN pip install --no-cache-dir uv
+RUN pip install --no-cache-dir --index-url "$UV_PIP_INDEX_URL" uv
 
 ENV ST_EDITION=ce \
     ST_CONTROL_PLANE_DSN= \
@@ -17,7 +21,8 @@ ENV ST_EDITION=ce \
     UV_PROJECT_ENVIRONMENT=/app/.venv \
     HERMES_CLI_PATH=/root/.local/bin/hermes
 
-RUN apt-get update \
+RUN sed -i "s|deb.debian.org|$DEBIAN_MIRROR|g; s|security.debian.org|$DEBIAN_MIRROR|g" /etc/apt/sources.list.d/debian.sources \
+    && apt-get update \
     && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
@@ -48,13 +53,17 @@ RUN set -eux; \
         apt-get install -y --no-install-recommends git nodejs npm; \
         rm -rf /var/lib/apt/lists/*; \
         npm install -g @playcanvas/splat-transform; \
-        uv sync --frozen --no-dev --extra world; \
+        UV_INDEX_URL="$UV_INDEX_URL" uv export --frozen --no-dev --extra world --no-hashes --no-emit-project -o /tmp/requirements.txt; \
     else \
-        uv sync --frozen --no-dev; \
+        UV_INDEX_URL="$UV_INDEX_URL" uv export --frozen --no-dev --no-hashes --no-emit-project -o /tmp/requirements.txt; \
     fi; \
+    uv venv "$UV_PROJECT_ENVIRONMENT"; \
+    UV_INDEX_URL="$UV_INDEX_URL" uv pip install --python "$UV_PROJECT_ENVIRONMENT/bin/python" -r /tmp/requirements.txt; \
+    uv pip install --python "$UV_PROJECT_ENVIRONMENT/bin/python" --no-deps .; \
+    rm -f /tmp/requirements.txt; \
     mkdir -p /data
 
-RUN uv tool install 'hermes-agent[acp]'
+RUN UV_INDEX_URL="$UV_INDEX_URL" uv tool install 'hermes-agent[acp]'
 
 ENV PATH="/app/.venv/bin:/root/.local/bin:$PATH"
 

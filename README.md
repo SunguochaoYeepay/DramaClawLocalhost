@@ -210,6 +210,24 @@ docker compose up -d --build   # starts two services: api / web
 
 Open the app at <http://localhost:8080>; the REST API is at <http://localhost:8780>. In **Settings → Model Config → Official**, paste your DC key (get one at <https://relayclaw.cdnfg.com>) and you're ready — no model mapping needed. Full steps in the [Quick Start](docs/en/getting-started/quickstart.md).
 
+### Windows Docker Desktop + local ComfyUI
+
+For the hybrid setup where ComfyUI stays on the Windows host while DramaClaw runs in Docker Desktop:
+
+```powershell
+cd E:\AI-Image\DramaClaw\DramaClawLocalhost
+docker compose -f docker-compose.yml -f docker-compose.windows.yml up -d
+```
+
+Open <http://localhost:8080>. ComfyUI must be running on the host and listening on port `8188`; the API container reaches it at `http://host.docker.internal:8188`. The Windows override persists generated files in the `ce-data` volume at `/data/output` and does not start the bundled NewAPI service. Keep provider configuration in the local `.env` file, including your DashScope/Bailian settings (`DASHSCOPE_API_KEY`), HuiMeng settings (`HUIMENGI_API_KEY`), and Cloudinary relay settings (`CLOUDINARY_RELAY_*`). Never commit `.env` or provider keys.
+
+The tested image version is `33cb312`. To pin or switch versions explicitly:
+
+```powershell
+$env:DRAMACLAW_VERSION="33cb312"
+docker compose -f docker-compose.yml -f docker-compose.windows.yml up -d
+```
+
 **No build needed** — every GitHub Release publishes multi-arch (amd64/arm64) images to Docker Hub, so a single file is enough to run:
 
 ```bash

@@ -209,6 +209,24 @@ docker compose up -d --build   # 起两个服务：api / web
 
 浏览器打开 <http://localhost:8080> 进入应用；REST API 在 <http://localhost:8780>。到**设置 → 模型配置 → 官方渠道**粘贴你的 DC key（到 <https://relayclaw.cdnfg.com> 获取）即可,**无需映射模型**。完整步骤见 [快速开始](../docs/zh/getting-started/quickstart.md)。
 
+### Windows Docker Desktop + 本机 ComfyUI
+
+适用于“ComfyUI 保持在 Windows 本机、DramaClaw 运行在 Docker Desktop”这种混合部署：
+
+```powershell
+cd E:\AI-Image\DramaClaw\DramaClawLocalhost
+docker compose -f docker-compose.yml -f docker-compose.windows.yml up -d
+```
+
+打开 <http://localhost:8080>。请确保本机 ComfyUI 监听 `8188` 端口；API 容器通过 `http://host.docker.internal:8188` 访问它。Windows 覆盖配置会把生成文件持久化到 `ce-data` 卷的 `/data/output`，不会启动内置 NewAPI。模型服务配置继续放在本地 `.env` 中，包括阿里云百炼 / DashScope（`DASHSCOPE_API_KEY`）、汇梦（`HUIMENGI_API_KEY`）和 Cloudinary 中转（`CLOUDINARY_RELAY_*`）。不要把 `.env` 或密钥提交到仓库。
+
+当前已验证的镜像版本是 `33cb312`。如需明确固定或切换版本：
+
+```powershell
+$env:DRAMACLAW_VERSION="33cb312"
+docker compose -f docker-compose.yml -f docker-compose.windows.yml up -d
+```
+
 **免构建跑法** —— 每次 GitHub Release 都会发布 amd64/arm64 多架构镜像到 Docker Hub,一个文件即可运行:
 
 ```bash
