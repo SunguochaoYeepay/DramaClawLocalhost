@@ -217,6 +217,11 @@ def test_minimax_h3_backend_is_identified_for_multi_image_reference_input() -> N
     assert is_freezone_minimax_h3_backend("ltx23_director") is False
 
 
+def test_freezone_default_video_backend_is_minimax_h3() -> None:
+    assert resolve_freezone_video_backend(None) == "minimax_h3"
+    assert get_freezone_video_model_names()[0] == "minimax_h3"
+
+
 def test_seedance2_backend_detection_accepts_newapi_and_legacy_values() -> None:
     assert is_freezone_seedance2_backend("newapi_seedance-2.0-fast")
     assert is_freezone_seedance2_backend("huimeng_seedance-2.0-fast")

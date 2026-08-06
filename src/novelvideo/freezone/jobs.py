@@ -1236,7 +1236,7 @@ async def run_freezone_video_gen(
     generate_audio: bool = False,
     human_review: bool = False,
     scene_optimize: str | None = None,
-    backend: str = "huimeng_seedance-2.0-fast",
+    backend: str = "minimax_h3",
     last_frame_path: Optional[str] = None,
     on_progress: Optional[Callable[[float], None]] = None,
     on_log: Optional[Callable[[str], None]] = None,

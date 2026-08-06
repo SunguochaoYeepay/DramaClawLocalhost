@@ -32,7 +32,6 @@ import {
   DEFAULT_SHARED_MODEL_ID,
   DEFAULT_VIDEO_MODEL_ID,
 } from '../ui/ProviderModelPicker';
-import { readLastVideoModel } from './lastVideoModel';
 
 export type MenuIconKey = 'upload' | 'sparkles' | 'layout' | 'text' | 'video' | 'audio' | 'script' | 'pano360' | 'threeDWorld' | 'videoCompose';
 
@@ -394,8 +393,8 @@ const videoNodeDefinition: CanvasNodeDefinition<VideoNodeData> = {
     // generation panel defaults
     prompt: '',
     genMode: 'textToVideo',
-    // 继承用户上次为视频节点选的模型；无记录时回落到默认模型。
-    model: readLastVideoModel() ?? DEFAULT_VIDEO_MODEL_ID,
+    // Every newly created video node starts from the shared H3 default.
+    model: DEFAULT_VIDEO_MODEL_ID,
     quality: '720P',
     durationSec: 5,
     generateAudio: true,

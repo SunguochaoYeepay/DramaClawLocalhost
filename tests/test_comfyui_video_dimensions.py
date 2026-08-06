@@ -131,6 +131,57 @@ def test_minimax_h3_workflows_use_the_same_half_megapixel_canvas():
     assert generator._workflow_templates["minimax_h3_r2v"]["115"]["inputs"]["megapixels"] == 0.5
 
 
+@pytest.mark.asyncio
+async def test_minimax_h3_text_to_video_omits_optional_keyframe_inputs(monkeypatch, tmp_path):
+    output = tmp_path / "result.mp4"
+    generator = ComfyUIVideoGenerator(workflow_type="minimax_h3")
+    captured: dict[str, object] = {}
+
+    async def unexpected_upload(*_args, **_kwargs):
+        raise AssertionError("H3 T2V must not upload an empty first-frame image")
+
+    async def fake_queue(workflow, _client_id):
+        captured["workflow"] = workflow
+        return {"prompt_id": "h3-t2v-test"}
+
+    async def fake_history(_prompt_id):
+        return {"h3-t2v-test": {"outputs": {"92": {"images": [{"filename": "result.mp4"}]}}}}
+
+    async def fake_download(_filename, _subfolder=""):
+        return b"video"
+
+    class FakeWebSocket:
+        async def recv(self):
+            return json.dumps({"type": "executing", "data": {"prompt_id": "h3-t2v-test", "node": None}})
+
+        async def close(self):
+            return None
+
+    async def fake_connect(*_args, **_kwargs):
+        return FakeWebSocket()
+
+    monkeypatch.setattr(generator, "_upload_image", unexpected_upload)
+    monkeypatch.setattr(generator, "_queue_prompt", fake_queue)
+    monkeypatch.setattr(generator, "_get_history", fake_history)
+    monkeypatch.setattr(generator, "_download_video", fake_download)
+    monkeypatch.setattr(video_generator_module.websockets, "connect", fake_connect)
+
+    result = await generator.generate(
+        image_path=None,
+        prompt="A rainy street at night, slow dolly in, distant traffic and rain ambience.",
+        output_path=str(output),
+        duration=5,
+    )
+
+    workflow = captured["workflow"]
+    h3_inputs = workflow["105:104"]["inputs"]
+    assert result.status.value == "done"
+    assert output.read_bytes() == b"video"
+    assert h3_inputs["prompt"].startswith("A rainy street")
+    assert "first_frame" not in h3_inputs
+    assert "last_frame" not in h3_inputs
+
+
 def test_minimax_h3_reference_prompt_adapts_numbered_drama_claw_assets():
     prompt = ComfyUIVideoGenerator._build_minimax_h3_reference_prompt(
         "@图1为主角，带着@图片2中的道具进入场景；参考@视频1的运镜和@音频1的节奏。",

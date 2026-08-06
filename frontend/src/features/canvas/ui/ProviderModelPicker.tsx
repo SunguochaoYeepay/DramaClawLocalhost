@@ -85,6 +85,15 @@ export const VIDEO_PROVIDERS: ProviderOption[] = [
 
 export const VIDEO_MODELS: ModelOption[] = [
   {
+    id: 'minimax_h3',
+    providerId: 'minimax',
+    apiModel: 'minimax_h3',
+    label: 'MiniMax H3 (local ComfyUI)',
+    resolutionOptions: ['720p', '1080p'],
+    minDuration: 5,
+    maxDuration: 15,
+  },
+  {
     id: 'huimeng_seedance-2.0-fast',
     providerId: 'huimeng',
     apiModel: 'huimeng_seedance-2.0-fast',
@@ -122,9 +131,8 @@ export const VIDEO_MODELS: ModelOption[] = [
 
 // Matches the backend `FreezoneVideoGenRequest.model` default. The picker
 // hydrates the live list via /freezone/video/models, but this id is what the
-// canvas store uses on first node creation before that fetch resolves (and
-// when no previously-picked model has been remembered).
-export const DEFAULT_VIDEO_MODEL_ID = 'huimeng_seedance-2.0-fast';
+// canvas store uses on first node creation before that fetch resolves.
+export const DEFAULT_VIDEO_MODEL_ID = 'minimax_h3';
 
 export type ProviderModelDomain = 'image' | 'video';
 

@@ -198,7 +198,6 @@ import {
   DEFAULT_VIDEO_MODEL_ID,
   ProviderModelPicker,
 } from "@/features/canvas/ui/ProviderModelPicker";
-import { writeLastVideoModel } from "@/features/canvas/domain/lastVideoModel";
 import {
   CreditCostPill,
   formatCreditCost,
@@ -790,10 +789,8 @@ export const VideoNode = memo(
       isLoading: videoModelsLoading,
       isFallback: videoModelsFallback,
     } = useFreezoneVideoModels();
-    // Same fix as ImageGenNode: when no model is explicitly picked, default to
-    // the FIRST live model (what ProviderModelPicker displays) rather than the
-    // static DEFAULT_VIDEO_MODEL_ID, so the displayed model matches the value
-    // actually sent to /freezone/video/gen.
+    // Resolve a persisted model against the live list; absent or unavailable
+    // values fall back to the first backend-provided model (H3 by default).
     const selectedVideoModel = useMemo(() => {
       const persisted =
         typeof data.model === "string" && data.model.length > 0
@@ -3267,8 +3264,6 @@ export const VideoNode = memo(
                           ? { genMode: "textToVideo" as VideoGenMode }
                           : {}),
                       });
-                      // 记住这次选择，后续新建的视频节点将继承它。
-                      writeLastVideoModel(nextModelId);
                     }}
                     domain="video"
                     popoverPlacement="top"

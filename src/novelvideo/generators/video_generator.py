@@ -3301,6 +3301,8 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 else "MiniMax H3 First/Last Frame"
                 if last_frame_path
                 else "MiniMax H3 I2V"
+                if image_path
+                else "MiniMax H3 T2V"
             )
         elif self.workflow_type in {"ltx23", "ltx23_director", "ltx23_director_fast"}:
             workflow_key = "ltx23"
@@ -3339,13 +3341,14 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         # 获取节点映射
         node_map = self.NODE_MAPPING.get(workflow_key, {})
 
-        # H3 ReferenceToVideo can generate from video/audio references alone.
+        # H3 ImageToVideo can run as T2V with no keyframes; ReferenceToVideo
+        # can likewise run from video/audio references alone.
         if image_path and not os.path.exists(image_path):
             return VideoGenResult(
                 status=VideoGenStatus.FAILED,
                 error=f"首帧图片不存在: {image_path}",
             )
-        if not image_path and workflow_key != "minimax_h3_r2v":
+        if not image_path and workflow_key not in {"minimax_h3", "minimax_h3_r2v"}:
             return VideoGenResult(
                 status=VideoGenStatus.FAILED,
                 error="该视频工作流需要首帧图片",
@@ -3473,12 +3476,16 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 workflow[node_map["first_image"]]["inputs"]["image"] = first_image_filename
                 workflow[node_map["last_image"]]["inputs"]["image"] = last_image_filename
             elif workflow_key == "minimax_h3":
-                workflow[node_map["first_image"]]["inputs"]["image"] = first_image_filename
                 workflow[node_map["duration"]]["inputs"]["value"] = min(15, max(5, float(duration)))
+                h3_inputs = workflow[node_map["positive_prompt"]]["inputs"]
+                if first_image_filename:
+                    workflow[node_map["first_image"]]["inputs"]["image"] = first_image_filename
+                else:
+                    h3_inputs.pop("first_frame", None)
                 if last_image_filename:
                     workflow[node_map["last_image"]]["inputs"]["image"] = last_image_filename
                 else:
-                    workflow[node_map["positive_prompt"]]["inputs"].pop("last_frame", None)
+                    h3_inputs.pop("last_frame", None)
             elif workflow_key == "minimax_h3_r2v":
                 r2v_inputs = workflow[node_map["positive_prompt"]]["inputs"]
                 r2v_inputs["ref_image_size"] = "match"
