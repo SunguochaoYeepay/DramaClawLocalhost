@@ -1359,7 +1359,6 @@ src/novelvideo/generators/grid_splitter.py,Elastic-2.0,2026 SuperTale contributo
 src/novelvideo/generators/huimengi.py,Elastic-2.0,2026 SuperTale contributors,REUSE.toml aggregate annotation
 src/novelvideo/generators/image_generator.py,Elastic-2.0,2026 SuperTale contributors,REUSE.toml aggregate annotation
 src/novelvideo/generators/indextts2_fal.py,Elastic-2.0,2026 SuperTale contributors,REUSE.toml aggregate annotation
-src/novelvideo/generators/ltx2-3-I2V.json,Elastic-2.0,2026 SuperTale contributors,REUSE.toml aggregate annotation
 src/novelvideo/generators/nanobanana_character.py,Elastic-2.0,2026 SuperTale contributors,REUSE.toml aggregate annotation
 src/novelvideo/generators/nanobanana_grid.py,Elastic-2.0,2026 SuperTale contributors,REUSE.toml aggregate annotation
 src/novelvideo/generators/nanobanana_prop.py,Elastic-2.0,2026 SuperTale contributors,REUSE.toml aggregate annotation

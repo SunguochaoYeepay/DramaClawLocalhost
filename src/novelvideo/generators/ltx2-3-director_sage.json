@@ -280,7 +280,7 @@
       "override_audio": false,
       "timeline_ui": "",
       "model": [
-        "93",
+        "95",
         0
       ],
       "clip": [
@@ -560,6 +560,19 @@
     "class_type": "LoraLoaderModelOnly",
     "_meta": {
       "title": "LoRA加载器(仅模型)"
+    }
+  },
+  "95": {
+    "inputs": {
+      "model": [
+        "93",
+        0
+      ],
+      "triton_kernels": false
+    },
+    "class_type": "LTX2MemoryEfficientSageAttentionPatch",
+    "_meta": {
+      "title": "LTX2 Mem Eff Sage Attention Patch"
     }
   },
   "94": {

@@ -91,7 +91,7 @@
     "inputs": {
       "cfg": 1,
       "model": [
-        "167:155",
+        "167:168",
         0
       ],
       "positive": [
@@ -472,7 +472,7 @@
     "inputs": {
       "cfg": 4,
       "model": [
-        "167:162",
+        "167:167",
         0
       ],
       "positive": [
@@ -501,6 +501,32 @@
     "class_type": "LoraLoaderModelOnly",
     "_meta": {
       "title": "Load LoRA"
+    }
+  },
+  "167:167": {
+    "inputs": {
+      "model": [
+        "167:162",
+        0
+      ],
+      "triton_kernels": false
+    },
+    "class_type": "LTX2MemoryEfficientSageAttentionPatch",
+    "_meta": {
+      "title": "LTX2 Mem Eff Sage Attention Patch (base)"
+    }
+  },
+  "167:168": {
+    "inputs": {
+      "model": [
+        "167:155",
+        0
+      ],
+      "triton_kernels": false
+    },
+    "class_type": "LTX2MemoryEfficientSageAttentionPatch",
+    "_meta": {
+      "title": "LTX2 Mem Eff Sage Attention Patch (LoRA)"
     }
   },
   "167:156": {

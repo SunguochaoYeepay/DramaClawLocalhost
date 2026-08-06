@@ -1,7 +1,7 @@
 # Docker Desktop on Windows: keep ComfyUI on the host and persist generated output.
 services:
   api:
-    image: dramaclaw-api:${DRAMACLAW_VERSION:-33cb312}
+    image: dramaclaw-api:${DRAMACLAW_VERSION:-1.1.2-h3-sage}
     build:
       args:
         UV_PIP_INDEX_URL: https://mirrors.aliyun.com/pypi/simple/
@@ -12,4 +12,4 @@ services:
       COMFYUI_VIDEO_URL: http://host.docker.internal:8188
       NOVELVIDEO_OUTPUT_DIR: /data/output
   web:
-    image: dramaclaw-web:${DRAMACLAW_VERSION:-33cb312}
+    image: dramaclaw-web:${DRAMACLAW_VERSION:-1.1.2-h3-sage}

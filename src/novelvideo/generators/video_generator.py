@@ -2769,13 +2769,13 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
     LTX23_DIRECTOR_FPS = 24
 
     # 工作流模板路径
-    GGUF_WORKFLOW_PATH = Path(__file__).parent / "wan2-2-I2V-GGUF-LightX2V.json"
+    GGUF_WORKFLOW_PATH = Path(__file__).parent / "wan2-2-I2V-GGUF-LightX2V_sage.json"
     FP8_I2V_WORKFLOW_PATH = Path(__file__).parent / "wan2-2-I2V-LightX2V.json"
-    FP8_FLF_WORKFLOW_PATH = Path(__file__).parent / "wan2-2-FLF-LightX2V.json"
-    LTX23_I2V_WORKFLOW_PATH = Path(__file__).parent / "ltx2-3-I2V.json"
-    LTX23_DIRECTOR_WORKFLOW_PATH = Path(__file__).parent / "ltx2-3-director.json"
-    MINIMAX_H3_I2V_WORKFLOW_PATH = Path(__file__).parent / "minimax-h3-I2V.json"
-    MINIMAX_H3_R2V_WORKFLOW_PATH = Path(__file__).parent / "minimax-h3-R2V.json"
+    FP8_FLF_WORKFLOW_PATH = Path(__file__).parent / "wan2-2-FLF-LightX2V_sage.json"
+    LTX23_I2V_WORKFLOW_PATH = Path(__file__).parent / "ltx2-3-I2V_sage.json"
+    LTX23_DIRECTOR_WORKFLOW_PATH = Path(__file__).parent / "ltx2-3-director_sage.json"
+    MINIMAX_H3_I2V_WORKFLOW_PATH = Path(__file__).parent / "minimax-h3-I2V_sage.json"
+    MINIMAX_H3_R2V_WORKFLOW_PATH = Path(__file__).parent / "minimax-h3-R2V_sage.json"
 
     # 节点映射配置（不同工作流的节点 ID）
     NODE_MAPPING = {
@@ -2943,6 +2943,62 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         workflow[self.NODE_MAPPING["minimax_h3"]["dimensions"]]["inputs"]["aspect_ratio"] = ratio_names.get(
             aspect_ratio, "16:9 (Widescreen)"
         )
+
+    @staticmethod
+    def _build_minimax_h3_reference_prompt(
+        prompt: str,
+        *,
+        image_roles: list[str],
+        video_roles: list[str],
+        audio_roles: list[str],
+    ) -> str:
+        """Adapt DramaClaw's numbered reference language to H3 reference tags."""
+
+        def replace_reference_tag(match: re.Match[str]) -> str:
+            media_type = match.group(1)
+            number = int(match.group(2))
+            tag = {"图片": "Picture", "图": "Picture", "视频": "Video", "音频": "Audio"}[media_type]
+            return f"<{tag} {number}>"
+
+        normalized_prompt = re.sub(
+            r"@?(图片|图|视频|音频)\s*(\d+)",
+            replace_reference_tag,
+            str(prompt or "").strip(),
+        )
+        instructions: list[str] = []
+
+        for index, role in enumerate(image_roles, 1):
+            tag = f"<Picture {index}>"
+            role_text = str(role or "").strip()
+            if index == 1:
+                instructions.append(
+                    f"{tag} is the primary identity and visual anchor. Preserve its visible subject, "
+                    "appearance, clothing or product details unless the prompt explicitly requests a change."
+                )
+            elif role_text:
+                instructions.append(
+                    f"{tag} is an auxiliary reference for {role_text}. Apply only that reference role; "
+                    "do not replace or merge it into the primary subject."
+                )
+            else:
+                instructions.append(
+                    f"{tag} is an auxiliary visual reference. Do not replace or merge it into the primary subject."
+                )
+
+        for index, role in enumerate(video_roles, 1):
+            role_text = str(role or "").strip() or "motion and camera language"
+            instructions.append(f"<Video {index}> is a reference for {role_text}.")
+        for index, role in enumerate(audio_roles, 1):
+            role_text = str(role or "").strip() or "audio"
+            instructions.append(f"<Audio {index}> is a reference for {role_text}.")
+
+        if len(image_roles) > 1:
+            instructions.append(
+                "Keep the reference hierarchy stable. Create one continuous shot with coherent character and camera "
+                "motion; do not make a slideshow, hard cut, or frozen transition between reference images."
+            )
+
+        return "\n".join(part for part in (normalized_prompt, *instructions) if part)
 
     @staticmethod
     def _apply_director_fast_profile(workflow: dict) -> None:
@@ -3193,13 +3249,17 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         }
         is_minimax_h3 = self.workflow_type == "minimax_h3"
         h3_image_references: list[str] = []
+        h3_image_reference_roles: list[str] = ["first-frame subject and composition"] if image_path else []
         h3_video_references: list[str] = []
+        h3_video_reference_roles: list[str] = []
         h3_audio_references: list[str] = []
+        h3_audio_reference_roles: list[str] = []
         if is_minimax_h3 and not last_frame_path:
             seen_h3_image_paths = {os.path.abspath(image_path)} if image_path else set()
             for ref in kwargs.get("references") or []:
                 ref_path = getattr(ref, "path", None)
                 ref_type = getattr(ref, "type", "image")
+                ref_role = str(getattr(ref, "role", "") or "").strip()
                 if not ref_path:
                     continue
                 if ref_type == "image":
@@ -3208,15 +3268,26 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                         continue
                     seen_h3_image_paths.add(normalized_path)
                     h3_image_references.append(ref_path)
+                    h3_image_reference_roles.append(ref_role)
                 elif ref_type == "video" and len(h3_video_references) < 3:
                     h3_video_references.append(ref_path)
+                    h3_video_reference_roles.append(ref_role)
                 elif ref_type == "audio" and len(h3_audio_references) < 3:
                     h3_audio_references.append(ref_path)
+                    h3_audio_reference_roles.append(ref_role)
+        # A normal first frame belongs to the I2V workflow. ReferenceToVideo is
+        # only for additional image/video/audio references; otherwise a first
+        # frame incorrectly makes every H3 request bypass strict first/last mode.
         h3_reference_image_paths = ([image_path] if image_path else []) + h3_image_references
         use_h3_reference_mode = bool(
-            h3_reference_image_paths or h3_video_references or h3_audio_references
+            h3_image_references or h3_video_references or h3_audio_references
         )
-        use_flf_mode = last_frame_path is not None and not is_ltx23_director and not is_minimax_h3
+        if self.workflow_type == "ltx23" and last_frame_path:
+            return VideoGenResult(
+                status=VideoGenStatus.FAILED,
+                error="LTX 2.3 22B only supports a first frame; use Wan 2.2 or MiniMax H3 for first/last-frame video.",
+            )
+        use_flf_mode = last_frame_path is not None and self.workflow_type in {"gguf", "fp8"}
 
         # 选择工作流
         if use_flf_mode:
@@ -3592,35 +3663,11 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             if workflow_key in {"ltx23", "minimax_h3"}:
                 workflow[node_map["positive_prompt"]]["inputs"]["prompt"] = prompt or ""
             elif workflow_key == "minimax_h3_r2v":
-                reference_instructions = []
-                if h3_image_filenames:
-                    picture_tags = ", ".join(
-                        f"<Picture {index}>" for index in range(1, len(h3_image_filenames) + 1)
-                    )
-                    reference_instructions.append(
-                        f"Use {picture_tags} as visual references. Keep their identities and visual details consistent."
-                    )
-                if h3_video_filenames:
-                    video_tags = ", ".join(
-                        f"<Video {index}>" for index in range(1, len(h3_video_filenames) + 1)
-                    )
-                    reference_instructions.append(
-                        f"Use {video_tags} as motion and camera references."
-                    )
-                if h3_audio_filenames:
-                    audio_tags = ", ".join(
-                        f"<Audio {index}>" for index in range(1, len(h3_audio_filenames) + 1)
-                    )
-                    reference_instructions.append(
-                        f"Use {audio_tags} as audio references."
-                    )
-                h3_prompt = "\n".join(
-                    part
-                    for part in (
-                        prompt or "",
-                        *reference_instructions,
-                    )
-                    if part
+                h3_prompt = self._build_minimax_h3_reference_prompt(
+                    prompt or "",
+                    image_roles=h3_image_reference_roles,
+                    video_roles=h3_video_reference_roles,
+                    audio_roles=h3_audio_reference_roles,
                 )
                 workflow[node_map["positive_prompt"]]["inputs"]["prompt"] = h3_prompt
             elif workflow_key != "ltx23_director":

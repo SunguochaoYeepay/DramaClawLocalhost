@@ -89,6 +89,21 @@ def test_ltx23_workflow_dimensions_follow_the_requested_canvas():
     assert workflow["167:102"]["inputs"]["resize_type.height"] == 1920
 
 
+@pytest.mark.asyncio
+async def test_ltx23_rejects_last_frame_instead_of_using_wan_flf_workflow(tmp_path):
+    generator = ComfyUIVideoGenerator(workflow_type="ltx23")
+
+    result = await generator.generate(
+        image_path=str(tmp_path / "first.png"),
+        last_frame_path=str(tmp_path / "last.png"),
+        prompt="A continuous shot.",
+        output_path=str(tmp_path / "result.mp4"),
+    )
+
+    assert result.status.value == "failed"
+    assert "only supports a first frame" in (result.error or "")
+
+
 def test_minimax_h3_workflow_is_registered_with_first_and_last_frame_inputs():
     from novelvideo.api.routes.generation import _api_video_backend_options
 
@@ -107,6 +122,32 @@ def test_minimax_h3_workflow_is_registered_with_first_and_last_frame_inputs():
     assert backend.reference_image_max == 9
     assert backend.min_duration == 5
     assert backend.max_duration == 15
+
+
+def test_minimax_h3_workflows_use_the_same_half_megapixel_canvas():
+    generator = ComfyUIVideoGenerator(workflow_type="minimax_h3")
+
+    assert generator._workflow_templates["minimax_h3"]["115"]["inputs"]["megapixels"] == 0.5
+    assert generator._workflow_templates["minimax_h3_r2v"]["115"]["inputs"]["megapixels"] == 0.5
+
+
+def test_minimax_h3_reference_prompt_adapts_numbered_drama_claw_assets():
+    prompt = ComfyUIVideoGenerator._build_minimax_h3_reference_prompt(
+        "@图1为主角，带着@图片2中的道具进入场景；参考@视频1的运镜和@音频1的节奏。",
+        image_roles=["首帧主体", "道具参考"],
+        video_roles=["镜头运动"],
+        audio_roles=["节奏与氛围"],
+    )
+
+    assert "@图" not in prompt
+    assert "@图片" not in prompt
+    assert "<Picture 1>为主角" in prompt
+    assert "<Picture 2>中的道具" in prompt
+    assert "<Video 1>的运镜" in prompt
+    assert "<Audio 1>的节奏" in prompt
+    assert "primary identity and visual anchor" in prompt
+    assert "auxiliary reference for 道具参考" in prompt
+    assert "do not make a slideshow" in prompt
 
 
 @pytest.mark.asyncio
@@ -152,10 +193,10 @@ async def test_minimax_h3_multiple_images_use_reference_workflow(monkeypatch, tm
 
     result = await generator.generate(
         image_path=str(first_image),
-        prompt="A continuous cinematic shot",
+        prompt="@图1为主角，带着@图2中的形象连续行走。",
         output_path=str(output),
         duration=5,
-        references=[ShotReference("image", str(reference_image), "H3 reference")],
+        references=[ShotReference("image", str(reference_image), "同伴形象")],
     )
 
     workflow = captured["workflow"]
@@ -169,6 +210,69 @@ async def test_minimax_h3_multiple_images_use_reference_workflow(monkeypatch, tm
     assert h3_inputs["ref_images.ref_image_1"] == ["h3_reference_image_1", 0]
     assert "<Picture 1>" in h3_inputs["prompt"]
     assert "<Picture 2>" in h3_inputs["prompt"]
+    assert "<Picture 1>为主角" in h3_inputs["prompt"]
+    assert "auxiliary reference for 同伴形象" in h3_inputs["prompt"]
+    assert "do not make a slideshow" in h3_inputs["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_minimax_h3_first_last_frame_uses_official_keyframe_slots(monkeypatch, tmp_path):
+    first_image = tmp_path / "first.png"
+    last_image = tmp_path / "last.png"
+    output = tmp_path / "result.mp4"
+    first_image.write_bytes(b"first")
+    last_image.write_bytes(b"last")
+    generator = ComfyUIVideoGenerator(workflow_type="minimax_h3")
+    captured: dict[str, object] = {}
+    uploaded: list[str] = []
+
+    async def fake_upload(_data, filename, **_kwargs):
+        uploaded.append(filename)
+        return {"name": filename}
+
+    async def fake_queue(workflow, _client_id):
+        captured["workflow"] = workflow
+        return {"prompt_id": "h3-first-last-test"}
+
+    async def fake_history(_prompt_id):
+        return {"h3-first-last-test": {"outputs": {"92": {"images": [{"filename": "result.mp4"}]}}}}
+
+    async def fake_download(_filename, _subfolder=""):
+        return b"video"
+
+    class FakeWebSocket:
+        async def recv(self):
+            return json.dumps({"type": "executing", "data": {"prompt_id": "h3-first-last-test", "node": None}})
+
+        async def close(self):
+            return None
+
+    async def fake_connect(*_args, **_kwargs):
+        return FakeWebSocket()
+
+    monkeypatch.setattr(generator, "_upload_image", fake_upload)
+    monkeypatch.setattr(generator, "_queue_prompt", fake_queue)
+    monkeypatch.setattr(generator, "_get_history", fake_history)
+    monkeypatch.setattr(generator, "_download_video", fake_download)
+    monkeypatch.setattr(video_generator_module.websockets, "connect", fake_connect)
+
+    result = await generator.generate(
+        image_path=str(first_image),
+        last_frame_path=str(last_image),
+        prompt="A single continuous transition from the first keyframe to the last keyframe.",
+        output_path=str(output),
+        duration=5,
+    )
+
+    workflow = captured["workflow"]
+    h3_inputs = workflow["105:104"]["inputs"]
+    assert result.status.value == "done"
+    assert workflow["105:104"]["class_type"] == "MiniMaxH3ImageToVideo"
+    assert h3_inputs["first_frame"] == ["114", 0]
+    assert h3_inputs["last_frame"] == ["121", 0]
+    assert workflow["114"]["inputs"]["image"].startswith("first_")
+    assert workflow["121"]["inputs"]["image"].startswith("last_")
+    assert len(uploaded) == 2
 
 
 @pytest.mark.asyncio
