@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import io
 import mimetypes
 import os
 import urllib.parse
@@ -292,8 +293,26 @@ def validate_huimeng_media_download(
         if content_type.startswith("image/") or content.startswith(
             (b"\x89PNG\r\n\x1a\n", b"\xff\xd8\xff", b"GIF87a", b"GIF89a")
         ):
+            # A matching content type or file signature is not enough. Some CDNs
+            # occasionally return a PNG whose header is intact but whose IDAT
+            # stream is truncated/corrupt; accepting it defers the failure until
+            # storyboard splitting and leaves a broken artifact in the project.
+            try:
+                from PIL import Image
+
+                with Image.open(io.BytesIO(content)) as image:
+                    image.load()
+            except Exception as exc:
+                raise RuntimeError(f"HuiMeng 下载结果图片解码失败: {exc}") from exc
             return
         if content.startswith(b"RIFF") and content[8:12] == b"WEBP":
+            try:
+                from PIL import Image
+
+                with Image.open(io.BytesIO(content)) as image:
+                    image.load()
+            except Exception as exc:
+                raise RuntimeError(f"HuiMeng 下载结果图片解码失败: {exc}") from exc
             return
     if expected_media_type == "video":
         if content_type.startswith("video/") or (
