@@ -578,6 +578,23 @@ export function VideoPane({
       ),
     [seedance2AssetItems],
   );
+  // H3 ReferenceToVideo numbers pictures by the order they are sent to
+  // ComfyUI. Keep the editor's @图N chips on that exact order: the beat
+  // first frame is always Picture 1 and selected assets follow it.
+  const h3PromptReferenceItems = useMemo(() => {
+    if (!isH3ReferenceBackend) return [];
+    return directorReferenceImagePaths
+      .map((path) =>
+        directorReferenceImageItems.find(
+          (asset) => (asset.abs_path || asset.path || "") === path,
+        ),
+      )
+      .filter((asset): asset is Seedance2AssetItem => Boolean(asset));
+  }, [
+    directorReferenceImageItems,
+    directorReferenceImagePaths,
+    isH3ReferenceBackend,
+  ]);
   const seedance2ReferenceOptions = useMemo(
     () =>
       modelReferenceAssetItems.filter(
@@ -3016,6 +3033,47 @@ export function VideoPane({
                   <p className="text-xs text-muted-foreground/65">
                     上传或生成图片后，可在这里加入{isH3ReferenceBackend ? " H3 多图参考" : " Director 时间线"}。
                   </p>
+                  )}
+                  {isH3ReferenceBackend && (
+                    <div className="flex flex-wrap items-center gap-1.5 border-t border-white/[0.055] pt-2">
+                      <span className="text-[11px] text-muted-foreground/78">
+                        H3 引用提示词
+                      </span>
+                      <Button
+                        type="button"
+                        size="xs"
+                        variant="ghost"
+                        className={SEEDANCE2_PILL_ACTION_CLASS}
+                        onClick={() =>
+                          setLegacyVideoPrompt((current) =>
+                            `${current}${current && !/\s$/.test(current) ? " " : ""}@图1 `,
+                          )
+                        }
+                      >
+                        @图1 首帧主体
+                      </Button>
+                      {h3PromptReferenceItems.map((asset, index) => (
+                        <Button
+                          key={asset.key}
+                          type="button"
+                          size="xs"
+                          variant="ghost"
+                          className={SEEDANCE2_PILL_ACTION_CLASS}
+                          onClick={() =>
+                            setLegacyVideoPrompt((current) =>
+                              `${current}${current && !/\s$/.test(current) ? " " : ""}@图${index + 2} `,
+                            )
+                          }
+                        >
+                          @图{index + 2} {asset.label}
+                        </Button>
+                      ))}
+                      <span className="text-[10px] text-muted-foreground/60">
+                        {h3PromptReferenceItems.length > 0
+                          ? "点击插入；提交时会转换为 H3 的 <Picture N> 引用。"
+                          : "先选择参考图，选中顺序即为 @图编号。"}
+                      </span>
+                    </div>
                   )}
                 </div>
               )}
