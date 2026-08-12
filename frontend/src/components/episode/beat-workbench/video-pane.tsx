@@ -680,13 +680,13 @@ export function VideoPane({
       localConfig.duration ?? current.duration,
       seedance2DurationBounds,
     );
-    // Wan2.2 only supports first-frame and first-last-frame inputs. The
-    // shared Seedance config defaults to multimodal_reference when no local
-    // config exists, so never let that provider-only value overwrite the
-    // local panel selection during a beat/config refresh.
+    // Local backends have different input modes. H3 also supports multimodal
+    // references; Wan2.2 and LTX keep their first-frame-only local behavior.
     const requestedMode = localConfig.mode ?? current.mode;
     const mode: Seedance2ConfigDraft["mode"] =
-      requestedMode === "first_last_frame" || requestedMode === "first_frame"
+      requestedMode === "first_last_frame" ||
+      requestedMode === "first_frame" ||
+      (isH3ReferenceBackend && requestedMode === "multimodal_reference")
         ? requestedMode
         : "first_frame";
     if (
@@ -2380,9 +2380,11 @@ export function VideoPane({
                       {t("episode.workbench.video.seedance2ModeLabels.first_last_frame")}
                     </SelectItem>
                   )}
-                  <SelectItem value="multimodal_reference">
-                    {t("episode.workbench.video.seedance2ModeLabels.multimodal_reference")}
-                  </SelectItem>
+                  {(showSeedance2Config || isH3ReferenceBackend) && (
+                    <SelectItem value="multimodal_reference">
+                      {t("episode.workbench.video.seedance2ModeLabels.multimodal_reference")}
+                    </SelectItem>
+                  )}
                 </SelectContent>
               </Select>
             </Seedance2Field>
@@ -2799,6 +2801,11 @@ export function VideoPane({
                     <SelectItem value="first_last_frame">
                       {t("episode.workbench.video.seedance2ModeLabels.first_last_frame")}
                     </SelectItem>
+                    {isH3ReferenceBackend && (
+                      <SelectItem value="multimodal_reference">
+                        {t("episode.workbench.video.seedance2ModeLabels.multimodal_reference")}
+                      </SelectItem>
+                    )}
                   </SelectContent>
                 </Select>
               </Seedance2Field>
