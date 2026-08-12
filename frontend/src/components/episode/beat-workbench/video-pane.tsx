@@ -1546,6 +1546,15 @@ export function VideoPane({
     try {
       const res = await generateBeatVideoPrompt.mutateAsync({
         beatNum: beat.beat_number,
+        ...(isH3ReferenceBackend && h3PromptReferenceItems.length > 0
+          ? {
+              h3ReferenceImages: h3PromptReferenceItems.map((asset) => ({
+                path: asset.abs_path || asset.path || "",
+                label: asset.label,
+              })),
+              manualPromptReference: legacyVideoPrompt,
+            }
+          : {}),
       });
       if (!res.ok) {
         toast.error(

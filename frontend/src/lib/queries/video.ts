@@ -649,12 +649,28 @@ export function useGenerateSeedance2Prompt(project: string, episode: number) {
 export function useGenerateBeatVideoPrompt(project: string, episode: number) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ beatNum }: { beatNum: number }) =>
+    mutationFn: ({
+      beatNum,
+      h3ReferenceImages,
+      manualPromptReference,
+    }: {
+      beatNum: number;
+      h3ReferenceImages?: Array<{ path: string; label: string }>;
+      manualPromptReference?: string;
+    }) =>
       jsonWithBackendError<OkResponse<BeatVideoPromptResult> | TaskResponse | ErrorResponse>(
         api.post(
           p`api/v1/projects/${project}/episodes/${episode}/beats/${beatNum}/video-prompt/generate`,
           {
-            json: { language: currentPromptLanguage() },
+            json: {
+              language: currentPromptLanguage(),
+              ...(h3ReferenceImages?.length
+                ? {
+                    h3_reference_images: h3ReferenceImages,
+                    manual_prompt_reference: manualPromptReference ?? "",
+                  }
+                : {}),
+            },
             throwHttpErrors: false,
           },
         ),

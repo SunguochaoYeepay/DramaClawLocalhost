@@ -4,10 +4,12 @@
 """
 
 import logging
+import json
 from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger("novelvideo.api.scripts")
 
@@ -34,6 +36,89 @@ router = APIRouter()
 
 SEEDANCE2_PROMPT_FEATURE_KEY = "seedance2_prompt"
 MODEL_CALL_CREDIT_POLICY_FEATURE_INCLUDED = "feature_included"
+
+
+class _H3PromptComposerOutput(BaseModel):
+    prompt: str = Field(default="")
+
+
+def _build_h3_reference_prompt_draft(
+    beat: dict[str, Any],
+    references: list[dict[str, str]],
+    manual_prompt_reference: str = "",
+) -> str:
+    """Create a usable H3 prompt even when the optional AI rewrite is offline."""
+    visual = str(beat.get("visual_description") or "").strip()
+    scene = str(beat.get("scene_description") or "").strip()
+    narration = str(beat.get("dialogue") or beat.get("narration_segment") or "").strip()
+    parts = [
+        "@图1作为主主体与起始构图，保持其人物身份、面部、服装和画面风格一致。",
+    ]
+    for index, reference in enumerate(references, 2):
+        label = str(reference.get("label") or "辅助视觉元素").strip()
+        parts.append(f"@图{index}作为{label}的参考，仅继承与该素材相关的外观、道具或风格，不替换@图1主体。")
+    if visual:
+        parts.append(f"画面动作与事件：{visual}。")
+    if scene:
+        parts.append(f"场景环境：{scene}。")
+    if narration:
+        parts.append(f"镜头内容围绕：{narration}。")
+    parts.append("保持一个连续镜头和连贯的人物、镜头运动，不要幻灯片式切换、硬切或定格。")
+    if manual_prompt_reference.strip():
+        parts.append(f"用户要求：{manual_prompt_reference.strip()}")
+    return "".join(parts)
+
+
+async def _generate_h3_reference_video_prompt(
+    *,
+    beat: dict[str, Any],
+    references: list[dict[str, str]],
+    manual_prompt_reference: str = "",
+) -> str:
+    """Mirror Seedance's asset-aware composer with H3's @图N editor syntax."""
+    draft = _build_h3_reference_prompt_draft(beat, references, manual_prompt_reference)
+    manifest = [
+        {"label": "@图1", "role": "首帧主体与起始构图"},
+        *[
+            {"label": f"@图{index}", "role": str(item.get("label") or "辅助参考")}
+            for index, item in enumerate(references, 2)
+        ],
+    ]
+    task = (
+        "根据下面 JSON 改写 MiniMax H3 多图参考生视频提示词。\n"
+        "硬性要求：只能使用 asset_manifest 中的 @图N 编号；@图1是主主体；"
+        "每张辅助图只能承担指定角色；描述连续运动，禁止幻灯片、硬切、定格；"
+        "输出中文最终提示词，不要解释。\n\n"
+        + json.dumps(
+            {
+                "asset_manifest": manifest,
+                "beat": {
+                    "visual_description": beat.get("visual_description") or "",
+                    "scene_description": beat.get("scene_description") or "",
+                    "narration": beat.get("dialogue") or beat.get("narration_segment") or "",
+                },
+                "user_prompt_reference": manual_prompt_reference,
+                "rule_based_draft": draft,
+            },
+            ensure_ascii=False,
+        )
+    )
+    try:
+        from pydantic_ai import Agent
+        from novelvideo.config import get_newapi_text_pydantic_model
+
+        agent = Agent(
+            get_newapi_text_pydantic_model("MINIMAX_H3_PROMPT_COMPOSER_MODEL", "qwen-max"),
+            output_type=_H3PromptComposerOutput,
+            output_retries=1,
+            name="MiniMax H3 Prompt Composer",
+        )
+        result = await agent.run(task)
+        prompt = str(result.output.prompt or "").strip()
+        return prompt or draft
+    except Exception:
+        logger.warning("H3 prompt composer unavailable; using asset-aware draft", exc_info=True)
+        return draft
 
 
 def _requester_user_id_for_billing(resolved: Any, user: dict) -> str:
@@ -426,6 +511,38 @@ async def generate_beat_video_prompt(
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except ValueError as exc:
         return {"ok": False, "error": str(exc)}
+
+    # Unlike the legacy first-frame optimizer, H3 needs the ordered reference
+    # manifest to write @图N semantics. Keep this request synchronous so the
+    # rule-based fallback can still return a prompt when the LLM gateway is
+    # temporarily unavailable.
+    if body.h3_reference_images:
+        script_data = await store.get_script_as_dict(episode_num)
+        target = next(
+            (
+                beat
+                for beat in list((script_data or {}).get("beats") or [])
+                if int(beat.get("beat_number") or 0) == beat_num
+            ),
+            None,
+        )
+        if target is None:
+            raise HTTPException(status_code=404, detail=f"Beat {beat_num} not found")
+        prompt = await _generate_h3_reference_video_prompt(
+            beat=target,
+            references=body.h3_reference_images[:8],
+            manual_prompt_reference=str(body.manual_prompt_reference or ""),
+        )
+        target["video_prompt"] = prompt
+        sync_beat_asset_refs(target)
+        saved = await store.update_beat_asset(
+            episode_number=episode_num,
+            beat_number=beat_num,
+            video_prompt=prompt,
+        )
+        if not saved:
+            raise RuntimeError(f"Beat {beat_num} was not updated")
+        return {"ok": True, "data": {"beat": target, "field": "video_prompt", "prompt": prompt}}
 
     if resolved.ctx is not None:
         queued = await get_task_backend().enqueue_project_task(
