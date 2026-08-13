@@ -155,7 +155,7 @@ def test_video_model_options_and_resolution_work() -> None:
     labels = {item["label"] for item in options}
     api_models = {item["apiModel"] for item in options}
 
-    assert names[0] == "newapi_seedance-2.0-fast"
+    assert names[0] == "minimax_h3"
     assert {
         "newapi_seedance-2.0-fast",
         "newapi_seedance-1.0-pro-fast",
@@ -164,7 +164,7 @@ def test_video_model_options_and_resolution_work() -> None:
     assert "newapi_grok-video-channel" not in names
     assert ids == set(names)
     assert api_models == set(names)
-    assert all(item["providerId"] == "newapi" for item in options)
+    assert next(item for item in options if item["id"] == "minimax_h3")["providerId"] == "minimax_h3"
     assert "Seedance1.0 Pro Fast" in labels
     assert "Seedance1.5 Pro" in labels
     assert "Seedance2.0 Fast" in labels
@@ -199,10 +199,10 @@ def test_resolve_freezone_video_backend_accepts_id_and_label() -> None:
         == "newapi_seedance-1.0-pro-fast"
     )
     assert resolve_freezone_video_backend("Seedance1.5 Pro") == "newapi_seedance-1.5-pro"
-    assert resolve_freezone_video_backend("huimeng_seedance20_fast") == "newapi_seedance-2.0-fast"
+    assert resolve_freezone_video_backend("huimeng_seedance20_fast") == "huimeng_seedance-2.0-fast"
     assert resolve_freezone_video_backend("seedance_fast") == "newapi_seedance-1.0-pro-fast"
     assert resolve_freezone_video_backend("Seedance 1.5 有声") == "newapi_seedance-1.5-pro"
-    assert resolve_freezone_video_backend(None) == "newapi_seedance-2.0-fast"
+    assert resolve_freezone_video_backend(None) == "minimax_h3"
 
 
 def test_ltx_director_backends_are_identified_for_multi_image_timeline_input() -> None:

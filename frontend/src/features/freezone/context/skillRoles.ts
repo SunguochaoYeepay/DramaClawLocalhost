@@ -14,7 +14,11 @@ export type SkillInputRole =
   | "scene_reverse_master"
   | "director_combined"
   | "source_image"
-  | "frame";
+  | "frame"
+  | "creative_intent"
+  | "image_reference"
+  | "video_reference"
+  | "audio_reference";
 
 export type SkillOutputRole =
   | "current_sketch_candidate"
@@ -22,7 +26,8 @@ export type SkillOutputRole =
   | "scene_360_candidate"
   | "selected_background"
   | "director_combined"
-  | "review_report";
+  | "review_report"
+  | "h3_video_prompt";
 
 export type SkillCardinality = "single" | "multi";
 export type SkillMediaType = "image" | "text" | "json" | "node_patch" | "graph_patch";
@@ -95,6 +100,8 @@ export interface ResolvedSkillInput {
   node_id: string;
   node_type: string;
   image_url?: string;
+  video_url?: string;
+  audio_url?: string;
   slot_target?: Record<string, unknown>;
   reference_target?: Record<string, unknown>;
   candidate_origin?: CandidateOrigin;

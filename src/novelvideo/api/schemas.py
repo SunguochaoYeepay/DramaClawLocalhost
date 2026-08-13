@@ -191,6 +191,9 @@ class Seedance2PromptGenerateRequest(BaseModel):
 
 class BeatVideoPromptGenerateRequest(BaseModel):
     language: str = "zh"
+    # Use the shared H3 prompt composer even when only the implicit first
+    # frame is available.
+    h3_prompt_composer: bool = False
     # H3 ReferenceToVideo uses an explicit, ordered reference manifest. The
     # first frame is implicit Picture 1; these are Picture 2 onwards.
     h3_reference_images: list[dict[str, str]] = Field(default_factory=list)

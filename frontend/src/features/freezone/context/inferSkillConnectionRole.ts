@@ -113,6 +113,13 @@ export function inferSkillConnectionRole({
     return "source_image";
   }
 
+  if (skillId === "freezone.h3_prompt_composer") {
+    if (sourceNode.type === "textAnnotationNode") return "creative_intent";
+    if (sourceNode.type === "videoNode") return "video_reference";
+    if (sourceNode.type === "audioNode") return "audio_reference";
+    if (sourceHasImage(sourceNode)) return "image_reference";
+  }
+
   // 通用规则：源资产 role/slot 词表 → 输入口 role。
   for (const token of sourceRoleTokens(sourceNode)) {
     const mapped = SOURCE_TOKEN_TO_INPUT_ROLE[token];

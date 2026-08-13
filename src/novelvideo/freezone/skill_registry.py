@@ -67,6 +67,8 @@ class ResolvedSkillInput(BaseModel):
     node_type: str = ""
     beat_context: dict[str, Any] | None = None
     image_url: str | None = None
+    video_url: str | None = None
+    audio_url: str | None = None
     text: str | None = None
     slot_target: dict[str, Any] | None = None
     reference_target: dict[str, Any] | None = None
@@ -202,6 +204,18 @@ def _text_accepts(*, node_types: list[str] | None = None) -> SkillInputAcceptSpe
     return SkillInputAcceptSpec(
         node_types=node_types or ["textAnnotationNode"],
         media_kinds=["text"],
+    )
+
+
+def _media_accepts(media_kind: str) -> SkillInputAcceptSpec:
+    node_types = {
+        "image": IMAGE_NODE_TYPES,
+        "video": ["videoNode"],
+        "audio": ["audioNode"],
+    }
+    return SkillInputAcceptSpec(
+        node_types=node_types[media_kind],
+        media_kinds=[media_kind],
     )
 
 
@@ -562,6 +576,52 @@ _REGISTRY: dict[str, SkillDefinition] = {
             SkillOutputSpec(
                 role="review_report",
                 label="Review report",
+                media_type="text",
+                node_type="textAnnotationNode",
+                pushable=False,
+            )
+        ],
+    ),
+    "freezone.h3_prompt_composer": SkillDefinition(
+        id="freezone.h3_prompt_composer",
+        provider="agent",
+        capabilities=_AGENT_PROOF_CAPABILITIES,
+        display_name="H3 Prompt Composer",
+        description="Compose an editable MiniMax H3 prompt from creative intent and ordered references.",
+        inputs=[
+            _input(
+                "creative_intent",
+                "Creative intent",
+                required=True,
+                cardinality="single",
+                accepts=_text_accepts(),
+            ),
+            _input(
+                "image_reference",
+                "Image references",
+                required=False,
+                cardinality="multi",
+                accepts=_media_accepts("image"),
+            ),
+            _input(
+                "video_reference",
+                "Video references",
+                required=False,
+                cardinality="multi",
+                accepts=_media_accepts("video"),
+            ),
+            _input(
+                "audio_reference",
+                "Audio references",
+                required=False,
+                cardinality="multi",
+                accepts=_media_accepts("audio"),
+            ),
+        ],
+        outputs=[
+            SkillOutputSpec(
+                role="h3_video_prompt",
+                label="H3 video prompt",
                 media_type="text",
                 node_type="textAnnotationNode",
                 pushable=False,

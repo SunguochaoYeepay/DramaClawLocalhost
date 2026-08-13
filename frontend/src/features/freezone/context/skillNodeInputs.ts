@@ -209,6 +209,14 @@ function resolveImageUrl(data: Record<string, unknown>): string | undefined {
   );
 }
 
+function resolveVideoUrl(data: Record<string, unknown>): string | undefined {
+  return nonEmptyString(data.videoUrl);
+}
+
+function resolveAudioUrl(data: Record<string, unknown>): string | undefined {
+  return nonEmptyString(data.audioUrl);
+}
+
 function resolveText(data: Record<string, unknown>): string | undefined {
   return (
     nonEmptyString(data.text) ??
@@ -424,6 +432,14 @@ function resolveInputSnapshot(
   if (imageUrl) {
     resolved.image_url = imageUrl;
   }
+  const videoUrl = resolveVideoUrl(data);
+  if (videoUrl) {
+    resolved.video_url = videoUrl;
+  }
+  const audioUrl = resolveAudioUrl(data);
+  if (audioUrl) {
+    resolved.audio_url = audioUrl;
+  }
 
   const text = resolveText(data);
   if (text) {
@@ -460,7 +476,8 @@ function resolveInputSnapshot(
   }
 
   const mediaKind =
-    nonEmptyString(data.media_kind) ?? (imageUrl ? "image" : text ? "text" : undefined);
+    nonEmptyString(data.media_kind) ??
+    (imageUrl ? "image" : videoUrl ? "video" : audioUrl ? "audio" : text ? "text" : undefined);
   if (mediaKind) {
     resolved.media_kind = mediaKind;
   }

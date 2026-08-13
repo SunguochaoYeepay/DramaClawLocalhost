@@ -1546,8 +1546,9 @@ export function VideoPane({
     try {
       const res = await generateBeatVideoPrompt.mutateAsync({
         beatNum: beat.beat_number,
-        ...(isH3ReferenceBackend && h3PromptReferenceItems.length > 0
+        ...(isH3ReferenceBackend
           ? {
+              h3PromptComposer: true,
               h3ReferenceImages: h3PromptReferenceItems.map((asset) => ({
                 path: asset.abs_path || asset.path || "",
                 label: asset.label,
@@ -3055,11 +3056,11 @@ export function VideoPane({
                         className={SEEDANCE2_PILL_ACTION_CLASS}
                         onClick={() =>
                           setLegacyVideoPrompt((current) =>
-                            `${current}${current && !/\s$/.test(current) ? " " : ""}@图1 `,
+                            `${current}${current && !/\s$/.test(current) ? " " : ""}@图片1 `,
                           )
                         }
                       >
-                        @图1 首帧主体
+                        @图片1 首帧主体
                       </Button>
                       {h3PromptReferenceItems.map((asset, index) => (
                         <Button
@@ -3070,17 +3071,17 @@ export function VideoPane({
                           className={SEEDANCE2_PILL_ACTION_CLASS}
                           onClick={() =>
                             setLegacyVideoPrompt((current) =>
-                              `${current}${current && !/\s$/.test(current) ? " " : ""}@图${index + 2} `,
+                              `${current}${current && !/\s$/.test(current) ? " " : ""}@图片${index + 2} `,
                             )
                           }
                         >
-                          @图{index + 2} {asset.label}
+                          @图片{index + 2} {asset.label}
                         </Button>
                       ))}
                       <span className="text-[10px] text-muted-foreground/60">
                         {h3PromptReferenceItems.length > 0
                           ? "点击插入；提交时会转换为 H3 的 <Picture N> 引用。"
-                          : "先选择参考图，选中顺序即为 @图编号。"}
+                          : "先选择参考图，选中顺序即为 @图片编号。"}
                       </span>
                     </div>
                   )}

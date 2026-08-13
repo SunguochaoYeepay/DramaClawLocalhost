@@ -444,6 +444,44 @@ def test_generate_beat_video_prompt_updates_first_frame_video_prompt(
     ]
 
 
+def test_generate_h3_video_prompt_uses_shared_composer_with_first_frame(monkeypatch, tmp_path):
+    from novelvideo.api.routes import scripts
+
+    seen = {}
+
+    async def fake_compose(**kwargs):
+        seen.update(kwargs)
+        return "@图片1 主体连续运动"
+
+    monkeypatch.setattr(scripts, "_generate_h3_reference_video_prompt", fake_compose)
+    client, store = _client(
+        monkeypatch,
+        tmp_path,
+        [
+            {
+                "beat_number": 1,
+                "video_mode": "first_frame",
+                "visual_description": "主角转身走向窗边",
+                "video_prompt": "保留暖光氛围",
+            }
+        ],
+    )
+
+    response = client.post(
+        "/projects/demo/episodes/1/beats/1/video-prompt/generate",
+        json={
+            "h3_prompt_composer": True,
+            "manual_prompt_reference": "保留暖光氛围",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["prompt"] == "@图片1 主体连续运动"
+    assert seen["references"] == []
+    assert seen["manual_prompt_reference"] == "保留暖光氛围"
+    assert store.updates[0]["updates"] == {"video_prompt": "@图片1 主体连续运动"}
+
+
 def test_generate_beat_video_prompt_enqueues_project_task_in_celery_mode(
     monkeypatch, tmp_path
 ):

@@ -2794,6 +2794,10 @@ def _input_media_kind(input_item: ResolvedSkillInput) -> str:
         return media_kind
     if input_item.image_url:
         return "image"
+    if input_item.video_url:
+        return "video"
+    if input_item.audio_url:
+        return "audio"
     if input_item.text:
         return "text"
     return ""
@@ -2870,11 +2874,18 @@ def _normalize_skill_input_url_scope(
     username: str,
     project_name: str,
 ) -> None:
-    image_url = (input_item.image_url or "").strip()
-    if not image_url:
+    media_url = next(
+        (
+            str(value or "").strip()
+            for value in (input_item.image_url, input_item.video_url, input_item.audio_url)
+            if str(value or "").strip()
+        ),
+        "",
+    )
+    if not media_url:
         return
-    parsed = urlsplit(image_url)
-    path = parsed.path or image_url
+    parsed = urlsplit(media_url)
+    path = parsed.path or media_url
     if parsed.scheme in {"http", "https"}:
         allowed_hosts = {"static.local", "localhost", "127.0.0.1"}
         if parsed.hostname not in allowed_hosts:
@@ -2929,7 +2940,13 @@ def _normalize_skill_input_url_scope(
                 message="project media URL missing media path",
                 user_action_hint="Use a complete project media URL.",
             )
-        input_item.image_url = f"/{media_path}"
+        normalized_url = f"/{media_path}"
+        if input_item.image_url:
+            input_item.image_url = normalized_url
+        elif input_item.video_url:
+            input_item.video_url = normalized_url
+        else:
+            input_item.audio_url = normalized_url
         return
     if path.startswith("/static/"):
         parts = path.split("/", 4)
@@ -4528,6 +4545,60 @@ async def freezone_skill_run(
         run_id = f"agent.review_frame:{_new_job_id()}"
         output = _skill_output_metadata(skill, grouped)
         output["text"] = await _review_frame_text(body, grouped)
+        _write_skill_run_metadata(
+            project_dir,
+            run_id,
+            {
+                "run_id": run_id,
+                "skill_id": skill_id,
+                "status": "completed",
+                "outputs": [output],
+                "canvas_id": body.canvas_id,
+                "skill_node_id": body.skill_node_id,
+            },
+        )
+        response = SkillRunResponse(run_id=run_id, status="completed")
+        _append_canvas_event(
+            project_dir=project_dir,
+            project_id=project,
+            canvas_id=body.canvas_id,
+            event_type="skill.run_completed",
+            actor=_canvas_event_actor(user),
+            payload={
+                "skill_id": skill_id,
+                "skill_node_id": body.skill_node_id,
+                "run_id": run_id,
+                "status": response.status,
+                "output_count": 1,
+            },
+        )
+        _persist_skill_run_idempotency_response(
+            project_dir,
+            skill_id,
+            body,
+            idempotency_request_hash,
+            response,
+        )
+        return response
+    elif skill_id == "freezone.h3_prompt_composer":
+        from novelvideo.generators.h3_prompt_composer import H3Reference, compose_h3_prompt
+
+        intent = _required_input(grouped, "creative_intent")
+        reference_specs: list[H3Reference] = []
+        for role, media_type, limit in (
+            ("image_reference", "image", 9),
+            ("video_reference", "video", 3),
+            ("audio_reference", "audio", 3),
+        ):
+            for item in (grouped.get(role) or [])[:limit]:
+                label = str(_input_extra(item, "display_name") or item.node_id or "辅助参考").strip()
+                reference_specs.append(H3Reference(media_type=media_type, label=label))
+        run_id = f"freezone.h3_prompt_composer:{_new_job_id()}"
+        output = _skill_output_metadata(skill, grouped)
+        output["text"] = await compose_h3_prompt(
+            creative_intent=str(intent.text or _input_extra(intent, "content") or "").strip(),
+            references=reference_specs,
+        )
         _write_skill_run_metadata(
             project_dir,
             run_id,

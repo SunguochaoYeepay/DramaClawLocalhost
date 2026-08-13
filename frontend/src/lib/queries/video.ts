@@ -651,10 +651,12 @@ export function useGenerateBeatVideoPrompt(project: string, episode: number) {
   return useMutation({
     mutationFn: ({
       beatNum,
+      h3PromptComposer,
       h3ReferenceImages,
       manualPromptReference,
     }: {
       beatNum: number;
+      h3PromptComposer?: boolean;
       h3ReferenceImages?: Array<{ path: string; label: string }>;
       manualPromptReference?: string;
     }) =>
@@ -664,7 +666,8 @@ export function useGenerateBeatVideoPrompt(project: string, episode: number) {
           {
             json: {
               language: currentPromptLanguage(),
-              ...(h3ReferenceImages?.length
+              ...(h3PromptComposer ? { h3_prompt_composer: true } : {}),
+              ...(h3PromptComposer || h3ReferenceImages?.length
                 ? {
                     h3_reference_images: h3ReferenceImages,
                     manual_prompt_reference: manualPromptReference ?? "",
