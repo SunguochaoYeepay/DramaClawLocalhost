@@ -64,6 +64,33 @@ def test_video_history_persists_model_and_gen_mode(tmp_path: Path) -> None:
     assert stored[-1]["gen_mode"] == "firstLastFrame"
 
 
+def test_video_history_persists_h3_mode_profile_and_resolution(tmp_path: Path) -> None:
+    ctx = _ctx(tmp_path)
+    project_dir = tmp_path / "proj"
+    payload = {
+        "node_id": "video_h3",
+        "canvas_id": "default",
+        "prompt": "A continuous close-up shot.",
+        "model_id": "minimax_h3",
+        "h3_mode": "i2va",
+        "h3_profile": "balanced",
+        "resolution": "720p",
+    }
+
+    rec = _append_freezone_video_node_history(
+        ctx=ctx,
+        project_dir=project_dir,
+        payload=payload,
+        job_id="job_h3",
+        result={"output_url": "/static/h3.mp4"},
+    )
+
+    assert rec is not None
+    assert rec["h3_mode"] == "i2va"
+    assert rec["h3_profile"] == "balanced"
+    assert rec["resolution"] == "720p"
+
+
 def test_video_history_omits_model_keys_when_absent(tmp_path: Path) -> None:
     ctx = _ctx(tmp_path)
     project_dir = tmp_path / "proj"

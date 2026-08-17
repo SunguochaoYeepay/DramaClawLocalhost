@@ -124,11 +124,74 @@ def test_minimax_h3_workflow_is_registered_with_first_and_last_frame_inputs():
     assert backend.max_duration == 15
 
 
-def test_minimax_h3_workflows_use_the_same_half_megapixel_canvas():
-    generator = ComfyUIVideoGenerator(workflow_type="minimax_h3")
+@pytest.mark.parametrize(
+    ("resolution", "aspect_ratio", "expected_size", "expected_megapixels"),
+    [
+        ("720p", "16:9", (1280, 720), 0.9216),
+        ("720p", "9:16", (720, 1280), 0.9216),
+        ("1080p", "16:9", (1920, 1080), 2.0736),
+        ("1080p", "9:16", (1080, 1920), 2.0736),
+    ],
+)
+def test_minimax_h3_dimensions_use_the_requested_real_canvas(
+    resolution, aspect_ratio, expected_size, expected_megapixels
+):
+    generator = ComfyUIVideoGenerator(workflow_type="minimax_h3", resolution=resolution)
 
-    assert generator._workflow_templates["minimax_h3"]["115"]["inputs"]["megapixels"] == 0.5
-    assert generator._workflow_templates["minimax_h3_r2v"]["115"]["inputs"]["megapixels"] == 0.5
+    for workflow_key in ("minimax_h3", "minimax_h3_r2v"):
+        workflow = copy.deepcopy(generator._workflow_templates[workflow_key])
+        assert (
+            generator._apply_minimax_h3_dimensions(workflow, aspect_ratio, workflow_key)
+            == expected_size
+        )
+        assert workflow["115"]["inputs"]["megapixels"] == expected_megapixels
+        if workflow_key == "minimax_h3":
+            assert workflow["119"]["inputs"]["megapixels"] == expected_megapixels
+
+
+@pytest.mark.parametrize(
+    ("profile", "expected_profile", "steps", "lora_fragment"),
+    [
+        ("draft", "draft", 4, "turbo_4step"),
+        ("balanced", "balanced", 8, "turbo_8step"),
+        ("final", "final", 20, None),
+    ],
+)
+def test_minimax_h3_quality_profiles_apply_steps_and_turbo_lora(
+    profile, expected_profile, steps, lora_fragment
+):
+    generator = ComfyUIVideoGenerator(workflow_type="minimax_h3")
+    workflow = copy.deepcopy(generator._workflow_templates["minimax_h3"])
+
+    resolved, resolved_steps, lora_name = generator._apply_minimax_h3_profile(
+        workflow, "minimax_h3", profile
+    )
+
+    assert (resolved, resolved_steps) == (expected_profile, steps)
+    assert workflow["105:9"]["inputs"]["steps"] == steps
+    if lora_fragment:
+        assert lora_fragment in (lora_name or "")
+        assert workflow["105:9"]["inputs"]["model"] == ["h3_turbo_lora", 0]
+        assert workflow["105:120"]["inputs"]["model"] == ["h3_turbo_lora", 0]
+    else:
+        assert lora_name is None
+        assert "h3_turbo_lora" not in workflow
+        assert workflow["105:9"]["inputs"]["model"] == ["105:6", 0]
+
+
+def test_minimax_h3_ref2va_forces_native_sampler_without_fl2va_turbo():
+    generator = ComfyUIVideoGenerator(workflow_type="minimax_h3")
+    workflow = copy.deepcopy(generator._workflow_templates["minimax_h3_r2v"])
+
+    resolved, steps, lora_name = generator._apply_minimax_h3_profile(
+        workflow, "minimax_h3_r2v", "draft"
+    )
+
+    assert (resolved, steps, lora_name) == ("final", 20, None)
+    assert "h3_turbo_lora" not in workflow
+    assert workflow["124"]["inputs"]["model"] == ["127", 0]
+    assert workflow["137"]["inputs"]["model"] == ["127", 0]
+    assert "ref2va" in workflow["127"]["inputs"]["unet_name"]
 
 
 @pytest.mark.asyncio

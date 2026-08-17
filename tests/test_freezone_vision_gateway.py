@@ -39,6 +39,7 @@ async def test_vision_gateway_uses_pydantic_agent_and_logical_model(
     assert output == "视觉解析结果"
     assert captured["model_env"] == "FREEZONE_VISION_MODEL"
     assert captured["model_name_override"] == "custom-vision-model"
+    assert captured["timeout_seconds_override"] == 120.0
 
 
 @pytest.mark.parametrize(

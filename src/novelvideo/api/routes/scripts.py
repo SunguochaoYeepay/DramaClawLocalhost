@@ -58,7 +58,8 @@ async def _generate_h3_reference_video_prompt(
         context={
             "visual_description": beat.get("visual_description") or "",
             "scene_description": beat.get("scene_description") or "",
-            "narration": beat.get("dialogue") or beat.get("narration_segment") or "",
+            "dialogue": beat.get("dialogue") or "",
+            "narration": beat.get("narration_segment") or "",
         },
     )
 

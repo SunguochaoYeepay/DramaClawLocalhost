@@ -110,4 +110,5 @@ export interface ResolvedSkillInput {
   beat_context?: Record<string, unknown>;
   media_kind?: string;
   text?: string;
+  display_name?: string;
 }

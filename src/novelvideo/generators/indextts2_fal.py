@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import os
 import subprocess
 import tempfile
 import time
 import uuid
+import wave
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +18,9 @@ import httpx
 from novelvideo.ports import get_usage_meter
 from novelvideo.shared.billing_errors import is_insufficient_credits_error
 from novelvideo.generators.tts_generator import TTSResult
+
+
+MIN_COSYVOICE_REFERENCE_SECONDS = 3.0
 
 
 async def _reserve_tts_model_call(model: str, *, source: str) -> str:
@@ -311,6 +316,11 @@ class IndexTTS2FalClient:
             voice_id = await self._resolve_cosyvoice_voice_id(audio_url)
         except Exception as exc:
             detail = str(exc) or repr(exc)
+            if "Audio.AudioShortError" in detail or "valid audio too short" in detail.lower():
+                detail = (
+                    "参考音频中的有效人声不足 3 秒。请使用 3-30 秒的单人清晰语音，"
+                    "并去除开头、结尾和中间的长静音后重试。"
+                )
             return TTSResult(success=False, error=f"CosyVoice 声音注册失败: {detail}")
 
         # --- Step 2: synthesize speech ---
@@ -497,6 +507,7 @@ class IndexTTS2FalClient:
                 prefix="dramaclaw",
                 url=audio_url,
                 language_hints=[COSYVOICE_BEAT_LANGUAGE],
+                max_prompt_audio_length=30.0,
             )
 
         import asyncio
@@ -593,12 +604,20 @@ class IndexTTS2FalClient:
             loop = asyncio.get_event_loop()
             result = await loop.run_in_executor(None, _upload)
             return str(result.get("secure_url") or result.get("url") or "").strip()
+        except ValueError:
+            # Preserve reference-audio validation errors for the canvas UI.
+            raise
         except Exception:
             return ""
 
     @staticmethod
     def _prepare_cosyvoice_reference_audio(raw_bytes: bytes, source_ext: str) -> bytes:
-        """Normalize clone input to a short 24 kHz mono PCM WAV."""
+        """Normalize clone input to a compact 24 kHz mono PCM WAV.
+
+        CosyVoice enrollment validates contiguous voiced regions. Removing only
+        clear pauses before uploading prevents normal sentence breaks from being
+        mistaken for a too-short voice sample.
+        """
         with tempfile.TemporaryDirectory(prefix="dramaclaw-cosyvoice-") as temp_dir:
             temp_root = Path(temp_dir)
             source_path = temp_root / f"reference.{source_ext or 'mp3'}"
@@ -612,6 +631,12 @@ class IndexTTS2FalClient:
                     "error",
                     "-i",
                     str(source_path),
+                    "-af",
+                    (
+                        "silenceremove="
+                        "start_periods=1:start_duration=0.3:start_threshold=-45dB:"
+                        "stop_periods=-1:stop_duration=0.3:stop_threshold=-45dB"
+                    ),
                     "-t",
                     "30",
                     "-ac",
@@ -631,6 +656,19 @@ class IndexTTS2FalClient:
             normalized = output_path.read_bytes()
             if not normalized:
                 raise RuntimeError("参考音频转码结果为空")
+            try:
+                with wave.open(io.BytesIO(normalized), "rb") as wav_file:
+                    frame_rate = wav_file.getframerate()
+                    frame_count = wav_file.getnframes()
+                duration_seconds = frame_count / frame_rate if frame_rate else 0.0
+            except (EOFError, wave.Error) as exc:
+                raise RuntimeError("无法读取转码后的参考音频") from exc
+            if duration_seconds < MIN_COSYVOICE_REFERENCE_SECONDS:
+                raise ValueError(
+                    "CosyVoice 声音克隆参考音频过短："
+                    f"当前 {duration_seconds:.1f} 秒，至少需要 "
+                    f"{MIN_COSYVOICE_REFERENCE_SECONDS:.0f} 秒清晰连续的人声。"
+                )
             return normalized
 
     async def _generate_via_newapi(

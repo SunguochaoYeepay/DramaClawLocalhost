@@ -2774,8 +2774,22 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
     FP8_FLF_WORKFLOW_PATH = Path(__file__).parent / "wan2-2-FLF-LightX2V_sage.json"
     LTX23_I2V_WORKFLOW_PATH = Path(__file__).parent / "ltx2-3-I2V_sage.json"
     LTX23_DIRECTOR_WORKFLOW_PATH = Path(__file__).parent / "ltx2-3-director_sage.json"
-    MINIMAX_H3_I2V_WORKFLOW_PATH = Path(__file__).parent / "minimax-h3-I2V_sage.json"
-    MINIMAX_H3_R2V_WORKFLOW_PATH = Path(__file__).parent / "minimax-h3-R2V_sage.json"
+    # v2 templates preserve the original workflows while adding runtime quality
+    # profiles and a correct Ref2VA model boundary.
+    MINIMAX_H3_I2V_WORKFLOW_PATH = Path(__file__).parent / "minimax-h3-base-v2_sage.json"
+    MINIMAX_H3_R2V_WORKFLOW_PATH = Path(__file__).parent / "minimax-h3-ref2va-v2_sage.json"
+
+    MINIMAX_H3_PROFILES = {
+        "draft": {
+            "steps": 4,
+            "lora": "minimax_h3_fl2v_turbo_4step_v1.0_768p_comfyui_bf16.safetensors",
+        },
+        "balanced": {
+            "steps": 8,
+            "lora": "minimax_h3_fl2v_turbo_8step_v1.0_comfyui_bf16.safetensors",
+        },
+        "final": {"steps": 20, "lora": None},
+    }
 
     # 节点映射配置（不同工作流的节点 ID）
     NODE_MAPPING = {
@@ -2830,6 +2844,10 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             "dimensions": "115",
             "duration": "105:111",
             "positive_prompt": "105:104",
+            "scheduler": "105:9",
+            "model_loader": "105:6",
+            "sage_patch": "105:120",
+            "input_scale": "119",
             "seed": "105:15",
             "video_output": "92",
         },
@@ -2837,6 +2855,9 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             "dimensions": "115",
             "duration": "132",
             "positive_prompt": "136",
+            "scheduler": "124",
+            "model_loader": "127",
+            "sage_patch": "137",
             "seed": "129",
             "video_output": "92",
         },
@@ -2931,7 +2952,12 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         inputs["resize_type.height"] = height
         return width, height
 
-    def _apply_minimax_h3_dimensions(self, workflow: dict, aspect_ratio: str) -> None:
+    def _apply_minimax_h3_dimensions(
+        self,
+        workflow: dict,
+        aspect_ratio: str,
+        workflow_key: str = "minimax_h3",
+    ) -> tuple[int, int]:
         ratio_names = {
             "16:9": "16:9 (Widescreen)",
             "9:16": "9:16 (Portrait Widescreen)",
@@ -2940,9 +2966,74 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             "3:4": "3:4 (Portrait Standard)",
             "21:9": "21:9 (Ultrawide)",
         }
-        workflow[self.NODE_MAPPING["minimax_h3"]["dimensions"]]["inputs"]["aspect_ratio"] = ratio_names.get(
-            aspect_ratio, "16:9 (Widescreen)"
+        short_edge_presets = {"480p": 480, "720p": 720, "1080p": 1080}
+        short_edge = short_edge_presets.get(
+            str(self.resolution or "720p").strip().lower(), 720
         )
+        try:
+            w_part, h_part = str(aspect_ratio or "16:9").split(":", 1)
+            ratio = float(w_part) / float(h_part)
+            if ratio <= 0:
+                raise ValueError
+        except (TypeError, ValueError, ZeroDivisionError):
+            ratio = 16 / 9
+        if ratio >= 1:
+            height = short_edge
+            width = round(height * ratio)
+        else:
+            width = short_edge
+            height = round(width / ratio)
+        # ResolutionSelector owns H3's 32-pixel alignment. Calculate its
+        # megapixel target from the requested nominal resolution so 720p does
+        # not get rounded down to 704p before it reaches the node.
+        megapixels = round(width * height / 1_000_000, 4)
+        node_map = self.NODE_MAPPING[workflow_key]
+        dimension_inputs = workflow[node_map["dimensions"]]["inputs"]
+        dimension_inputs["aspect_ratio"] = ratio_names.get(aspect_ratio, "16:9 (Widescreen)")
+        dimension_inputs["megapixels"] = megapixels
+        input_scale = node_map.get("input_scale")
+        if input_scale and input_scale in workflow:
+            workflow[input_scale]["inputs"]["megapixels"] = megapixels
+        return width, height
+
+    @classmethod
+    def _normalize_minimax_h3_profile(cls, profile: str | None) -> str:
+        normalized = str(profile or "balanced").strip().lower()
+        return normalized if normalized in cls.MINIMAX_H3_PROFILES else "balanced"
+
+    @classmethod
+    def _apply_minimax_h3_profile(
+        cls,
+        workflow: dict,
+        workflow_key: str,
+        profile: str | None,
+    ) -> tuple[str, int, str | None]:
+        normalized = cls._normalize_minimax_h3_profile(profile)
+        # Turbo LoRAs are released for FL2VA. Ref2VA stays on its native sampler.
+        if workflow_key == "minimax_h3_r2v":
+            normalized = "final"
+        config = cls.MINIMAX_H3_PROFILES[normalized]
+        steps = int(config["steps"])
+        lora_name = str(config["lora"]) if config["lora"] else None
+        node_map = cls.NODE_MAPPING[workflow_key]
+        workflow[node_map["scheduler"]]["inputs"]["steps"] = steps
+
+        model_output: list[object] = [node_map["model_loader"], 0]
+        if lora_name:
+            workflow["h3_turbo_lora"] = {
+                "inputs": {
+                    "lora_name": lora_name,
+                    "strength_model": 1.0,
+                    "model": model_output,
+                },
+                "class_type": "LoraLoaderModelOnly",
+                "_meta": {"title": f"MiniMax H3 Turbo ({steps} steps)"},
+            }
+            model_output = ["h3_turbo_lora", 0]
+
+        workflow[node_map["scheduler"]]["inputs"]["model"] = model_output
+        workflow[node_map["sage_patch"]]["inputs"]["model"] = model_output
+        return normalized, steps, lora_name
 
     @staticmethod
     def _build_minimax_h3_reference_prompt(
@@ -3299,6 +3390,8 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 "MiniMax H3 Multi-Reference"
                 if use_h3_reference_mode
                 else "MiniMax H3 First/Last Frame"
+                if image_path and last_frame_path
+                else "MiniMax H3 Last Frame"
                 if last_frame_path
                 else "MiniMax H3 I2V"
                 if image_path
@@ -3464,7 +3557,21 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                 log(f"画布: {wan_width}x{wan_height}")
 
             if workflow_key in {"minimax_h3", "minimax_h3_r2v"}:
-                self._apply_minimax_h3_dimensions(workflow, aspect_ratio)
+                h3_width, h3_height = self._apply_minimax_h3_dimensions(
+                    workflow,
+                    aspect_ratio,
+                    workflow_key,
+                )
+                h3_profile, h3_steps, h3_lora = self._apply_minimax_h3_profile(
+                    workflow,
+                    workflow_key,
+                    kwargs.get("h3_profile"),
+                )
+                log(f"H3 画布: {h3_width}x{h3_height}")
+                log(
+                    f"H3 质量档位: {h3_profile} ({h3_steps} steps"
+                    f"{', Turbo LoRA' if h3_lora else ', native'})"
+                )
 
             # 设置输入图片（根据工作流类型）
             if workflow_key == "ltx23":

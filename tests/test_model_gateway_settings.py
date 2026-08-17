@@ -115,6 +115,33 @@ def test_newapi_runtime_credentials_allow_explicit_override(monkeypatch, tmp_pat
     assert base_url == "https://request.example/v1"
 
 
+def test_newapi_text_factory_allows_model_and_timeout_overrides(monkeypatch):
+    monkeypatch.delenv("MODEL_PROVIDER", raising=False)
+    monkeypatch.setattr(
+        config,
+        "get_newapi_runtime_credentials",
+        lambda **_kwargs: ("sk-test", "https://gateway.example/v1"),
+    )
+    captured: dict[str, object] = {}
+
+    def fake_model(model_name, **kwargs):
+        captured.update(model_name=model_name, **kwargs)
+        return "newapi-model"
+
+    monkeypatch.setattr(config, "_newapi_text_openai_model", fake_model)
+
+    result = config.get_newapi_text_pydantic_model(
+        "FREEZONE_VISION_MODEL",
+        "default-vision-model",
+        model_name_override="request-vision-model",
+        timeout_seconds_override=345.0,
+    )
+
+    assert result == "newapi-model"
+    assert captured["model_name"] == "request-vision-model"
+    assert captured["timeout_seconds"] == 345.0
+
+
 def test_legacy_pydantic_factory_uses_ce_gateway_settings(monkeypatch, tmp_path):
     _isolate_settings_db(monkeypatch, tmp_path)
     monkeypatch.setenv("MODEL_API_KEY", "sk-stale-env-secret")

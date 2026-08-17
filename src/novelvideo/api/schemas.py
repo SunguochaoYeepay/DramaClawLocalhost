@@ -1053,6 +1053,14 @@ class FreezoneVideoGenRequest(BaseModel):
     canvas_id: str = Field(default="", description="可选：来源画布 id，用于记录节点生成历史")
     node_id: str = Field(default="", description="可选：来源节点 id，用于记录节点生成历史")
     gen_mode: Optional[str] = Field(default=None, description="可选：生成模式，用于还原节点时回填 genMode")
+    h3_mode: Optional[Literal["t2va", "i2va", "fl2va", "l2va", "ref2va"]] = Field(
+        default=None,
+        description="MiniMax H3 官方生成模式；为空时根据输入自动判断",
+    )
+    h3_profile: Optional[Literal["draft", "balanced", "final"]] = Field(
+        default=None,
+        description="MiniMax H3 质量档位：4 步、8 步或原生 20 步",
+    )
 
 
 class FreezoneImageToVideoRequest(BaseModel):
@@ -1105,6 +1113,8 @@ class FreezoneImageToVideoRequest(BaseModel):
     canvas_id: str = Field(default="", description="可选：来源画布 id，用于记录节点生成历史")
     node_id: str = Field(default="", description="可选：来源节点 id，用于记录节点生成历史")
     gen_mode: Optional[str] = Field(default=None, description="可选：生成模式，用于还原节点时回填 genMode")
+    h3_mode: Optional[Literal["t2va", "i2va", "fl2va", "l2va", "ref2va"]] = None
+    h3_profile: Optional[Literal["draft", "balanced", "final"]] = None
 
 
 class FreezoneKeyframeVideoRequest(BaseModel):
@@ -1159,6 +1169,8 @@ class FreezoneKeyframeVideoRequest(BaseModel):
     canvas_id: str = Field(default="", description="可选：来源画布 id，用于记录节点生成历史")
     node_id: str = Field(default="", description="可选：来源节点 id，用于记录节点生成历史")
     gen_mode: Optional[str] = Field(default=None, description="可选：生成模式，用于还原节点时回填 genMode")
+    h3_mode: Optional[Literal["t2va", "i2va", "fl2va", "l2va", "ref2va"]] = None
+    h3_profile: Optional[Literal["draft", "balanced", "final"]] = None
 
 
 class FreezoneVideoEditRequest(BaseModel):
@@ -1369,6 +1381,8 @@ class FreezoneVideoOmniGenRequest(BaseModel):
     )
     canvas_id: str = Field(default="", description="可选：来源画布 id，用于记录节点生成历史")
     node_id: str = Field(default="", description="可选：来源节点 id，用于记录节点生成历史")
+    h3_mode: Optional[Literal["t2va", "i2va", "fl2va", "l2va", "ref2va"]] = None
+    h3_profile: Optional[Literal["draft", "balanced", "final"]] = None
     gen_mode: Optional[str] = Field(default=None, description="可选：生成模式，用于还原节点时回填 genMode")
 
 

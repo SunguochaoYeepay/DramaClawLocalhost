@@ -54,6 +54,7 @@ import {
   isUploadNode,
   isVideoNode,
   type CanvasNode,
+  type MiniMaxH3Profile,
   type Seedance2SceneOptimize,
   type VideoGenCount,
   type VideoGenMode,
@@ -281,6 +282,12 @@ const ASPECT_RATIOS: ReadonlyArray<FreezoneVideoAspectRatio> = [
 ];
 const QUALITIES: ReadonlyArray<VideoGenQuality> = ["480P", "720P", "1080P"];
 const COUNT_OPTIONS: ReadonlyArray<VideoGenCount> = [1, 2, 4];
+const H3_PROFILE_OPTIONS: ReadonlyArray<MiniMaxH3Profile> = ["draft", "balanced", "final"];
+const H3_PROFILE_LABELS: Record<MiniMaxH3Profile, string> = {
+  draft: "草稿 · 4步",
+  balanced: "平衡 · 8步",
+  final: "成片 · 20步",
+};
 const SCENE_OPTIMIZE_OPTIONS: ReadonlyArray<Seedance2SceneOptimize> = ["anime", "realistic"];
 const VIDEO_PARAM_POPOVER_CLASS =
   `nodrag nowheel absolute bottom-full left-0 z-50 mb-2 w-[320px] p-4 ${NODE_FLOATING_PANEL_SURFACE_CLASS}`;
@@ -401,6 +408,13 @@ function isSeedance1xModel(modelId: string | null | undefined): boolean {
     .replace(/[\s._-]/g, "")
     .toLowerCase();
   return /seedance1\d/.test(normalized);
+}
+
+function h3ModeForVideoGenMode(mode: VideoGenMode) {
+  if (mode === "allReference" || mode === "imageReference") return "ref2va" as const;
+  if (mode === "firstLastFrame") return "fl2va" as const;
+  if (mode === "imageToVideo") return "i2va" as const;
+  return "t2va" as const;
 }
 
 function isSeedance20VideoModel(modelId: string | null | undefined): boolean {
@@ -706,6 +720,38 @@ async function captureVideoFrameBlob(
   });
 }
 
+async function uploadVideoLastFrame(
+  projectId: string,
+  videoUrl: string,
+): Promise<string> {
+  const blob = await captureVideoFrameBlob(
+    resolveImageDisplayUrl(videoUrl),
+    Number.MAX_SAFE_INTEGER,
+  );
+  const filename = `h3-last-frame-${Date.now()}.png`;
+  const file = new File([blob], filename, { type: "image/png" });
+  const uploaded = await uploadFreezoneImage(projectId, file, filename);
+  return uploaded.url;
+}
+
+function previousH3BatchVideoNode(
+  nodes: CanvasNode[],
+  currentId: string,
+  data: VideoNodeData,
+): CanvasNode | null {
+  if (!data.h3BatchId || typeof data.h3BatchIndex !== "number" || data.h3BatchIndex <= 0) {
+    return null;
+  }
+  const batchId = data.h3BatchId;
+  const previousIndex = data.h3BatchIndex - 1;
+  return nodes.find((node) => (
+    node.id !== currentId
+    && isVideoNode(node)
+    && node.data.h3BatchId === batchId
+    && node.data.h3BatchIndex === previousIndex
+  )) ?? null;
+}
+
 export const VideoNode = memo(
   ({ id, data, selected, width, height }: VideoNodeProps) => {
     const { t } = useTranslation();
@@ -725,6 +771,7 @@ export const VideoNode = memo(
     const inputRef = useRef<HTMLInputElement>(null);
     // 在途守卫：持到本批所有并发任务 allSettled 才释放（见 handleSubmit）。
     const submittingRef = useRef(false);
+    const batchStartingRef = useRef(false);
     // Mirror the actual <video> element into state so VideoPlayerControls 能
     // 在挂载/卸载时重新订阅事件（仅 ref 不会触发重渲染）。同时保留可写的
     // ref，给非 React 路径（capture frame 之类）继续用 .current。
@@ -805,6 +852,7 @@ export const VideoNode = memo(
     const modelId = selectedVideoModel?.id ?? DEFAULT_VIDEO_MODEL_ID;
     const selectedVideoModelId = selectedVideoModel?.apiModel ?? selectedVideoModel?.id ?? modelId;
     const isHappyHorseModel = isHappyHorseVideoModel(selectedVideoModelId);
+    const isMiniMaxH3Model = isMiniMaxH3VideoModel(selectedVideoModelId);
     // aspectRatio 只认合法的比例预设（含 "auto"）；历史上曾被写成像素串(如
     // "1248:704")的旧节点在这里吸附到最接近的合法视频比例，保证 chip 显示干净。
     const aspectRatio: FreezoneVideoAspectRatio = (
@@ -854,6 +902,13 @@ export const VideoNode = memo(
       defaultSceneOptimizeForModel(selectedVideoModel),
     );
     const generateAudio = Boolean(data.generateAudio);
+    const h3Profile: MiniMaxH3Profile = data.h3Profile ?? "balanced";
+    const h3Continuity = Boolean(
+      data.h3BatchId
+      && typeof data.h3BatchIndex === "number"
+      && data.h3BatchIndex > 0
+      && data.h3Continuity !== false,
+    );
     // 真人素材审核开关只对 Seedance 2.0 系列模型生效。归一化掉分隔符后匹配
     // `seedance2`，覆盖 `huimeng_seedance20_fast` / 未来可能的 `seedance_2_0` 等 id。
     const isSeedance20Model = /seedance2/i.test(modelId.replace(/[\s._-]/g, ""));
@@ -1717,13 +1772,16 @@ export const VideoNode = memo(
       if (data.genMode != null) return;
       if (referenceImages.length === 0) return;
       updateNodeData(id, {
-        genMode: supportsOmniReferenceVideoModel(selectedVideoModelId)
+        genMode: isMiniMaxH3Model && referenceImages.length === 1
+          ? "imageToVideo"
+          : supportsOmniReferenceVideoModel(selectedVideoModelId)
           ? "allReference"
           : "imageToVideo",
       });
     }, [
       data.genMode,
       id,
+      isMiniMaxH3Model,
       isHappyHorseModel,
       referenceImages.length,
       selectedVideoModelId,
@@ -1823,12 +1881,15 @@ export const VideoNode = memo(
       if (genMode !== "textToVideo") return;
       if (upstreamCounts.images === 0 && upstreamCounts.audios === 0) return;
       updateNodeData(id, {
-        genMode: supportsOmniReferenceVideoModel(selectedVideoModelId)
+        genMode: isMiniMaxH3Model && upstreamCounts.images === 1 && upstreamCounts.audios === 0
+          ? "imageToVideo"
+          : supportsOmniReferenceVideoModel(selectedVideoModelId)
           ? "allReference"
           : "imageToVideo",
       });
     }, [
       genMode,
+      isMiniMaxH3Model,
       isHappyHorseModel,
       upstreamCounts.images,
       upstreamCounts.audios,
@@ -2121,16 +2182,91 @@ export const VideoNode = memo(
           return urls;
         };
 
+        let h3ContinuityFrameUrl: string | null = null;
+        if (
+          isMiniMaxH3Model
+          && h3Continuity
+          && typeof data.h3BatchIndex === "number"
+          && data.h3BatchIndex > 0
+        ) {
+          const state = useCanvasStore.getState();
+          const previousShot = previousH3BatchVideoNode(state.nodes, id, data);
+          const previousData = previousShot?.data as VideoNodeData | undefined;
+          if (!previousShot || previousData?.isGenerating || !previousData?.videoUrl) {
+            updateNodeData(id, { isGenerating: false, generationStartedAt: null });
+            void showErrorDialog(
+              "连续镜头需要先完成上一段视频。请先生成上一镜头，再生成当前镜头。",
+              "等待上一镜头",
+            );
+            return;
+          }
+
+          h3ContinuityFrameUrl = previousData.h3LastFrameUrl ?? null;
+          if (!h3ContinuityFrameUrl) {
+            try {
+              h3ContinuityFrameUrl = await uploadVideoLastFrame(projectId, previousData.videoUrl);
+              updateNodeData(previousShot.id, { h3LastFrameUrl: h3ContinuityFrameUrl });
+            } catch (error) {
+              console.error("[video-node] H3 continuity frame extraction failed", error);
+              updateNodeData(id, { isGenerating: false, generationStartedAt: null });
+              void showErrorDialog(
+                "上一镜头的末帧提取失败。可以重试，或在参数中关闭“衔接上一镜头”。",
+                "镜头衔接失败",
+              );
+              return;
+            }
+          }
+        }
+
         const durationClamped = clampVideoDuration(durationSec, durationBounds);
         const cameraTemplateId = cameraMovementId;
         // 后端按 canvas_id + node_id 记录每个节点的生成历史。多条生成时每个
         // 兄弟节点用各自的 targetId 作 node_id，历史才能分别落到对应节点。
         const canvasId = readUrl().canvas ?? "default";
+        const h3RequestOptions = isMiniMaxH3Model
+          ? {
+              h3Mode: h3ModeForVideoGenMode(genMode),
+              h3Profile,
+            }
+          : {};
 
         // 后端不再支持一次出多条，改为按「生成数量」并发调用 N 次接口。先按
         // genMode 组装出一个「调一次接口」的闭包 doSubmit，校验失败则置空提前返回。
         let doSubmit: ((targetId: string) => Promise<FreezoneJobRef>) | null = null;
-        if (genMode === "firstLastFrame") {
+        if (isMiniMaxH3Model && h3ContinuityFrameUrl) {
+          const currentStoryboardFrameUrl = collectUpstreamImageUrls()[0] ?? null;
+          if (!currentStoryboardFrameUrl) {
+            console.warn("[video-node] H3 continuity submit without storyboard end frame");
+            updateNodeData(id, {
+              isGenerating: false,
+              generationStartedAt: null,
+            });
+            void showErrorDialog(
+              "当前镜头缺少分镜图，无法作为视频尾帧。请重新连接当前分镜图片。",
+              "缺少尾帧",
+            );
+            return;
+          }
+          doSubmit = (targetId) =>
+            submitFreezoneVideoKeyframes(projectId, {
+              firstFrameUrl: h3ContinuityFrameUrl,
+              lastFrameUrl: currentStoryboardFrameUrl,
+              prompt: composedPrompt,
+              cameraTemplateId,
+              aspectRatio: submitAspectRatio,
+              resolution: qualityToResolution(quality),
+              durationSeconds: durationClamped,
+              generateAudio,
+              model: modelId,
+              genMode: "firstLastFrame",
+              h3Mode: "fl2va",
+              h3Profile,
+              humanReview: false,
+              sceneOptimize: sceneOptimize ?? null,
+              canvasId,
+              nodeId: targetId,
+            });
+        } else if (genMode === "firstLastFrame") {
           const imageUrls = collectUpstreamImageUrls();
           const firstFrameUrl = imageUrls[0] ?? null;
           const lastFrameUrl = imageUrls[1] ?? null;
@@ -2156,6 +2292,7 @@ export const VideoNode = memo(
               generateAudio,
               model: modelId,
               genMode,
+              ...h3RequestOptions,
               humanReview: isSeedance20Model && humanReview,
               sceneOptimize: sceneOptimize ?? null,
               canvasId,
@@ -2183,6 +2320,7 @@ export const VideoNode = memo(
               generateAudio,
               model: modelId,
               genMode,
+              ...h3RequestOptions,
               humanReview: isSeedance20Model && humanReview,
               sceneOptimize: sceneOptimize ?? null,
               canvasId,
@@ -2341,6 +2479,7 @@ export const VideoNode = memo(
               generateAudio,
               model: modelId,
               genMode,
+              ...h3RequestOptions,
               humanReview: isSeedance20Model && humanReview,
               sceneOptimize: sceneOptimize ?? null,
               canvasId,
@@ -2358,6 +2497,7 @@ export const VideoNode = memo(
               generateAudio,
               model: modelId,
               genMode,
+              ...h3RequestOptions,
               humanReview: isSeedance20Model && humanReview,
               sceneOptimize: sceneOptimize ?? null,
               canvasId,
@@ -2423,6 +2563,20 @@ export const VideoNode = memo(
                   : {}),
                 ...(total > 1 ? { generationBatch: [...completedUrls] } : {}),
               });
+              if (
+                isFirstCompleted
+                && isMiniMaxH3Model
+                && data.h3BatchId
+                && typeof data.h3BatchIndex === "number"
+              ) {
+                try {
+                  const lastFrameUrl = await uploadVideoLastFrame(projectId, url);
+                  updateNodeData(id, { h3LastFrameUrl: lastFrameUrl });
+                } catch (error) {
+                  console.error("[video-node] H3 last frame extraction failed", error);
+                  toast.warning("视频已生成，但末帧提取失败；生成下一镜头时会再次尝试");
+                }
+              }
             } else {
               console.warn(
                 "[video-node] video gen completed without output url",
@@ -2468,7 +2622,10 @@ export const VideoNode = memo(
 
         // 旧画册清空 + 占位计数都在所有校验通过、真正开跑前才动——前面有多个
         // 校验失败的早退路径，提前动会白白毁掉已有画册 / 把「生成中」占位卡死。
-        updateNodeData(id, { generationBatch: null });
+        updateNodeData(id, {
+          generationBatch: null,
+          ...(isMiniMaxH3Model && data.h3BatchId ? { h3LastFrameUrl: null } : {}),
+        });
         setAlbumPendingTotal(id, total > 1 ? total : 0);
         await Promise.allSettled(
           Array.from({ length: total }, (_, runIndex) => runOne(runIndex)),
@@ -2527,8 +2684,11 @@ export const VideoNode = memo(
       durationSec,
       generateAudio,
       genMode,
+      h3Continuity,
+      h3Profile,
       humanReview,
       id,
+      isMiniMaxH3Model,
       isSeedance20Model,
       modelId,
       prompt,
@@ -2538,6 +2698,75 @@ export const VideoNode = memo(
       submitDisabled,
       updateNodeData,
       upstreamTextJoined,
+    ]);
+
+    useEffect(() => {
+      if (!data.autoStartGeneration || isGenerating) return;
+      updateNodeData(id, { autoStartGeneration: false });
+      const timer = window.setTimeout(() => {
+        void handleSubmit();
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }, [data.autoStartGeneration, handleSubmit, id, isGenerating, updateNodeData]);
+
+    useEffect(() => {
+      const batchId = data.h3BatchId;
+      const batchIndex = data.h3BatchIndex;
+      const batchState = data.h3BatchState;
+      if (!batchId || typeof batchIndex !== "number" || !batchState) return;
+
+      if (batchState === "running") {
+        if (isGenerating || submittingRef.current) return;
+        if (data.videoUrl || data.generationError) {
+          updateNodeData(id, {
+            h3BatchState: data.videoUrl ? "succeeded" : "failed",
+          });
+        }
+        return;
+      }
+      if (batchState !== "pending" || isGenerating || batchStartingRef.current) return;
+
+      const state = useCanvasStore.getState();
+      const earlierShots = state.nodes.filter((node) => {
+        if (!isVideoNode(node)) return false;
+        return (
+          node.data.h3BatchId === batchId &&
+          typeof node.data.h3BatchIndex === "number" &&
+          node.data.h3BatchIndex < batchIndex
+        );
+      });
+      const isBlocked = earlierShots.some(
+        (node) => node.data.h3BatchState !== "succeeded" && node.data.h3BatchState !== "failed",
+      );
+      if (isBlocked) return;
+
+      batchStartingRef.current = true;
+      updateNodeData(id, { h3BatchState: "running" });
+      void (async () => {
+        try {
+          await handleSubmit();
+          const latest = useCanvasStore.getState().nodes.find((node) => node.id === id);
+          const latestData = latest?.data as VideoNodeData | undefined;
+          updateNodeData(id, {
+            h3BatchState: latestData?.videoUrl ? "succeeded" : "failed",
+            ...(!latestData?.videoUrl && !latestData?.generationError
+              ? { generationError: "批量任务未能启动，可点击重新生成" }
+              : {}),
+          });
+        } finally {
+          batchStartingRef.current = false;
+        }
+      })();
+    }, [
+      data.generationError,
+      data.h3BatchId,
+      data.h3BatchIndex,
+      data.h3BatchState,
+      data.videoUrl,
+      handleSubmit,
+      id,
+      isGenerating,
+      updateNodeData,
     ]);
 
     const hasMainlineContext = hasMainlineContexts(
@@ -3280,6 +3509,10 @@ export const VideoNode = memo(
                     sceneOptimize={sceneOptimize}
                     sceneOptimizeOptions={sceneOptimizeOptions}
                     generateAudio={generateAudio}
+                    h3Profile={isMiniMaxH3Model ? h3Profile : undefined}
+                    h3Continuity={isMiniMaxH3Model && data.h3BatchId && data.h3BatchIndex !== 0
+                      ? h3Continuity
+                      : undefined}
                     onChange={(patch) => updateNodeData(id, patch)}
                   />
                   {isSeedance20Model && (
@@ -3669,6 +3902,8 @@ interface VideoConfigChipProps {
   sceneOptimize?: Seedance2SceneOptimize;
   sceneOptimizeOptions: readonly Seedance2SceneOptimize[];
   generateAudio: boolean;
+  h3Profile?: MiniMaxH3Profile;
+  h3Continuity?: boolean;
   onChange: (patch: Partial<VideoNodeData>) => void;
 }
 
@@ -3681,6 +3916,8 @@ function VideoConfigChip({
   sceneOptimize,
   sceneOptimizeOptions,
   generateAudio,
+  h3Profile,
+  h3Continuity,
   onChange,
 }: VideoConfigChipProps) {
   const { t } = useTranslation();
@@ -3757,6 +3994,18 @@ function VideoConfigChip({
         <span>{quality}</span>
         <span className="text-text-muted/80">·</span>
         <span>{durationSec}s</span>
+        {h3Profile ? (
+          <>
+            <span className="text-text-muted/80">·</span>
+            <span>{H3_PROFILE_LABELS[h3Profile]}</span>
+          </>
+        ) : null}
+        {h3Continuity !== undefined ? (
+          <>
+            <span className="text-text-muted/80">·</span>
+            <span>{h3Continuity ? "连续" : "切镜"}</span>
+          </>
+        ) : null}
         {generateAudio ? (
           <Volume2 className="ml-0.5 h-3.5 w-3.5 text-text-muted/90" />
         ) : (
@@ -3816,6 +4065,60 @@ function VideoConfigChip({
               );
             })}
           </div>
+
+          {h3Profile ? (
+            <>
+              <div className={VIDEO_PARAM_LABEL_CLASS}>H3 质量档位</div>
+              <div className={`grid grid-cols-3 ${VIDEO_PARAM_ROW_CLASS}`}>
+                {H3_PROFILE_OPTIONS.map((profile) => {
+                  const isActive = h3Profile === profile;
+                  return (
+                    <button
+                      key={profile}
+                      type="button"
+                      onClick={() => onChange({ h3Profile: profile })}
+                      className={`${VIDEO_PARAM_BUTTON_BASE_CLASS} ${
+                        isActive
+                          ? VIDEO_PARAM_ACTIVE_BUTTON_CLASS
+                          : VIDEO_PARAM_IDLE_BUTTON_CLASS
+                      }`}
+                    >
+                      {H3_PROFILE_LABELS[profile]}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          ) : null}
+
+          {h3Continuity !== undefined ? (
+            <>
+              <div className={VIDEO_PARAM_LABEL_CLASS}>镜头衔接</div>
+              <div className="mb-4 flex items-center justify-between rounded-md bg-white/[0.045] px-2.5 py-1.5">
+                <span className="text-xs font-medium text-text-dark/88">
+                  {h3Continuity ? "继承上一镜头末帧" : "使用当前分镜图切镜"}
+                </span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={h3Continuity}
+                  aria-label="衔接上一镜头"
+                  onClick={() => onChange({ h3Continuity: !h3Continuity })}
+                  className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full border transition-colors ${
+                    h3Continuity
+                      ? "border-white/24 bg-white/[0.18]"
+                      : "border-white/10 bg-white/[0.08]"
+                  }`}
+                >
+                  <span
+                    className={`h-4 w-4 rounded-full bg-text-dark shadow-[0_2px_8px_rgba(0,0,0,0.35)] transition-transform ${
+                      h3Continuity ? "translate-x-[18px]" : "translate-x-0.5"
+                    }`}
+                  />
+                </button>
+              </div>
+            </>
+          ) : null}
 
           <div className={VIDEO_PARAM_LABEL_CLASS}>
             {t("node.videoNode.duration.title")}

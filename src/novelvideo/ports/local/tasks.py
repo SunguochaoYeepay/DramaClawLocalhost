@@ -243,13 +243,19 @@ class InlineTaskBackend:
             return
         try:
             exc = task.exception()
-        except Exception:
-            logger.exception("Inline project task background runner failed")
+        except Exception as lookup_exc:
+            logger.error(
+                "Unable to inspect inline project task result: %s: %s",
+                type(lookup_exc).__name__,
+                str(lookup_exc)[:2000],
+            )
+            self._drain_lane(lane_name)
             return
         if exc is not None:
             logger.error(
-                "Inline project task background runner failed",
-                exc_info=(type(exc), exc, exc.__traceback__),
+                "Inline project task background runner failed: %s: %s",
+                type(exc).__name__,
+                str(exc)[:2000],
             )
         self._drain_lane(lane_name)
 

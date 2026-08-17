@@ -262,9 +262,18 @@ def _newapi_text_openai_model(
     )
 
 
-def get_newapi_text_pydantic_model(model_env: str, default_model: str):
+def get_newapi_text_pydantic_model(
+    model_env: str,
+    default_model: str,
+    *,
+    model_name_override: str | None = None,
+    timeout_seconds_override: float | None = None,
+):
     """Create a text model for gateway or direct-provider deployments."""
-    model_name = get_newapi_text_model_name(model_env, default_model)
+    model_name = str(model_name_override or "").strip() or get_newapi_text_model_name(
+        model_env,
+        default_model,
+    )
     # A configured direct provider is authoritative for local deployments.
     # Without this branch, stale UI gateway settings in settings.db override
     # MODEL_BASE_URL/MODEL_API_KEY and send direct-provider keys to RelayClaw.
@@ -277,9 +286,13 @@ def get_newapi_text_pydantic_model(model_env: str, default_model: str):
     )
     if not api_key:
         raise ValueError("API key not set. Configure DramaClawAPI credentials.")
-    timeout_seconds = _env_float(
-        f"{model_env}_TIMEOUT_SECONDS",
-        _env_float("NEWAPI_TEXT_TIMEOUT_SECONDS", 120.0),
+    timeout_seconds = (
+        float(timeout_seconds_override)
+        if timeout_seconds_override is not None
+        else _env_float(
+            f"{model_env}_TIMEOUT_SECONDS",
+            _env_float("NEWAPI_TEXT_TIMEOUT_SECONDS", 120.0),
+        )
     )
     return _newapi_text_openai_model(
         model_name,

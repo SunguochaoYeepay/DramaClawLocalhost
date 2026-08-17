@@ -60,6 +60,17 @@ def _append_freezone_video_node_history(
         result=result,
         error=error,
         prompt=payload.get("prompt"),
+        extra={
+            key: value
+            for key, value in {
+                "model": payload.get("model_id"),
+                "gen_mode": payload.get("gen_mode"),
+                "h3_mode": payload.get("h3_mode"),
+                "h3_profile": payload.get("h3_profile"),
+                "resolution": payload.get("resolution"),
+            }.items()
+            if value not in (None, "")
+        },
     )
 
     return append_generation_history(
@@ -805,6 +816,8 @@ async def _run_freezone_video_gen_async(
             scene_optimize=str(payload.get("scene_optimize") or ""),
             backend=str(payload.get("backend") or ""),
             last_frame_path=payload.get("last_frame_path"),
+            h3_mode=str(payload.get("h3_mode") or ""),
+            h3_profile=str(payload.get("h3_profile") or "balanced"),
             on_progress=_on_progress,
             on_log=_on_log,
         )

@@ -174,6 +174,8 @@ export type FreezoneVideoAspectRatio =
   | "21:9";
 
 export type FreezoneVideoResolution = "480p" | "720p" | "1080p";
+export type MiniMaxH3Mode = "t2va" | "i2va" | "fl2va" | "l2va" | "ref2va";
+export type MiniMaxH3Profile = "draft" | "balanced" | "final";
 
 /** Local element marker on the source image, used to anchor subjects/objects. */
 export interface FreezoneVideoMark {
@@ -210,6 +212,8 @@ export interface FreezoneVideoGenPayload extends FreezoneNodeContext {
    */
   humanReview?: boolean;
   sceneOptimize?: "anime" | "realistic" | null;
+  h3Mode?: MiniMaxH3Mode;
+  h3Profile?: MiniMaxH3Profile;
 }
 
 export async function submitFreezoneVideoGen(
@@ -243,6 +247,8 @@ export async function submitFreezoneVideoGen(
         ...(payload.genMode ? { gen_mode: payload.genMode } : {}),
         human_review: payload.humanReview ?? false,
         scene_optimize: payload.sceneOptimize ?? null,
+        ...(payload.h3Mode ? { h3_mode: payload.h3Mode } : {}),
+        ...(payload.h3Profile ? { h3_profile: payload.h3Profile } : {}),
         ...nodeContextBody(payload),
       },
     },
@@ -302,6 +308,8 @@ export interface FreezoneVideoKeyframesPayload extends FreezoneNodeContext {
   /** See {@link FreezoneVideoGenPayload.humanReview}. */
   humanReview?: boolean;
   sceneOptimize?: "anime" | "realistic" | null;
+  h3Mode?: MiniMaxH3Mode;
+  h3Profile?: MiniMaxH3Profile;
 }
 
 export async function submitFreezoneVideoKeyframes(
@@ -336,6 +344,8 @@ export async function submitFreezoneVideoKeyframes(
         ...(payload.genMode ? { gen_mode: payload.genMode } : {}),
         human_review: payload.humanReview ?? false,
         scene_optimize: payload.sceneOptimize ?? null,
+        ...(payload.h3Mode ? { h3_mode: payload.h3Mode } : {}),
+        ...(payload.h3Profile ? { h3_profile: payload.h3Profile } : {}),
         ...nodeContextBody(payload),
       },
     },
@@ -365,6 +375,8 @@ export interface FreezoneVideoI2vPayload extends FreezoneNodeContext {
   /** See {@link FreezoneVideoGenPayload.humanReview}. */
   humanReview?: boolean;
   sceneOptimize?: "anime" | "realistic" | null;
+  h3Mode?: MiniMaxH3Mode;
+  h3Profile?: MiniMaxH3Profile;
 }
 
 export async function submitFreezoneVideoI2v(
@@ -398,6 +410,8 @@ export async function submitFreezoneVideoI2v(
         ...(payload.genMode ? { gen_mode: payload.genMode } : {}),
         human_review: payload.humanReview ?? false,
         scene_optimize: payload.sceneOptimize ?? null,
+        ...(payload.h3Mode ? { h3_mode: payload.h3Mode } : {}),
+        ...(payload.h3Profile ? { h3_profile: payload.h3Profile } : {}),
         ...nodeContextBody(payload),
       },
     },
@@ -496,6 +510,8 @@ export interface FreezoneVideoOmniGenPayload extends FreezoneNodeContext {
   /** See {@link FreezoneVideoGenPayload.humanReview}. */
   humanReview?: boolean;
   sceneOptimize?: "anime" | "realistic" | null;
+  h3Mode?: MiniMaxH3Mode;
+  h3Profile?: MiniMaxH3Profile;
 }
 
 export async function submitFreezoneVideoOmniGen(
@@ -535,6 +551,8 @@ export async function submitFreezoneVideoOmniGen(
         ...(payload.genMode ? { gen_mode: payload.genMode } : {}),
         human_review: payload.humanReview ?? false,
         scene_optimize: payload.sceneOptimize ?? null,
+        ...(payload.h3Mode ? { h3_mode: payload.h3Mode } : {}),
+        ...(payload.h3Profile ? { h3_profile: payload.h3Profile } : {}),
         ...nodeContextBody(payload),
       },
     },

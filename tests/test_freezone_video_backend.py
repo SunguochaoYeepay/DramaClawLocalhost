@@ -235,6 +235,46 @@ def test_happyhorse_backend_detection_accepts_newapi_value() -> None:
 
 
 @pytest.mark.asyncio
+async def test_h3_last_frame_only_request_routes_as_l2va(monkeypatch, tmp_path: Path) -> None:
+    from novelvideo.api.routes import freezone as routes
+    from novelvideo.api.schemas import FreezoneKeyframeVideoRequest
+
+    captured: dict = {}
+
+    async def fake_resolve_project(*_args, **_kwargs):
+        return None, "admin", "demo", tmp_path, str(tmp_path / "output")
+
+    async def fake_start(**kwargs):
+        captured.update(kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(routes, "_resolve_freezone_project", fake_resolve_project)
+    monkeypatch.setattr(
+        routes,
+        "_resolve_url_list",
+        lambda _project_dir, urls: [str(tmp_path / "last.png")] if urls else [],
+    )
+    monkeypatch.setattr(routes, "_start_or_enqueue_freezone_video_gen", fake_start)
+
+    result = await routes.freezone_video_keyframes(
+        project="demo",
+        body=FreezoneKeyframeVideoRequest(
+            last_frame_url="/static/last.png",
+            prompt="End on the supplied portrait.",
+            model="minimax_h3",
+            h3_profile="balanced",
+        ),
+        user={"username": "admin"},
+    )
+
+    assert result == {"ok": True}
+    assert captured["h3_mode"] == "l2va"
+    assert captured["h3_profile"] == "balanced"
+    assert captured["reference_items"] == []
+    assert captured["last_frame_path"] == str(tmp_path / "last.png")
+
+
+@pytest.mark.asyncio
 async def test_freezone_video_gen_allows_newapi_seedance2_text_to_video(
     monkeypatch, tmp_path: Path
 ):

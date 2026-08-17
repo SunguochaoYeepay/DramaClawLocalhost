@@ -331,6 +331,8 @@ async def _start_or_enqueue_freezone_video_gen(
     node_id: str | None = None,
     model_id: str | None = None,
     gen_mode: str | None = None,
+    h3_mode: str | None = None,
+    h3_profile: str | None = None,
 ) -> dict:
     payload = {
         "job_id": job_id,
@@ -338,6 +340,8 @@ async def _start_or_enqueue_freezone_video_gen(
         "node_id": node_id or "",
         "model_id": model_id or "",
         "gen_mode": gen_mode or "",
+        "h3_mode": h3_mode or "",
+        "h3_profile": h3_profile or "balanced",
         "prompt": prompt,
         "reference_items": reference_items,
         "aspect_ratio": aspect_ratio,
@@ -4595,9 +4599,21 @@ async def freezone_skill_run(
                 reference_specs.append(H3Reference(media_type=media_type, label=label))
         run_id = f"freezone.h3_prompt_composer:{_new_job_id()}"
         output = _skill_output_metadata(skill, grouped)
+        duration_seconds = max(
+            4.0,
+            min(15.0, float(body.parameters.get("duration_seconds") or 5)),
+        )
         output["text"] = await compose_h3_prompt(
             creative_intent=str(intent.text or _input_extra(intent, "content") or "").strip(),
             references=reference_specs,
+            primary_image_is_subject=bool(
+                body.parameters.get("primary_image_is_subject", False)
+            ),
+            mode=str(body.parameters.get("mode") or "") or None,
+            duration_seconds=duration_seconds,
+            has_first_frame=bool(reference_specs),
+            has_last_frame=bool(body.parameters.get("has_last_frame", False)),
+            output_language=str(body.parameters.get("output_language") or "en"),
         )
         _write_skill_run_metadata(
             project_dir,
@@ -6996,6 +7012,8 @@ async def freezone_video_gen(
             node_id=body.node_id or None,
             model_id=body.model,
             gen_mode=body.gen_mode,
+            h3_mode=body.h3_mode or "t2va",
+            h3_profile=body.h3_profile,
         )
     except RuntimeError as exc:
         _handle_task_start_runtime_error("failed to start freezone video gen task", exc)
@@ -7089,6 +7107,8 @@ async def freezone_video_i2v(
             node_id=body.node_id or None,
             model_id=body.model,
             gen_mode=body.gen_mode,
+            h3_mode=body.h3_mode or ("ref2va" if len(source_paths) > 1 else "i2va"),
+            h3_profile=body.h3_profile,
         )
     except RuntimeError as exc:
         _handle_task_start_runtime_error("failed to start freezone image-to-video task", exc)
@@ -7127,11 +7147,15 @@ async def freezone_video_keyframes(
     first_path = first_paths[0] if first_paths else ""
     last_path = last_paths[0] if last_paths else ""
 
-    # 只有尾帧时，退化为单帧起始参考；仍保留尾帧语义在 prompt 中。
-    primary_first_path = first_path or last_path
-    reference_items = [
-        {"type": "image", "path": primary_first_path, "role": "首帧" if first_path else "尾帧参考"}
-    ]
+    # H3 supports native L2VA, so a last-frame-only request must not upload the
+    # same image into both keyframe slots. Other backends retain the legacy
+    # single-frame fallback.
+    primary_first_path = first_path or ("" if is_freezone_minimax_h3_backend(backend) else last_path)
+    reference_items = (
+        [{"type": "image", "path": primary_first_path, "role": "首帧" if first_path else "尾帧参考"}]
+        if primary_first_path
+        else []
+    )
     if (
         (is_freezone_seedance2_backend(backend) or is_freezone_ltx_director_backend(backend))
         and last_path
@@ -7170,6 +7194,10 @@ async def freezone_video_keyframes(
             node_id=body.node_id or None,
             model_id=body.model,
             gen_mode=body.gen_mode,
+            h3_mode=body.h3_mode or (
+                "fl2va" if first_path and last_path else "i2va" if first_path else "l2va"
+            ),
+            h3_profile=body.h3_profile,
         )
     except RuntimeError as exc:
         _handle_task_start_runtime_error("failed to start freezone keyframe video task", exc)
@@ -7256,6 +7284,8 @@ async def freezone_video_omni_gen(
             node_id=body.node_id or None,
             model_id=body.model,
             gen_mode=body.gen_mode,
+            h3_mode=body.h3_mode or "ref2va",
+            h3_profile=body.h3_profile,
         )
     except RuntimeError as exc:
         _handle_task_start_runtime_error("failed to start freezone omni video gen task", exc)

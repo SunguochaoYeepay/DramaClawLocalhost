@@ -117,6 +117,33 @@ async def _wait_lane_idle(backend: InlineTaskBackend, lane: str, *, timeout: flo
     assert backend.lane_snapshot()[lane]["active"] == 0
 
 
+def test_background_failure_logs_without_rendering_traceback(monkeypatch):
+    backend = InlineTaskBackend()
+    backend._lanes["default"].active = 1
+    failure = RuntimeError("provider request failed")
+    failed_task = type(
+        "FailedTask",
+        (),
+        {
+            "cancelled": lambda self: False,
+            "exception": lambda self: failure,
+        },
+    )()
+    captured: dict[str, object] = {}
+
+    def fake_log_error(message, *args, **kwargs):
+        captured.update(message=message, args=args, kwargs=kwargs)
+
+    monkeypatch.setattr("novelvideo.ports.local.tasks.logger.error", fake_log_error)
+
+    backend._on_background_task_done(failed_task, "default")
+
+    assert captured["message"] == "Inline project task background runner failed: %s: %s"
+    assert captured["args"] == ("RuntimeError", "provider request failed")
+    assert captured["kwargs"] == {}
+    assert backend.lane_snapshot()["default"]["active"] == 0
+
+
 def _spawn_tree_script(tmp_path: Path) -> tuple[Path, Path]:
     pidfile = tmp_path / "process-tree.pid"
     script = tmp_path / "spawn_tree.py"

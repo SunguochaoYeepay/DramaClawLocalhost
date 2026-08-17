@@ -16,7 +16,16 @@ import {
   useUpdateNodeInternals,
   type NodeProps,
 } from '@xyflow/react';
-import { Download, FolderOpen, ImagePlus, SlidersHorizontal, SquareArrowOutUpRight } from 'lucide-react';
+import {
+  Download,
+  Film,
+  FolderOpen,
+  ImagePlus,
+  Loader2,
+  Sparkles,
+  SlidersHorizontal,
+  SquareArrowOutUpRight,
+} from 'lucide-react';
 
 import {
   embedStoryboardImageMetadata,
@@ -31,6 +40,8 @@ import type {
   StoryboardExportOptions,
   StoryboardFrameItem,
   StoryboardSplitNodeData,
+  MiniMaxH3Profile,
+  VideoNodeData,
 } from '@/features/canvas/domain/canvasNodes';
 import {
   CANVAS_NODE_TYPES,
@@ -59,6 +70,13 @@ import {
 import { CANVAS_NODE_PANEL_SURFACE_CLASS, canvasNodeFrameClass } from '@/features/canvas/ui/nodeFrameStyles';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { readUrl } from '@/lib/url-params';
+import {
+  ensureBackendImageUrl,
+  fetchFreezoneReversePromptResult,
+  submitFreezoneReversePrompt,
+} from '@/api/ops';
+import { getSkillRunResult, runSkill } from '@/api/skills';
+import { awaitTaskCompletion } from '@/api/tasks';
 
 type StoryboardNodeProps = NodeProps & {
   id: string;
@@ -93,6 +111,11 @@ const STORYBOARD_EXPORT_BUTTON_CLASS =
   '!h-6 !rounded-md !border-white/[0.12] !bg-white/[0.045] !px-2.5 !text-[11px] !text-text-dark/90 hover:!border-white/[0.22] hover:!bg-white/[0.08] hover:!text-white';
 const STORYBOARD_EXPORT_PRIMARY_BUTTON_CLASS =
   '!h-7 !rounded-md !border-transparent !bg-transparent !px-1.5 !text-[12px] !text-text-dark/92 hover:!bg-transparent hover:!text-white';
+const H3_BATCH_PROFILE_LABELS: Record<MiniMaxH3Profile, string> = {
+  draft: '草稿 · 4步',
+  balanced: '平衡 · 8步',
+  final: '成片 · 20步',
+};
 
 function SplitResultIcon({ className }: { className?: string }) {
   return (
@@ -133,6 +156,15 @@ function sanitizeExportLabel(raw: string, maxLength = 50): string {
     return '';
   }
   return compact.slice(0, maxLength);
+}
+
+function shouldGenerateChineseH3Prompt(note: string): boolean {
+  const text = note.trim();
+  if (!text) return true;
+  const isStructuredH3Prompt =
+    text.includes('integrated_multimodal_description:') ||
+    text.includes('detailed_description:');
+  return isStructuredH3Prompt && !/[\u3400-\u9fff]/u.test(text);
 }
 
 function toCssAspectRatio(aspectRatio: string): string {
@@ -483,8 +515,10 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
   // node drags don't re-render this node. See useUpstreamGraph.
   const upstreamNodes = useUpstreamNodes(id);
   const reorderStoryboardFrame = useCanvasStore((state) => state.reorderStoryboardFrame);
+  const addNode = useCanvasStore((state) => state.addNode);
   const addDerivedExportNode = useCanvasStore((state) => state.addDerivedExportNode);
   const addEdge = useCanvasStore((state) => state.addEdge);
+  const groupNodes = useCanvasStore((state) => state.groupNodes);
   const updateStoryboardFrame = useCanvasStore((state) => state.updateStoryboardFrame);
   const updateNodeData = useCanvasStore((state) => state.updateNodeData);
   const [draggedFrameId, setDraggedFrameId] = useState<string | null>(null);
@@ -494,6 +528,12 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
   const [isPackingSingleImages, setIsPackingSingleImages] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [isExportPanelOpen, setIsExportPanelOpen] = useState(false);
+  const [isH3BatchPanelOpen, setIsH3BatchPanelOpen] = useState(false);
+  const [h3BatchProfile, setH3BatchProfile] = useState<MiniMaxH3Profile>('balanced');
+  const [h3BatchQuality, setH3BatchQuality] = useState<'720P' | '1080P'>('720P');
+  const [h3BatchDuration, setH3BatchDuration] = useState(5);
+  const [isGeneratingH3Prompts, setIsGeneratingH3Prompts] = useState(false);
+  const [h3PromptProgress, setH3PromptProgress] = useState({ completed: 0, total: 0 });
 
   const orderedFrames = useMemo(
     () => [...data.frames].sort((a, b) => a.order - b.order),
@@ -994,6 +1034,227 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
     [id, incomingImageItems, updateStoryboardFrame]
   );
 
+  const handleCreateH3Batch = useCallback(() => {
+    const frames = orderedFrames.filter((frame) => Boolean(frame.imageUrl));
+    if (frames.length === 0) {
+      setExportError('没有可生成视频的分镜图片');
+      return;
+    }
+
+    const state = useCanvasStore.getState();
+    const sourceNode = state.nodes.find((node) => node.id === id);
+    if (!sourceNode) return;
+
+    setExportError(null);
+    const batchId = `h3-storyboard-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const columns = Math.min(3, Math.max(1, Math.ceil(Math.sqrt(frames.length))));
+    const rows = Math.ceil(frames.length / columns);
+    const pairWidth = 1040;
+    const rowHeight = 460;
+    const sourceWidth = typeof sourceNode.width === 'number' ? sourceNode.width : resolvedNodeWidth;
+    const startX = sourceNode.position.x + sourceWidth + 180;
+    const startY = sourceNode.position.y;
+    const createdNodeIds: string[] = [];
+    const videoNodeIds: string[] = [];
+    const validAspectRatios = new Set(['16:9', '4:3', '1:1', '3:4', '9:16', '21:9']);
+    const videoAspectRatio = validAspectRatios.has(frameAspectRatio) ? frameAspectRatio : '16:9';
+
+    frames.forEach((frame, index) => {
+      const row = Math.floor(index / columns);
+      const col = index % columns;
+      const x = startX + col * pairWidth;
+      const y = startY + row * rowHeight;
+      const shotLabel = `镜头 ${String(index + 1).padStart(2, '0')}`;
+      const imageNodeId = addNode(CANVAS_NODE_TYPES.upload, { x, y: y + 60 }, {
+        displayName: `${shotLabel} · 首帧`,
+        imageUrl: frame.imageUrl,
+        previewImageUrl: frame.previewImageUrl ?? frame.imageUrl,
+        aspectRatio: frame.aspectRatio ?? frameAspectRatio,
+      });
+      const videoNodeId = addNode(
+        CANVAS_NODE_TYPES.video,
+        { x: x + 400, y },
+        {
+          displayName: `${shotLabel} · H3`,
+          videoUrl: null,
+          prompt: frame.note.trim() || '保持首帧中的人物、服装、构图和场景一致，生成一个自然连贯的镜头。',
+          genMode: 'imageToVideo',
+          model: 'minimax_h3',
+          quality: h3BatchQuality,
+          durationSec: h3BatchDuration,
+          generateAudio: true,
+          count: 1,
+          aspectRatio: videoAspectRatio,
+          h3Profile: h3BatchProfile,
+          h3BatchId: batchId,
+          h3BatchIndex: index,
+          h3Continuity: index > 0,
+        } satisfies Partial<VideoNodeData>,
+      );
+      addEdge(imageNodeId, videoNodeId);
+      createdNodeIds.push(imageNodeId, videoNodeId);
+      videoNodeIds.push(videoNodeId);
+    });
+
+    const composeNodeId = addNode(
+      CANVAS_NODE_TYPES.videoCompose,
+      {
+        x: startX + columns * pairWidth + 180,
+        y: startY + Math.max(0, (rows - 1) * rowHeight * 0.5),
+      },
+      {
+        displayName: `H3 分镜合成 · ${frames.length} 镜头`,
+        resolution: h3BatchQuality === '1080P' ? '1080p' : '720p',
+      },
+    );
+    videoNodeIds.forEach((videoNodeId) => addEdge(videoNodeId, composeNodeId));
+    createdNodeIds.push(composeNodeId);
+    groupNodes(createdNodeIds, { label: `H3 批量视频 · ${frames.length} 镜头` });
+    setSelectedNode(composeNodeId);
+    setIsH3BatchPanelOpen(false);
+  }, [
+    addEdge,
+    addNode,
+    frameAspectRatio,
+    groupNodes,
+    h3BatchDuration,
+    h3BatchProfile,
+    h3BatchQuality,
+    id,
+    orderedFrames,
+    resolvedNodeWidth,
+    setSelectedNode,
+  ]);
+
+  const handleGenerateH3Prompts = useCallback(async () => {
+    if (isGeneratingH3Prompts) return;
+    const projectId = readUrl().project;
+    if (!projectId) {
+      setExportError('当前页面缺少项目信息，无法生成提示词');
+      return;
+    }
+
+    const framesToFill = orderedFrames.filter(
+      (frame) => Boolean(frame.imageUrl) && shouldGenerateChineseH3Prompt(frame.note),
+    );
+    if (framesToFill.length === 0) {
+      setExportError('没有空白或需要转为中文的分镜提示词');
+      return;
+    }
+
+    const canvasId = readUrl().canvas ?? 'default';
+    let failedCount = 0;
+    setExportError(null);
+    setIsGeneratingH3Prompts(true);
+    setH3PromptProgress({ completed: 0, total: framesToFill.length });
+
+    for (let index = 0; index < framesToFill.length; index += 1) {
+      const frame = framesToFill[index];
+      try {
+        const rawSourceUrl = frame.imageUrl;
+        if (!rawSourceUrl) {
+          throw new Error('分镜图片地址为空');
+        }
+        const sourceUrl = await ensureBackendImageUrl(projectId, rawSourceUrl);
+        const reverseRef = await submitFreezoneReversePrompt(projectId, {
+          sourceUrl,
+          canvasId,
+          nodeId: id,
+        });
+        await awaitTaskCompletion(reverseRef.task_key, projectId);
+        const reverseResult = await fetchFreezoneReversePromptResult(
+          projectId,
+          reverseRef.job_id,
+        );
+        const visualDescription = reverseResult.prompt.trim();
+        if (!visualDescription) {
+          throw new Error('画面分析没有返回内容');
+        }
+        const shotIndex = orderedFrames.findIndex((candidate) => candidate.id === frame.id);
+        const isContinuityShot = shotIndex > 0;
+
+        const skillResponse = await runSkill(
+          projectId,
+          'freezone.h3_prompt_composer',
+          {
+            skill_node_id: `${id}:h3-prompt:${frame.id}`,
+            canvas_id: canvasId,
+            idempotency_key: `${id}:${frame.id}:${Date.now()}`,
+            parameters: {
+              mode: isContinuityShot ? 'fl2va' : 'i2va',
+              duration_seconds: h3BatchDuration,
+              primary_image_is_subject: true,
+              has_last_frame: isContinuityShot,
+              output_language: 'zh-CN',
+            },
+            resolved_inputs: [
+              {
+                role: 'creative_intent',
+                node_id: `${frame.id}:intent`,
+                node_type: 'textAnnotationNode',
+                media_kind: 'text',
+                text: isContinuityShot
+                  ? `${visualDescription}\n从上一镜头末帧自然连续运动，并在结尾准确到达当前分镜图的构图、人物位置和动作。`
+                  : `${visualDescription}\n在保持人物身份、服装、场景和构图一致的前提下，设计自然连贯的主体动作与明确的镜头运动。`,
+              },
+              ...(isContinuityShot
+                ? [{
+                    role: 'image_reference' as const,
+                    node_id: `${frame.id}:previous-last-frame`,
+                    node_type: 'uploadNode',
+                    media_kind: 'image',
+                    display_name: `镜头 ${String(shotIndex).padStart(2, '0')} 视频末帧`,
+                  }]
+                : []),
+              {
+                role: 'image_reference',
+                node_id: frame.id,
+                node_type: 'uploadNode',
+                media_kind: 'image',
+                image_url: sourceUrl,
+                display_name: `镜头 ${String(shotIndex + 1).padStart(2, '0')} ${
+                  isContinuityShot ? '目标尾帧' : '首帧'
+                }`,
+              },
+            ],
+          },
+        );
+        if (skillResponse.task_key) {
+          await awaitTaskCompletion(skillResponse.task_key, projectId);
+        }
+        const skillResult = await getSkillRunResult(projectId, skillResponse.run_id);
+        const generatedPrompt = skillResult.outputs
+          .find((output) => output.role === 'h3_video_prompt' && typeof output.text === 'string')
+          ?.text?.trim();
+        if (!generatedPrompt) {
+          throw new Error('H3 Prompt Skill 没有返回提示词');
+        }
+        updateStoryboardFrame(id, frame.id, { note: generatedPrompt });
+      } catch (error) {
+        failedCount += 1;
+        console.error('[storyboard-node] H3 prompt generation failed', {
+          frameId: frame.id,
+          error,
+        });
+      } finally {
+        setH3PromptProgress({ completed: index + 1, total: framesToFill.length });
+      }
+    }
+
+    setIsGeneratingH3Prompts(false);
+    if (failedCount > 0) {
+      setExportError(
+        `已填充 ${framesToFill.length - failedCount} 格，${failedCount} 格生成失败，可再次点击重试`,
+      );
+    }
+  }, [
+    h3BatchDuration,
+    id,
+    isGeneratingH3Prompts,
+    orderedFrames,
+    updateStoryboardFrame,
+  ]);
+
   return (
     <div
       ref={rootRef}
@@ -1213,8 +1474,115 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
         </UiPanel>
       )}
 
+      {isH3BatchPanelOpen && (
+        <UiPanel
+          className={`nodrag nowheel mt-2 shrink-0 p-2.5 ${STORYBOARD_EXPORT_PANEL_CLASS}`}
+          onMouseDown={(event) => event.stopPropagation()}
+        >
+          <div className="grid gap-2 text-xs text-text-muted/82">
+            <div className="grid gap-1.5">
+              <span className="whitespace-nowrap">H3 质量档位</span>
+              <div className="grid grid-cols-3 gap-1.5">
+                {(Object.keys(H3_BATCH_PROFILE_LABELS) as MiniMaxH3Profile[]).map(
+                  (profile) => (
+                    <UiChipButton
+                      key={profile}
+                      active={h3BatchProfile === profile}
+                      className="h-8 min-w-0 whitespace-nowrap px-2 text-[11px]"
+                      onClick={() => setH3BatchProfile(profile)}
+                    >
+                      {H3_BATCH_PROFILE_LABELS[profile]}
+                    </UiChipButton>
+                  )
+                )}
+              </div>
+            </div>
+            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] items-end gap-2">
+              <label className="grid min-w-0 gap-1">
+                <span className="whitespace-nowrap">分辨率</span>
+                <UiSelect
+                  className={STORYBOARD_EXPORT_FIELD_CLASS}
+                  value={h3BatchQuality}
+                  onChange={(event) =>
+                    setH3BatchQuality(event.target.value === '1080P' ? '1080P' : '720P')
+                  }
+                >
+                  <option value="720P">720P</option>
+                  <option value="1080P">1080P</option>
+                </UiSelect>
+              </label>
+              <label className="grid min-w-0 gap-1">
+                <span className="whitespace-nowrap">时长</span>
+                <UiInput
+                  type="number"
+                  min={5}
+                  max={15}
+                  value={h3BatchDuration}
+                  className={`h-8 ${STORYBOARD_EXPORT_FIELD_CLASS}`}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setH3BatchDuration(
+                      Math.min(15, Math.max(5, Number.isFinite(value) ? value : 5))
+                    );
+                  }}
+                />
+              </label>
+              <UiButton
+                size="sm"
+                variant="primary"
+                className={`nodrag h-8 whitespace-nowrap ${NODE_CONTROL_PRIMARY_BUTTON_CLASS}`}
+                onClick={handleCreateH3Batch}
+              >
+                <Film className={NODE_CONTROL_ICON_CLASS} />
+                创建镜头
+              </UiButton>
+            </div>
+          </div>
+        </UiPanel>
+      )}
+
       <div className="mt-2 flex shrink-0 items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
+          <UiChipButton
+            active={isGeneratingH3Prompts}
+            disabled={isGeneratingH3Prompts}
+            className={`${NODE_CONTROL_CHIP_CLASS} ${STORYBOARD_EXPORT_TRIGGER_CLASS} ${
+              isGeneratingH3Prompts
+                ? STORYBOARD_EXPORT_TRIGGER_ACTIVE_CLASS
+                : STORYBOARD_EXPORT_TRIGGER_INACTIVE_CLASS
+            }`}
+            onClick={(event) => {
+              event.stopPropagation();
+              void handleGenerateH3Prompts();
+            }}
+          >
+            {isGeneratingH3Prompts ? (
+              <Loader2 className={`${NODE_CONTROL_ICON_CLASS} shrink-0 animate-spin`} />
+            ) : (
+              <Sparkles className={`${NODE_CONTROL_ICON_CLASS} shrink-0`} />
+            )}
+            <span>
+              {isGeneratingH3Prompts
+                ? `生成 ${h3PromptProgress.completed}/${h3PromptProgress.total}`
+                : '生成提示词'}
+            </span>
+          </UiChipButton>
+          <UiChipButton
+            active={isH3BatchPanelOpen}
+            className={`${NODE_CONTROL_CHIP_CLASS} ${STORYBOARD_EXPORT_TRIGGER_CLASS} ${
+              isH3BatchPanelOpen
+                ? STORYBOARD_EXPORT_TRIGGER_ACTIVE_CLASS
+                : STORYBOARD_EXPORT_TRIGGER_INACTIVE_CLASS
+            }`}
+            onClick={(event) => {
+              event.stopPropagation();
+              setIsH3BatchPanelOpen((open) => !open);
+              setIsExportPanelOpen(false);
+            }}
+          >
+            <Film className={`${NODE_CONTROL_ICON_CLASS} shrink-0`} />
+            <span>H3 批量视频</span>
+          </UiChipButton>
           <div className="nodrag relative flex">
             <UiChipButton
               active={isExportPanelOpen}
@@ -1226,6 +1594,7 @@ export const StoryboardNode = memo(({ id, data, selected, width, height }: Story
               onClick={(event) => {
                 event.stopPropagation();
                 setIsExportPanelOpen((open) => !open);
+                setIsH3BatchPanelOpen(false);
               }}
             >
               <SlidersHorizontal className={`${NODE_CONTROL_ICON_CLASS} shrink-0`} />

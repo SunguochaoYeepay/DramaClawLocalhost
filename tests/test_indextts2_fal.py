@@ -1,3 +1,5 @@
+import io
+import wave
 from pathlib import Path
 
 import pytest
@@ -5,6 +7,16 @@ import pytest
 from novelvideo.shared.billing_errors import InsufficientCreditsError
 
 pytestmark = pytest.mark.m07
+
+
+def _pcm_wav(seconds: float) -> bytes:
+    with io.BytesIO() as buffer:
+        with wave.open(buffer, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(24_000)
+            wav_file.writeframes(b"\x00\x00" * int(24_000 * seconds))
+        return buffer.getvalue()
 
 
 class _FakeResponse:
@@ -41,6 +53,35 @@ class _FakeAsyncClient:
     async def get(self, url):
         self.calls.append(("get", url, None, None))
         return self.get_response
+
+
+def test_cosyvoice_reference_audio_rejects_short_clip():
+    from novelvideo.generators.indextts2_fal import IndexTTS2FalClient
+
+    with pytest.raises(ValueError, match="至少需要 3 秒"):
+        IndexTTS2FalClient._prepare_cosyvoice_reference_audio(_pcm_wav(2.5), "wav")
+
+
+@pytest.mark.asyncio
+async def test_cosyvoice_enrollment_uses_full_reference_window(monkeypatch):
+    from novelvideo.generators.indextts2_fal import IndexTTS2FalClient
+
+    calls: list[dict] = []
+
+    class FakeVoiceEnrollmentService:
+        def create_voice(self, **kwargs):
+            calls.append(kwargs)
+            return "dramaclaw-voice"
+
+    import dashscope.audio.tts_v2 as tts_v2
+
+    monkeypatch.setattr(tts_v2, "VoiceEnrollmentService", FakeVoiceEnrollmentService)
+    client = IndexTTS2FalClient(provider="cosyvoice", api_key="test-key")
+
+    voice_id = await client._enroll_cosyvoice_voice("https://media.example/reference.wav")
+
+    assert voice_id == "dramaclaw-voice"
+    assert calls[0]["max_prompt_audio_length"] == 30.0
 
 
 @pytest.mark.asyncio

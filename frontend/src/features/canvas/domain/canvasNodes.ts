@@ -92,6 +92,7 @@ export type VideoGenMode =
 export type VideoGenQuality = '480P' | '720P' | '1080P';
 export type VideoGenCount = 1 | 2 | 4;
 export type Seedance2SceneOptimize = 'anime' | 'realistic';
+export type MiniMaxH3Profile = 'draft' | 'balanced' | 'final';
 
 export interface VideoNodeData extends NodeDisplayData {
   videoUrl: string | null;
@@ -135,6 +136,18 @@ export interface VideoNodeData extends NodeDisplayData {
   quality?: VideoGenQuality;
   durationSec?: number;
   generateAudio?: boolean;
+  /** H3 only: Turbo 4-step, Turbo 8-step, or native 20-step sampling. */
+  h3Profile?: MiniMaxH3Profile;
+  /** One-shot flag used by storyboard batches; cleared before submission. */
+  autoStartGeneration?: boolean;
+  /** Persistent storyboard batch metadata. Pending shots start one at a time. */
+  h3BatchId?: string;
+  h3BatchIndex?: number;
+  h3BatchState?: 'pending' | 'running' | 'succeeded' | 'failed';
+  /** H3 storyboard shot: use the previous shot's extracted last frame as this shot's first frame. */
+  h3Continuity?: boolean;
+  /** Last frame extracted from this generated shot for the following continuity shot. */
+  h3LastFrameUrl?: string | null;
   /**
    * 真人素材审核开关。仅 Seedance 2.0 视频模型展示。开启后请求体里
    * `human_review: true`，素材含真实人脸时降低被拦截概率（不保证通过、可能增加审核时间）。

@@ -398,6 +398,7 @@ const videoNodeDefinition: CanvasNodeDefinition<VideoNodeData> = {
     quality: '720P',
     durationSec: 5,
     generateAudio: true,
+    h3Profile: 'balanced',
     count: 1,
     isGenerating: false,
     generationStartedAt: null,

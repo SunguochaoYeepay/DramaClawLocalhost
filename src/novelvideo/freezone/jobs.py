@@ -1238,6 +1238,8 @@ async def run_freezone_video_gen(
     scene_optimize: str | None = None,
     backend: str = "minimax_h3",
     last_frame_path: Optional[str] = None,
+    h3_mode: str = "",
+    h3_profile: str = "balanced",
     on_progress: Optional[Callable[[float], None]] = None,
     on_log: Optional[Callable[[str], None]] = None,
 ) -> Path:
@@ -1277,9 +1279,42 @@ async def run_freezone_video_gen(
         resolution=resolution,
         generate_audio=generate_audio,
     )
+
+    effective_prompt = prompt
+    if is_freezone_minimax_h3_backend(backend):
+        from novelvideo.generators.h3_prompt_composer import (
+            H3Reference,
+            compose_h3_prompt,
+            infer_h3_prompt_mode,
+            is_valid_h3_prompt_structure,
+        )
+
+        first_image_ref = next((ref for ref in references if ref.type == "image"), None)
+        prompt_references = [H3Reference(ref.type, ref.role) for ref in references]
+        resolved_h3_mode = infer_h3_prompt_mode(
+            prompt_references,
+            mode=h3_mode,
+            has_first_frame=bool(first_image_ref and first_image_ref.path),
+            has_last_frame=bool(last_frame_path),
+        )
+        if not is_valid_h3_prompt_structure(prompt, resolved_h3_mode):
+            effective_prompt = await compose_h3_prompt(
+                creative_intent=prompt,
+                references=prompt_references,
+                primary_image_is_subject=bool(first_image_ref and first_image_ref.path),
+                mode=resolved_h3_mode,
+                duration_seconds=duration_seconds,
+                has_first_frame=bool(first_image_ref and first_image_ref.path),
+                has_last_frame=bool(last_frame_path),
+            )
+        if on_log:
+            on_log(
+                f"H3 official prompt mode: {resolved_h3_mode.value}; "
+                f"profile: {h3_profile or 'balanced'}"
+            )
     if backend == "seedance_2":
         result = await video_gen.generate(
-            prompt=prompt,
+            prompt=effective_prompt,
             output_path=str(out),
             references=references,
             duration=float(duration_seconds),
@@ -1300,7 +1335,7 @@ async def run_freezone_video_gen(
             raise RuntimeError(f"backend {backend} requires a first-frame image reference")
         result = await video_gen.generate(
             image_path=first_image_ref.path if first_image_ref and first_image_ref.path else None,
-            prompt=prompt,
+            prompt=effective_prompt,
             output_path=str(out),
             aspect_ratio=aspect_ratio,
             duration=float(duration_seconds),
@@ -1308,6 +1343,7 @@ async def run_freezone_video_gen(
             references=references,
             human_review=bool(human_review),
             seedance2_config={"scene_optimize": scene_optimize} if scene_optimize else None,
+            h3_profile=h3_profile,
             on_progress=on_progress,
             on_log=on_log,
         )
