@@ -10,6 +10,8 @@ services:
     environment:
       COMFYUI_IMAGE_URL: http://host.docker.internal:8188
       COMFYUI_VIDEO_URL: http://host.docker.internal:8188
+      # DashScope-compatible gateway model; the DC-* default is not exposed here.
+      FREEZONE_VISION_MODEL: qwen-vl-max
       NOVELVIDEO_OUTPUT_DIR: /data/output
   web:
     image: dramaclaw-web:${DRAMACLAW_VERSION:-1.1.2-h3-sage}
