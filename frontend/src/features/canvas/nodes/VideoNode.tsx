@@ -185,7 +185,9 @@ import {
   type FreezoneVideoReferenceItem,
   type FreezoneVideoResolution,
 } from "@/api/ops";
+import { getSkillRunResult, runSkill } from "@/api/skills";
 import { awaitTaskCompletion } from "@/api/tasks";
+import type { ResolvedSkillInput } from "@/features/freezone/context/skillRoles";
 import { generationTaskDescriptor } from "@/features/canvas/application/resumeGeneration";
 import { useNodeGenerationHistory } from "@/features/canvas/hooks/useNodeGenerationHistory";
 import {
@@ -787,6 +789,7 @@ export const VideoNode = memo(
     >(null);
     const [isCapturingFrame, setIsCapturingFrame] = useState(false);
     const [isTranslatingPrompt, setIsTranslatingPrompt] = useState(false);
+    const [isGeneratingH3Prompt, setIsGeneratingH3Prompt] = useState(false);
     const [isCharacterLibraryOpen, setIsCharacterLibraryOpen] = useState(false);
     const [isComposingClip, setIsComposingClip] = useState(false);
     const [clipError, setClipError] = useState<string | null>(null);
@@ -909,6 +912,14 @@ export const VideoNode = memo(
       && data.h3BatchIndex > 0
       && data.h3Continuity !== false,
     );
+    const h3NativeProfileOnly = Boolean(
+      isMiniMaxH3Model
+      && !h3Continuity
+      && h3ModeForVideoGenMode(genMode) === "ref2va",
+    );
+    const effectiveH3Profile: MiniMaxH3Profile = h3NativeProfileOnly
+      ? "final"
+      : h3Profile;
     // 真人素材审核开关只对 Seedance 2.0 系列模型生效。归一化掉分隔符后匹配
     // `seedance2`，覆盖 `huimeng_seedance20_fast` / 未来可能的 `seedance_2_0` 等 id。
     const isSeedance20Model = /seedance2/i.test(modelId.replace(/[\s._-]/g, ""));
@@ -1744,6 +1755,154 @@ export const VideoNode = memo(
       }
     }, [id, isGenerating, isTranslatingPrompt, prompt, updateNodeData]);
 
+    const handleGenerateH3Prompt = useCallback(async () => {
+      if (!isMiniMaxH3Model || isGeneratingH3Prompt || isGenerating) return;
+      const projectId = readUrl().project;
+      if (!projectId) {
+        toast.error("当前页面缺少项目信息，无法生成 H3 提示词");
+        return;
+      }
+
+      const canvasId = readUrl().canvas ?? "default";
+      const mode = h3Continuity ? "fl2va" : h3ModeForVideoGenMode(genMode);
+      const cameraPrompt = cameraMovementPreset?.promptFragment?.trim() ?? "";
+      const creativeIntent = [cameraPrompt, upstreamTextJoined, promptDraft.trim()]
+        .filter((value) => value.length > 0)
+        .join("\n\n") || "根据当前参考素材生成自然、连贯、稳定的电影感镜头。";
+      const resolvedInputs: ResolvedSkillInput[] = [
+        {
+          role: "creative_intent",
+          node_id: `${id}:h3-prompt-intent`,
+          node_type: "textAnnotationNode",
+          media_kind: "text",
+          text: creativeIntent,
+        },
+      ];
+
+      const pushReference = (
+        item: ReferenceMediaItem,
+        role: "image_reference" | "video_reference" | "audio_reference",
+        displayName: string,
+      ) => {
+        resolvedInputs.push({
+          role,
+          node_id: item.nodeId,
+          node_type:
+            item.kind === "image"
+              ? "uploadNode"
+              : item.kind === "video"
+                ? "videoNode"
+                : "audioNode",
+          media_kind: item.kind,
+          display_name: displayName,
+          ...(item.kind === "image" ? { image_url: item.imageUrl } : {}),
+          ...(item.kind === "video" ? { video_url: item.videoUrl } : {}),
+          ...(item.kind === "audio" ? { audio_url: item.audioUrl } : {}),
+        });
+      };
+
+      const usableReferences = referenceMediaCapInfo
+        .filter((entry) => entry.withinCap);
+      if (mode === "ref2va") {
+        const used = { image: 0, video: 0, audio: 0 };
+        const limits = { image: 9, video: 3, audio: 3 };
+        for (const { item } of usableReferences) {
+          if (used[item.kind] >= limits[item.kind]) continue;
+          used[item.kind] += 1;
+          const role = `${item.kind}_reference` as
+            | "image_reference"
+            | "video_reference"
+            | "audio_reference";
+          const fallbackLabel =
+            item.kind === "image"
+              ? `图片参考 ${used.image}`
+              : item.kind === "video"
+                ? `动作与运镜参考 ${used.video}`
+                : `声音与节奏参考 ${used.audio}`;
+          pushReference(item, role, item.displayName?.trim() || fallbackLabel);
+        }
+      } else if (mode === "i2va") {
+        const firstImage = usableReferences.find(({ item }) => item.kind === "image")?.item;
+        if (firstImage?.kind === "image") {
+          pushReference(firstImage, "image_reference", firstImage.displayName?.trim() || "首帧");
+        }
+      } else if (mode === "fl2va") {
+        const images = usableReferences
+          .map(({ item }) => item)
+          .filter((item): item is Extract<ReferenceMediaItem, { kind: "image" }> => item.kind === "image")
+          .slice(0, h3Continuity ? 1 : 2);
+        if (h3Continuity) {
+          resolvedInputs.push({
+            role: "image_reference",
+            node_id: `${id}:previous-last-frame`,
+            node_type: "videoNode",
+            media_kind: "image",
+            display_name: "上一镜头视频末帧",
+          });
+        }
+        images.forEach((item, index) => {
+          const label = h3Continuity
+            ? "当前分镜目标尾帧"
+            : index === 0
+              ? "首帧"
+              : "尾帧";
+          pushReference(item, "image_reference", item.displayName?.trim() || label);
+        });
+      }
+
+      setIsGeneratingH3Prompt(true);
+      try {
+        const skillResponse = await runSkill(
+          projectId,
+          "freezone.h3_prompt_composer",
+          {
+            skill_node_id: `${id}:h3-prompt-composer`,
+            canvas_id: canvasId,
+            idempotency_key: `${id}:h3-prompt:${Date.now()}`,
+            parameters: {
+              mode,
+              duration_seconds: durationSec,
+              primary_image_is_subject: mode === "i2va" || mode === "fl2va",
+              has_last_frame: mode === "fl2va",
+              output_language: "zh-CN",
+            },
+            resolved_inputs: resolvedInputs,
+          },
+        );
+        if (skillResponse.task_key) {
+          await awaitTaskCompletion(skillResponse.task_key, projectId);
+        }
+        const skillResult = await getSkillRunResult(projectId, skillResponse.run_id);
+        const generatedPrompt = skillResult.outputs
+          .find((output) => output.role === "h3_video_prompt" && typeof output.text === "string")
+          ?.text?.trim();
+        if (!generatedPrompt) {
+          throw new Error("H3 官方 Skill 没有返回提示词");
+        }
+        setPromptDraft(generatedPrompt);
+        updateNodeData(id, { prompt: generatedPrompt });
+        toast.success("已生成 H3 官方格式提示词，可继续编辑");
+      } catch (error) {
+        console.error("[video-node] H3 prompt generation failed", error);
+        toast.error(error instanceof Error ? error.message : "H3 提示词生成失败");
+      } finally {
+        setIsGeneratingH3Prompt(false);
+      }
+    }, [
+      cameraMovementPreset?.promptFragment,
+      durationSec,
+      genMode,
+      h3Continuity,
+      id,
+      isGenerating,
+      isGeneratingH3Prompt,
+      isMiniMaxH3Model,
+      promptDraft,
+      referenceMediaCapInfo,
+      updateNodeData,
+      upstreamTextJoined,
+    ]);
+
     useEffect(() => {
       return canvasEventBus.subscribe("video-node/reupload", ({ nodeId }) => {
         if (nodeId !== id) return;
@@ -2226,7 +2385,7 @@ export const VideoNode = memo(
         const h3RequestOptions = isMiniMaxH3Model
           ? {
               h3Mode: h3ModeForVideoGenMode(genMode),
-              h3Profile,
+              h3Profile: effectiveH3Profile,
             }
           : {};
 
@@ -2260,7 +2419,7 @@ export const VideoNode = memo(
               model: modelId,
               genMode: "firstLastFrame",
               h3Mode: "fl2va",
-              h3Profile,
+              h3Profile: effectiveH3Profile,
               humanReview: false,
               sceneOptimize: sceneOptimize ?? null,
               canvasId,
@@ -2685,7 +2844,7 @@ export const VideoNode = memo(
       generateAudio,
       genMode,
       h3Continuity,
-      h3Profile,
+      effectiveH3Profile,
       humanReview,
       id,
       isMiniMaxH3Model,
@@ -3500,6 +3659,29 @@ export const VideoNode = memo(
                       videoModelReferenceDisabledReason(model.apiModel ?? model.id, upstreamCounts)
                     }
                   />
+                  {isMiniMaxH3Model && (
+                    <button
+                      type="button"
+                      title="使用 MiniMax H3 官方 Skill 生成提示词"
+                      aria-label="使用 MiniMax H3 官方 Skill 生成提示词"
+                      disabled={isGeneratingH3Prompt || isGenerating}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void handleGenerateH3Prompt();
+                      }}
+                      className={`${NODE_INLINE_ICON_BUTTON_CLASS} ${
+                        isGeneratingH3Prompt
+                          ? NODE_INLINE_ICON_BUTTON_ACTIVE_CLASS
+                          : ""
+                      }`}
+                    >
+                      {isGeneratingH3Prompt ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-4 w-4" />
+                      )}
+                    </button>
+                  )}
                   <VideoConfigChip
                     aspectRatio={aspectRatio}
                     quality={quality}
@@ -3509,7 +3691,8 @@ export const VideoNode = memo(
                     sceneOptimize={sceneOptimize}
                     sceneOptimizeOptions={sceneOptimizeOptions}
                     generateAudio={generateAudio}
-                    h3Profile={isMiniMaxH3Model ? h3Profile : undefined}
+                    h3Profile={isMiniMaxH3Model ? effectiveH3Profile : undefined}
+                    h3NativeProfileOnly={h3NativeProfileOnly}
                     h3Continuity={isMiniMaxH3Model && data.h3BatchId && data.h3BatchIndex !== 0
                       ? h3Continuity
                       : undefined}
@@ -3903,6 +4086,7 @@ interface VideoConfigChipProps {
   sceneOptimizeOptions: readonly Seedance2SceneOptimize[];
   generateAudio: boolean;
   h3Profile?: MiniMaxH3Profile;
+  h3NativeProfileOnly?: boolean;
   h3Continuity?: boolean;
   onChange: (patch: Partial<VideoNodeData>) => void;
 }
@@ -3917,6 +4101,7 @@ function VideoConfigChip({
   sceneOptimizeOptions,
   generateAudio,
   h3Profile,
+  h3NativeProfileOnly = false,
   h3Continuity,
   onChange,
 }: VideoConfigChipProps) {
@@ -3997,7 +4182,11 @@ function VideoConfigChip({
         {h3Profile ? (
           <>
             <span className="text-text-muted/80">·</span>
-            <span>{H3_PROFILE_LABELS[h3Profile]}</span>
+            <span>
+              {h3NativeProfileOnly
+                ? "多图参考 · 原生20步"
+                : H3_PROFILE_LABELS[h3Profile]}
+            </span>
           </>
         ) : null}
         {h3Continuity !== undefined ? (
@@ -4069,25 +4258,35 @@ function VideoConfigChip({
           {h3Profile ? (
             <>
               <div className={VIDEO_PARAM_LABEL_CLASS}>H3 质量档位</div>
-              <div className={`grid grid-cols-3 ${VIDEO_PARAM_ROW_CLASS}`}>
-                {H3_PROFILE_OPTIONS.map((profile) => {
-                  const isActive = h3Profile === profile;
-                  return (
-                    <button
-                      key={profile}
-                      type="button"
-                      onClick={() => onChange({ h3Profile: profile })}
-                      className={`${VIDEO_PARAM_BUTTON_BASE_CLASS} ${
-                        isActive
-                          ? VIDEO_PARAM_ACTIVE_BUTTON_CLASS
-                          : VIDEO_PARAM_IDLE_BUTTON_CLASS
-                      }`}
-                    >
-                      {H3_PROFILE_LABELS[profile]}
-                    </button>
-                  );
-                })}
-              </div>
+              {h3NativeProfileOnly ? (
+                <div className={`grid grid-cols-1 ${VIDEO_PARAM_ROW_CLASS}`}>
+                  <div
+                    className={`${VIDEO_PARAM_BUTTON_BASE_CLASS} ${VIDEO_PARAM_ACTIVE_BUTTON_CLASS} flex items-center justify-center`}
+                  >
+                    多图参考 · 原生20步
+                  </div>
+                </div>
+              ) : (
+                <div className={`grid grid-cols-3 ${VIDEO_PARAM_ROW_CLASS}`}>
+                  {H3_PROFILE_OPTIONS.map((profile) => {
+                    const isActive = h3Profile === profile;
+                    return (
+                      <button
+                        key={profile}
+                        type="button"
+                        onClick={() => onChange({ h3Profile: profile })}
+                        className={`${VIDEO_PARAM_BUTTON_BASE_CLASS} ${
+                          isActive
+                            ? VIDEO_PARAM_ACTIVE_BUTTON_CLASS
+                            : VIDEO_PARAM_IDLE_BUTTON_CLASS
+                        }`}
+                      >
+                        {H3_PROFILE_LABELS[profile]}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </>
           ) : null}
 
