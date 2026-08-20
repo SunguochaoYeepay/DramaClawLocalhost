@@ -22,6 +22,7 @@ from urllib.parse import quote, unquote, urlencode, urlsplit
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import ValidationError
 
 from novelvideo.api.auth import get_api_user
 from novelvideo.api.deps import (
@@ -32,6 +33,8 @@ from novelvideo.api.deps import (
 )
 from novelvideo.api.schemas import (
     CanvasPayload,
+    ProductionPackageImportRequest,
+    ProductionPackagePreviewRequest,
     CreateIdentityAssetRequest,
     FreezoneAnalyzeShotsRequest,
     FreezoneAnalyzeVideoStoryRequest,
@@ -239,6 +242,13 @@ from novelvideo.freezone.video_node import (
     summarize_omni_reference_counts,
     validate_omni_reference_limits,
 )
+from novelvideo.freezone.production_package import (
+    build_canvas_from_package,
+    package_preview,
+    package_validation_errors,
+    parse_production_package,
+    production_keyframe_is_approved,
+)
 from novelvideo.models import CharacterIdentity, beat_scene_id
 from novelvideo.project_config import (
     load_effective_narration_style_for_voice,
@@ -333,6 +343,9 @@ async def _start_or_enqueue_freezone_video_gen(
     gen_mode: str | None = None,
     h3_mode: str | None = None,
     h3_profile: str | None = None,
+    h3_audio_mode: str = "motion_only",
+    audio_reference_duration_ms: int | None = None,
+    audio_reference_url: str | None = None,
 ) -> dict:
     payload = {
         "job_id": job_id,
@@ -342,6 +355,9 @@ async def _start_or_enqueue_freezone_video_gen(
         "gen_mode": gen_mode or "",
         "h3_mode": h3_mode or "",
         "h3_profile": h3_profile or "balanced",
+        "h3_audio_mode": h3_audio_mode or "motion_only",
+        "audio_reference_duration_ms": audio_reference_duration_ms,
+        "audio_reference_url": audio_reference_url or "",
         "prompt": prompt,
         "reference_items": reference_items,
         "aspect_ratio": aspect_ratio,
@@ -4614,6 +4630,7 @@ async def freezone_skill_run(
             has_first_frame=bool(reference_specs),
             has_last_frame=bool(body.parameters.get("has_last_frame", False)),
             output_language=str(body.parameters.get("output_language") or "en"),
+            audio_mode=str(body.parameters.get("audio_mode") or "motion_only"),
         )
         _write_skill_run_metadata(
             project_dir,
@@ -6945,6 +6962,29 @@ async def freezone_delete_video_character_library_item(
     return {"ok": True, "data": {"id": item_id, "deleted": True}}
 
 
+def _require_approved_production_keyframe(
+    *, ctx: ProjectContext, project_dir: Path, canvas_id: str, node_id: str
+) -> None:
+    """Require a generated keyframe for Codex-imported shots.
+
+    Human review remains available as metadata, but is intentionally not a
+    mandatory step before video generation.
+    """
+    if not canvas_id or not node_id:
+        return
+    canvas_project_dir = _canvas_state_project_dir(ctx, project_dir)
+    payload = canvas_store.read_canvas(canvas_project_dir, canvas_id)
+    if not isinstance(payload, dict):
+        return
+    nodes = [item for item in payload.get("nodes", []) if isinstance(item, dict)]
+    target = next((item for item in nodes if item.get("id") == node_id), None)
+    target_data = target.get("data") if isinstance(target, dict) else None
+    if not isinstance(target_data, dict) or target_data.get("source") != "codex":
+        return
+    if not production_keyframe_is_approved(payload, node_id):
+        raise HTTPException(409, "当前镜头还没有生成关键帧，请先生成关键帧")
+
+
 @router.post("/projects/{project}/freezone/video/gen", tags=[TAG_FREEZONE_VIDEO])
 async def freezone_video_gen(
     project: str,
@@ -6960,6 +7000,9 @@ async def freezone_video_gen(
     """
     ctx, username, project_name, project_dir, output_dir = await _resolve_freezone_project(
         project, user
+    )
+    _require_approved_production_keyframe(
+        ctx=ctx, project_dir=project_dir, canvas_id=body.canvas_id, node_id=body.node_id
     )
 
     if not body.prompt.strip():
@@ -7034,6 +7077,9 @@ async def freezone_video_i2v(
     """
     ctx, username, project_name, project_dir, output_dir = await _resolve_freezone_project(
         project, user
+    )
+    _require_approved_production_keyframe(
+        ctx=ctx, project_dir=project_dir, canvas_id=body.canvas_id, node_id=body.node_id
     )
 
     if body.camera_template_id and not get_video_camera_template(body.camera_template_id):
@@ -7128,6 +7174,9 @@ async def freezone_video_keyframes(
     ctx, username, project_name, project_dir, output_dir = await _resolve_freezone_project(
         project, user
     )
+    _require_approved_production_keyframe(
+        ctx=ctx, project_dir=project_dir, canvas_id=body.canvas_id, node_id=body.node_id
+    )
 
     if body.camera_template_id and not get_video_camera_template(body.camera_template_id):
         raise HTTPException(400, f"unknown camera_template_id: {body.camera_template_id}")
@@ -7217,6 +7266,9 @@ async def freezone_video_omni_gen(
     ctx, username, project_name, project_dir, output_dir = await _resolve_freezone_project(
         project, user
     )
+    _require_approved_production_keyframe(
+        ctx=ctx, project_dir=project_dir, canvas_id=body.canvas_id, node_id=body.node_id
+    )
 
     if not body.prompt.strip():
         raise HTTPException(400, "prompt is required")
@@ -7242,6 +7294,21 @@ async def freezone_video_omni_gen(
         validate_omni_reference_limits(raw_reference_items)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
+    audio_reference_count = sum(
+        str(item.get("type") or "").strip().lower() == "audio"
+        for item in raw_reference_items
+    )
+    image_reference_count = sum(
+        str(item.get("type") or "").strip().lower() == "image"
+        for item in raw_reference_items
+    )
+    if body.h3_audio_mode == "dialogue_audio_reference":
+        if not is_freezone_minimax_h3_backend(backend):
+            raise HTTPException(400, "对白音频驱动仅支持 MiniMax H3")
+        if audio_reference_count != 1:
+            raise HTTPException(400, "H3 对白音频驱动需要且只能连接 1 段音频")
+        if image_reference_count < 1:
+            raise HTTPException(400, "H3 对白音频驱动至少需要连接 1 张人物或场景图片")
     reference_items: list[dict[str, str]] = []
     for item in raw_reference_items:
         path_list = _resolve_url_list(project_dir, [str(item.get("url") or "")])
@@ -7286,6 +7353,16 @@ async def freezone_video_omni_gen(
             gen_mode=body.gen_mode,
             h3_mode=body.h3_mode or "ref2va",
             h3_profile=body.h3_profile,
+            h3_audio_mode=body.h3_audio_mode,
+            audio_reference_duration_ms=body.audio_reference_duration_ms,
+            audio_reference_url=next(
+                (
+                    str(item.get("url") or "")
+                    for item in raw_reference_items
+                    if str(item.get("type") or "").strip().lower() == "audio"
+                ),
+                "",
+            ),
         )
     except RuntimeError as exc:
         _handle_task_start_runtime_error("failed to start freezone omni video gen task", exc)
@@ -10180,6 +10257,111 @@ async def get_canvas(project: str, canvas_id: str, user: dict = Depends(get_api_
         project_dir=project_dir,
     )
     return {"ok": True, "data": migrated_payload or {"nodes": [], "edges": []}}
+
+
+@router.post(
+    "/projects/{project}/freezone/production-package/preview",
+    tags=[TAG_FREEZONE_CANVAS],
+)
+async def preview_production_package(
+    project: str,
+    body: ProductionPackagePreviewRequest,
+    user: dict = Depends(get_api_user),
+):
+    """Validate and summarize a Codex package without writing anything."""
+    await _resolve_freezone_project(project, user, required_role="viewer")
+    try:
+        package = parse_production_package(body.package)
+    except ValidationError as exc:
+        raise HTTPException(422, {"code": "production_package_invalid", "errors": package_validation_errors(exc)}) from exc
+    except ValueError as exc:
+        raise HTTPException(422, {"code": "production_package_invalid", "errors": [{"field": "$", "message": str(exc)}]}) from exc
+    return {"ok": True, "data": package_preview(package)}
+
+
+@router.post(
+    "/projects/{project}/freezone/production-package/import",
+    tags=[TAG_FREEZONE_CANVAS],
+)
+async def import_production_package(
+    project: str,
+    body: ProductionPackageImportRequest,
+    user: dict = Depends(get_api_user),
+):
+    """Import a validated package into a stable canvas graph.
+
+    This endpoint only parses and maps data.  It deliberately does not invoke
+    the script-analysis, Cognee, or any model-generation path.
+    """
+    if not body.confirm:
+        raise HTTPException(400, "confirm=true is required after reviewing the production package preview")
+    ctx, _username, _project_name, project_dir, _output_dir = await _resolve_freezone_project(project, user)
+    try:
+        package = parse_production_package(body.package)
+    except ValidationError as exc:
+        raise HTTPException(422, {"code": "production_package_invalid", "errors": package_validation_errors(exc)}) from exc
+    except ValueError as exc:
+        raise HTTPException(422, {"code": "production_package_invalid", "errors": [{"field": "$", "message": str(exc)}]}) from exc
+
+    package_id = package.effective_source_package_id()
+    canvas_project_dir = _canvas_state_project_dir(ctx, project_dir)
+    canvas_id = str(body.canvas_id or "").strip()
+    if canvas_id and not CANVAS_ID_RE.match(canvas_id):
+        raise HTTPException(400, "invalid canvas_id")
+    if not canvas_id:
+        for item in canvas_store.list_canvases(canvas_project_dir):
+            metadata = item.get("metadata") if isinstance(item, dict) else None
+            production = metadata.get("production_package") if isinstance(metadata, dict) else None
+            if isinstance(production, dict) and production.get("source_package_id") == package_id:
+                canvas_id = str(item.get("id") or "")
+                break
+    if not canvas_id:
+        safe_package_id = re.sub(r"[^a-zA-Z0-9_-]", "_", package_id)[:48]
+        canvas_id = f"codex_{safe_package_id or 'package'}"
+    if not CANVAS_ID_RE.match(canvas_id):
+        raise HTTPException(400, "source_package_id cannot produce a valid canvas id; provide canvas_id")
+
+    existing = canvas_store.read_canvas(canvas_project_dir, canvas_id)
+    mapped = build_canvas_from_package(package, existing)
+    base_revision = existing.get("revision") if isinstance(existing, dict) else None
+    request_hash = canvas_store.canvas_request_hash(body.package)
+
+    def build_payload(current: dict | None) -> dict:
+        return _prepare_canvas_payload_for_write(
+            project_id=project,
+            canvas_id=canvas_id,
+            body=None,
+            raw_payload={**mapped, "save_source": "import"},
+            existing=current,
+            user=user,
+        )
+
+    try:
+        saved = canvas_store.save_canvas(
+            canvas_project_dir,
+            canvas_id,
+            base_revision=base_revision,
+            build_payload=build_payload,
+            enforce_revision=True,
+            client_save_id=f"production-package:v2:{package_id}:{request_hash[:12]}",
+            request_hash=request_hash,
+            save_source="import",
+        )
+    except (canvas_store.CanvasStoreError, CanvasLockBusy) as exc:
+        _raise_canvas_store_http(exc)
+    payload = saved.payload
+    return {
+        "ok": True,
+        "message": "已按原始结构导入，未调用 AI 剧情分析。",
+        "data": {
+            "canvas_id": canvas_id,
+            "revision": payload.get("revision"),
+            "source_package_id": package_id,
+            "node_count": len(payload.get("nodes") or []),
+            "edge_count": len(payload.get("edges") or []),
+            "preview": package_preview(package),
+        },
+    }
 
 
 @router.get(

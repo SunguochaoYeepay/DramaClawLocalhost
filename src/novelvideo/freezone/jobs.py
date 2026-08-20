@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import shutil
 import subprocess
 import tempfile
@@ -276,7 +277,9 @@ async def _run_comfyui_gen(
     from novelvideo.generators.comfyui_image import ComfyUIImageGenerator
 
     # Initialize ComfyUI generator
-    comfyui_gen = ComfyUIImageGenerator(model=model)
+    # A bare ComfyUI provider request is still a Qwen request by default;
+    # callers can explicitly choose FLUX2 by passing its model selection.
+    comfyui_gen = ComfyUIImageGenerator(model=model or "qwen-image")
 
     # Convert aspect ratio to dimensions
     width, height = _aspect_to_dims(aspect_ratio, image_size)
@@ -1240,6 +1243,8 @@ async def run_freezone_video_gen(
     last_frame_path: Optional[str] = None,
     h3_mode: str = "",
     h3_profile: str = "balanced",
+    h3_audio_mode: str = "motion_only",
+    audio_reference_duration_ms: int | None = None,
     on_progress: Optional[Callable[[float], None]] = None,
     on_log: Optional[Callable[[str], None]] = None,
 ) -> Path:
@@ -1274,6 +1279,30 @@ async def run_freezone_video_gen(
         is_freezone_seedance2_backend,
     )
 
+    dialogue_audio_ref = None
+    effective_duration_seconds = duration_seconds
+    if h3_audio_mode == "dialogue_audio_reference":
+        if not is_freezone_minimax_h3_backend(backend):
+            raise RuntimeError("H3 dialogue audio reference mode requires MiniMax H3")
+        audio_refs = [ref for ref in references if ref.type == "audio" and ref.path]
+        if len(audio_refs) != 1:
+            raise RuntimeError("H3 dialogue audio reference mode requires exactly one audio")
+        if not any(ref.type == "image" and ref.path for ref in references):
+            raise RuntimeError("H3 dialogue audio reference mode requires at least one image")
+        dialogue_audio_ref = audio_refs[0]
+        audio_path = Path(dialogue_audio_ref.path)
+        if not audio_path.is_file():
+            raise RuntimeError("H3 dialogue audio reference file does not exist")
+        try:
+            audio_duration_seconds = await _probe_video_duration(str(audio_path))
+        except Exception:
+            if not audio_reference_duration_ms:
+                raise RuntimeError("unable to read H3 dialogue audio duration")
+            audio_duration_seconds = audio_reference_duration_ms / 1000
+        if audio_duration_seconds > 15.0:
+            raise RuntimeError("H3 dialogue audio reference must not exceed 15 seconds")
+        effective_duration_seconds = max(5, min(15, math.ceil(audio_duration_seconds)))
+
     video_gen = create_video_generator(
         backend=backend,
         resolution=resolution,
@@ -1297,15 +1326,24 @@ async def run_freezone_video_gen(
             has_first_frame=bool(first_image_ref and first_image_ref.path),
             has_last_frame=bool(last_frame_path),
         )
-        if not is_valid_h3_prompt_structure(prompt, resolved_h3_mode):
+        dialogue_prompt_ready = bool(
+            h3_audio_mode == "dialogue_audio_reference"
+            and "<Audio 1>" in prompt
+            and "non_diegetic_music: None" in prompt
+            and ("exact spoken performance" in prompt or "准确对白" in prompt)
+        )
+        if not is_valid_h3_prompt_structure(prompt, resolved_h3_mode) or (
+            h3_audio_mode == "dialogue_audio_reference" and not dialogue_prompt_ready
+        ):
             effective_prompt = await compose_h3_prompt(
                 creative_intent=prompt,
                 references=prompt_references,
                 primary_image_is_subject=bool(first_image_ref and first_image_ref.path),
                 mode=resolved_h3_mode,
-                duration_seconds=duration_seconds,
+                duration_seconds=effective_duration_seconds,
                 has_first_frame=bool(first_image_ref and first_image_ref.path),
                 has_last_frame=bool(last_frame_path),
+                audio_mode=h3_audio_mode,
             )
         if on_log:
             on_log(
@@ -1317,7 +1355,7 @@ async def run_freezone_video_gen(
             prompt=effective_prompt,
             output_path=str(out),
             references=references,
-            duration=float(duration_seconds),
+            duration=float(effective_duration_seconds),
             audio=bool(generate_audio),
             human_review=bool(human_review),
             aspect_ratio=aspect_ratio,
@@ -1338,12 +1376,13 @@ async def run_freezone_video_gen(
             prompt=effective_prompt,
             output_path=str(out),
             aspect_ratio=aspect_ratio,
-            duration=float(duration_seconds),
+            duration=float(effective_duration_seconds),
             last_frame_path=last_frame_path,
             references=references,
             human_review=bool(human_review),
             seedance2_config={"scene_optimize": scene_optimize} if scene_optimize else None,
             h3_profile=h3_profile,
+            h3_audio_mode=h3_audio_mode,
             on_progress=on_progress,
             on_log=on_log,
         )
@@ -1352,6 +1391,42 @@ async def run_freezone_video_gen(
         raise RuntimeError(f"freezone video generation failed: {err}")
     if not out.exists():
         raise RuntimeError("video generation returned success but no output file was written")
+    if dialogue_audio_ref is not None:
+        if not shutil.which("ffmpeg"):
+            raise RuntimeError("ffmpeg is required to preserve the original dialogue audio")
+        muxed = out.with_name(f"{out.stem}.dialogue_mux{out.suffix}")
+        try:
+            await _run_cmd(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    str(out),
+                    "-i",
+                    dialogue_audio_ref.path,
+                    "-map",
+                    "0:v:0",
+                    "-map",
+                    "1:a:0",
+                    "-c:v",
+                    "copy",
+                    "-c:a",
+                    "aac",
+                    "-af",
+                    "apad",
+                    "-shortest",
+                    "-movflags",
+                    "+faststart",
+                    str(muxed),
+                ]
+            )
+            if not muxed.is_file():
+                raise RuntimeError("dialogue audio mux finished without an output file")
+            muxed.replace(out)
+        finally:
+            muxed.unlink(missing_ok=True)
+        if on_log:
+            on_log("H3 dialogue audio preserved as the final video soundtrack")
     return out
 
 

@@ -16,8 +16,9 @@ const modelModules = import.meta.glob<{ imageModel: ImageModelDefinition }>(
   { eager: true }
 );
 
-const SUPERTALE_PROVIDER_IDS = new Set(['huimeng', 'openai', 'openrouter']);
+const SUPERTALE_PROVIDER_IDS = new Set(['comfyui', 'huimeng', 'openai', 'openrouter']);
 const SUPERTALE_IMAGE_MODEL_IDS = new Set([
+  'comfyui/qwen-image',
   'huimeng/default',
   'openai/gpt-image-2',
   'openrouter/default',
@@ -45,9 +46,10 @@ const imageModelMap = new Map<string, ImageModelDefinition>(
 // Freezone is SuperTale-project scoped, not BYO-provider scoped. Expose only
 // backend-supported image providers; old canvas model ids are normalized by the
 // alias map below instead of keeping old provider modules in the bundle.
-export const DEFAULT_IMAGE_MODEL_ID = 'openrouter/default';
+export const DEFAULT_IMAGE_MODEL_ID = 'comfyui/qwen-image';
 
 const imageModelAliasMap = new Map<string, string>([
+  ['comfyui_qwen_image', DEFAULT_IMAGE_MODEL_ID],
   ['gemini-3.1-flash', DEFAULT_IMAGE_MODEL_ID],
   ['gemini-3.1-flash-edit', DEFAULT_IMAGE_MODEL_ID],
   ['ppio/gemini-3.1-flash', DEFAULT_IMAGE_MODEL_ID],

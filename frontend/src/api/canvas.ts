@@ -75,6 +75,51 @@ export interface FreezoneCanvasSaveResult {
   backup_status?: CanvasBackupStatus;
 }
 
+export interface ProductionPackagePreview {
+  project_title: string;
+  episode_number: number;
+  episode_title: string;
+  scene_count: number;
+  shot_count: number;
+  character_count: number;
+  dialogue_count: number;
+  audio_count: number;
+  asset_count: number;
+  missing_resources: Array<{ field: string; id: string }>;
+  source_package_id: string;
+  ai_analysis_called: false;
+}
+
+export async function previewProductionPackage(
+  projectId: string,
+  packageData: Record<string, unknown>,
+): Promise<ProductionPackagePreview> {
+  return await apiCall<ProductionPackagePreview>(
+    `projects/${encodeURIComponent(projectId)}/freezone/production-package/preview`,
+    { method: "POST", json: { package: packageData } },
+  );
+}
+
+export interface ProductionPackageImportResult {
+  canvas_id: string;
+  revision: number;
+  source_package_id: string;
+  node_count: number;
+  edge_count: number;
+  preview: ProductionPackagePreview;
+}
+
+export async function importProductionPackage(
+  projectId: string,
+  packageData: Record<string, unknown>,
+  canvasId?: string,
+): Promise<ProductionPackageImportResult> {
+  return await apiCall<ProductionPackageImportResult>(
+    `projects/${encodeURIComponent(projectId)}/freezone/production-package/import`,
+    { method: "POST", json: { package: packageData, canvas_id: canvasId ?? null, confirm: true } },
+  );
+}
+
 /**
  * Mint an idempotency token for a single canvas save attempt. Callers should
  * reuse the same id across retries of the same logical save (network blip,

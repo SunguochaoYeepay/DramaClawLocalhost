@@ -378,12 +378,12 @@ export const ImageGenNode = memo(({ id, data, selected, width, height }: ImageGe
   // displayed id and the submit apiModel from this one object, so they can
   // never diverge.
   //
-  // The node's default `data.model` is seeded to the static
-  // `DEFAULT_SHARED_MODEL_ID` (`huimeng/gpt-image-2`), which is normally NOT in
-  // the live `/freezone/image/models` list. Trusting it blindly is the bug:
+  // The node's default `data.model` is seeded to
+  // `DEFAULT_SHARED_MODEL_ID` (`comfyui_qwen_image`). Trusting an unknown
+  // persisted id blindly is the bug:
   // ProviderModelPicker silently falls back to showing `availableModels[0]`
-  // (e.g. LingShan-G2) when the id isn't found, while submit resolves the stale
-  // id through SHARED_MODELS to `huimeng_gpt_image2` — display ≠ value sent.
+  // value when the id isn't found, while submit resolves the stale id through
+  // SHARED_MODELS — display ≠ value sent.
   // Reconciling here keeps them in lockstep: an unknown persisted id falls back
   // to the first live model (exactly what the picker shows).
   const selectedModel = useMemo(() => {
@@ -648,6 +648,10 @@ export const ImageGenNode = memo(({ id, data, selected, width, height }: ImageGe
   const albumTotalSlots = Math.max(albumUrls.length, albumPendingTotal);
   const albumPendingCount = Math.max(0, albumPendingTotal - albumUrls.length);
   const hasAlbum = albumTotalSlots > 1;
+  const productionReviewStatus =
+    typeof data.reviewStatus === 'string' ? data.reviewStatus : 'pending';
+  const isProductionKeyframe =
+    data.source === 'codex' && typeof data.shotId === 'string' && data.shotId.length > 0;
 
   // 画册展开期间注册为本节点的 activeOverlay：拖动画册会让 React Flow 重新
   // 选中节点（selectNodesOnDrag），单靠展开瞬间的取消选中压不住——action
@@ -1862,6 +1866,33 @@ export const ImageGenNode = memo(({ id, data, selected, width, height }: ImageGe
             </div>
           </div>
         </OperationPanelShell>
+      )}
+      {selected && isProductionKeyframe && (
+        <div
+          className="nodrag absolute left-1/2 z-[250] flex -translate-x-1/2 items-center gap-2 rounded-md border border-cyan-300/20 bg-[#10151a]/95 px-2.5 py-1.5 shadow-lg"
+          style={{ top: `calc(100% + ${OPERATIONS_PANEL_GAP + panelHeight + 8}px)` }}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <span className="text-[11px] text-white/65">
+            关键帧：{productionReviewStatus === 'approved' ? '已通过' : productionReviewStatus === 'rejected' ? '已驳回' : '待审核'}
+          </span>
+          <button
+            type="button"
+            onClick={() => updateNodeData(id, { reviewStatus: 'approved', productionStatus: '已通过', reviewNote: null })}
+            disabled={!data.imageUrl || productionReviewStatus === 'approved'}
+            className="rounded border border-emerald-300/30 px-2 py-0.5 text-[10px] text-emerald-100 disabled:opacity-40"
+          >
+            审核通过
+          </button>
+          <button
+            type="button"
+            onClick={() => updateNodeData(id, { reviewStatus: 'rejected', productionStatus: '需重做', reviewNote: '人工驳回' })}
+            disabled={!data.imageUrl}
+            className="rounded border border-rose-300/30 px-2 py-0.5 text-[10px] text-rose-100 disabled:opacity-40"
+          >
+            驳回关键帧
+          </button>
+        </div>
       )}
       {selected && !isBoxSelecting && !hasActiveOverlay && !panelExpanded && !stylePickerOpen && hasCompletedHistoryRecords(historyRecords) && (
         <div

@@ -93,6 +93,7 @@ export type VideoGenQuality = '480P' | '720P' | '1080P';
 export type VideoGenCount = 1 | 2 | 4;
 export type Seedance2SceneOptimize = 'anime' | 'realistic';
 export type MiniMaxH3Profile = 'draft' | 'balanced' | 'final';
+export type MiniMaxH3AudioMode = 'motion_only' | 'dialogue_audio_reference';
 
 export interface VideoNodeData extends NodeDisplayData {
   videoUrl: string | null;
@@ -138,6 +139,8 @@ export interface VideoNodeData extends NodeDisplayData {
   generateAudio?: boolean;
   /** H3 only: Turbo 4-step, Turbo 8-step, or native 20-step sampling. */
   h3Profile?: MiniMaxH3Profile;
+  /** H3 ref2va only: use one speech clip to drive the visible speaker and lip motion. */
+  h3AudioMode?: MiniMaxH3AudioMode;
   /** One-shot flag used by storyboard batches; cleared before submission. */
   autoStartGeneration?: boolean;
   /** Persistent storyboard batch metadata. Pending shots start one at a time. */
@@ -466,6 +469,8 @@ export interface AudioNodeData extends NodeDisplayData {
   audioUrl: string | null;
   sourceFileName?: string | null;
   durationMs?: number | null;
+  /** Optional character id/name attached by structured production-package imports. */
+  speaker?: string | null;
   isUploading?: boolean;
   /**
    * 音频节点的生成类型：

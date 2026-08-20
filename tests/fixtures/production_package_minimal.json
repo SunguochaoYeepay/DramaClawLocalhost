@@ -1,0 +1,28 @@
+{
+  "schema_version": "ai-drama.production.v1",
+  "source_package_id": "codex-bill-3000-v1",
+  "project": {"title": "藏在账单里的三千块", "style": "realistic", "language": "zh-CN"},
+  "episode": {"number": 1, "title": "藏在账单里的三千块"},
+  "characters": [
+    {"id": "chen_hao", "name": "陈浩", "description": "中国男性，38岁，普通上班族", "reference_assets": []},
+    {"id": "lin_yue", "name": "林悦", "description": "中国女性，35岁，母亲", "reference_assets": []},
+    {"id": "xiao_yu", "name": "小宇", "description": "六岁男孩", "reference_assets": []},
+    {"id": "mother_in_law", "name": "婆婆", "description": "陈浩的母亲", "reference_assets": []},
+    {"id": "narrator", "name": "旁白", "description": "旁白", "reference_assets": []}
+  ],
+  "scenes": [
+    {"id": "1-1", "location": "客餐厅", "time_of_day": "夜", "interior_exterior": "内", "summary": "陈浩发现家用卡少了三千块。", "shots": [{"id": "1-1-01", "visual_description": "现代中国家庭客餐厅，陈浩站在门口。", "shot_type": "中景", "camera_action": "固定", "characters": ["chen_hao", "lin_yue", "xiao_yu"], "emotion": "紧张", "dialogue_ids": ["d001"], "keyframe_prompt": "写实现代中国家庭客餐厅，16:9", "video_prompt": "丈夫推门进入客餐厅", "status": "pending"}]},
+    {"id": "1-2", "location": "客餐厅", "time_of_day": "夜", "interior_exterior": "内", "summary": "夫妻争吵。", "shots": [{"id": "1-2-01", "visual_description": "夫妻面对面争吵。", "shot_type": "近景", "camera_action": "轻微推进", "characters": ["chen_hao", "lin_yue"], "emotion": "压抑", "dialogue_ids": ["d002"], "keyframe_prompt": "现代家庭争吵，16:9", "video_prompt": "夫妻争吵", "status": "pending"}]},
+    {"id": "1-3", "location": "客餐厅", "time_of_day": "夜", "interior_exterior": "内", "summary": "孩子哭泣。", "shots": [{"id": "1-3-01", "visual_description": "孩子哭泣。", "shot_type": "特写", "camera_action": "固定", "characters": ["xiao_yu"], "emotion": "悲伤", "dialogue_ids": [], "keyframe_prompt": "孩子哭泣，16:9", "video_prompt": "孩子哭泣", "status": "pending"}]},
+    {"id": "1-4", "location": "客餐厅", "time_of_day": "夜", "interior_exterior": "内", "summary": "婆婆劝解。", "shots": [{"id": "1-4-01", "visual_description": "婆婆走来劝解。", "shot_type": "中远景", "camera_action": "横移", "characters": ["mother_in_law", "chen_hao", "lin_yue"], "emotion": "缓和", "dialogue_ids": [], "keyframe_prompt": "婆婆劝解夫妻，16:9", "video_prompt": "婆婆劝解", "status": "pending"}]},
+    {"id": "1-5", "location": "客餐厅", "time_of_day": "夜", "interior_exterior": "内", "summary": "一家人沉默。", "shots": [{"id": "1-5-01", "visual_description": "一家人沉默坐在餐桌旁。", "shot_type": "全景", "camera_action": "缓慢拉远", "characters": ["chen_hao", "lin_yue", "xiao_yu", "mother_in_law"], "emotion": "沉默", "dialogue_ids": [], "keyframe_prompt": "一家人沉默，16:9", "video_prompt": "镜头缓慢拉远", "status": "pending"}]}
+  ],
+  "dialogues": [
+    {"id": "d001", "speaker": "林悦", "text": "回来啦？锅里还有汤，我去给你热一下。", "audio_asset_id": "audio-001", "start_ms": 0, "end_ms": 3200},
+    {"id": "d002", "speaker": "陈浩", "text": "家用卡里的三千块去哪了？", "audio_asset_id": "audio-002", "start_ms": 0, "end_ms": 2400}
+  ],
+  "assets": [
+    {"id": "audio-001", "type": "audio", "url": "/已有音频资源地址/lin-yue.mp3", "label": "林悦对白"},
+    {"id": "audio-002", "type": "audio", "url": "/已有音频资源地址/chen-hao.mp3", "label": "陈浩对白"}
+  ]
+}

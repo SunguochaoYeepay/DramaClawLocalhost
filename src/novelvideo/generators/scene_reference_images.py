@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import base64
 import os
+import tempfile
 import time
 from pathlib import Path
 from typing import Literal
@@ -598,6 +600,57 @@ def _scene_image_config(model: str) -> dict[str, str]:
     return image_config
 
 
+async def _call_comfyui_scene_image(
+    *,
+    model: str,
+    prompt: str,
+    references: list[tuple[str, bytes, str]],
+) -> tuple[bytes | None, str]:
+    """Generate a scene reference through the local ComfyUI image workflow.
+
+    Scene references are kept in-memory for the cloud providers.  ComfyUI's
+    workflow generator consumes file paths, so materialize those bytes only for
+    the duration of this request and read the generated image back before the
+    temporary directory is removed.
+    """
+    from novelvideo.generators.comfyui_image import ComfyUIImageGenerator
+
+    with tempfile.TemporaryDirectory(prefix="dramacl_scene_ref_") as temp_dir:
+        temp_path = Path(temp_dir)
+        reference_paths: list[str] = []
+        for index, (_name, image_bytes, mime_type) in enumerate(references[:3]):
+            suffix = ".jpg" if mime_type == "image/jpeg" else ".png"
+            reference_path = temp_path / f"reference_{index}{suffix}"
+            reference_path.write_bytes(image_bytes)
+            reference_paths.append(str(reference_path))
+
+        generated_path = temp_path / "scene_reference.png"
+        generator = ComfyUIImageGenerator(model=model)
+        if reference_paths:
+            result = await generator.generate_with_references(
+                prompt=prompt,
+                reference_images=reference_paths,
+                output_path=str(generated_path),
+                width=1280,
+                height=720,
+            )
+        else:
+            result = await generator.generate(
+                prompt=prompt,
+                output_path=str(generated_path),
+                width=1280,
+                height=720,
+            )
+
+        if not result or not result.success:
+            return None, (result.error if result else "ComfyUI returned no result")
+        if generated_path.exists():
+            return generated_path.read_bytes(), ""
+        if result.image_base64:
+            return base64.b64decode(result.image_base64), ""
+        return None, "ComfyUI generated no image file or image bytes"
+
+
 async def generate_scene_reference_image(
     *,
     project_dir: Path,
@@ -698,6 +751,13 @@ async def generate_scene_reference_image(
                 "quality": "low",
                 "huimeng_image_quality": "low",
             },
+        )
+    elif provider == "comfyui":
+        selected_model = _scene_image_model(kind, provider, model)
+        image_bytes, error = await _call_comfyui_scene_image(
+            model=selected_model,
+            prompt=prompt,
+            references=references,
         )
     else:
         api_key = OPENROUTER_API_KEY or ""

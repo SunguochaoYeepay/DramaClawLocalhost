@@ -3092,6 +3092,31 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
         return "\n".join(part for part in (normalized_prompt, *instructions) if part)
 
     @staticmethod
+    def _apply_minimax_h3_native_audio_lock(
+        workflow: dict,
+        *,
+        audio_node_id: str,
+    ) -> None:
+        """Lock one real dialogue track into H3's joint audio/video latent."""
+        workflow["h3_native_audio_lock"] = {
+            "inputs": {
+                "model": ["137", 0],
+                "av_latent": ["136", 1],
+                "audio_vae": ["120", 0],
+                "audio": [audio_node_id, 0],
+            },
+            "class_type": "MiniMaxH3NativeAudioLock",
+            "_meta": {"title": "MiniMax H3 Native Exact-Audio Lock"},
+        }
+        # Both model-dependent sampling paths must use the patched model. The
+        # sampler receives the AV latent whose audio stream is fixed and masked
+        # from denoising, while CreateVideo receives the exact source audio.
+        workflow["124"]["inputs"]["model"] = ["h3_native_audio_lock", 0]
+        workflow["126"]["inputs"]["model"] = ["h3_native_audio_lock", 0]
+        workflow["125"]["inputs"]["latent_image"] = ["h3_native_audio_lock", 1]
+        workflow["130"]["inputs"]["audio"] = ["h3_native_audio_lock", 2]
+
+    @staticmethod
     def _apply_director_fast_profile(workflow: dict) -> None:
         """Use the local FP8 distilled model and skip the high-resolution pass."""
         workflow["77"] = {
@@ -3339,6 +3364,7 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
             "ltx23_director_fast",
         }
         is_minimax_h3 = self.workflow_type == "minimax_h3"
+        h3_audio_mode = str(kwargs.get("h3_audio_mode") or "motion_only").strip().lower()
         h3_image_references: list[str] = []
         h3_image_reference_roles: list[str] = ["first-frame subject and composition"] if image_path else []
         h3_video_references: list[str] = []
@@ -3637,6 +3663,16 @@ class ComfyUIVideoGenerator(VideoGeneratorBase):
                         "_meta": {"title": f"H3 Audio Reference {index + 1}"},
                     }
                     r2v_inputs[f"ref_audios.ref_audio_{index}"] = [node_id, 0]
+                if h3_audio_mode == "dialogue_audio_reference":
+                    if len(h3_audio_filenames) != 1:
+                        raise ValueError(
+                            "H3 dialogue audio reference mode requires exactly one audio"
+                        )
+                    self._apply_minimax_h3_native_audio_lock(
+                        workflow,
+                        audio_node_id="h3_reference_audio_0",
+                    )
+                    log("H3 原生对白锁定: 已将真实音频写入 AV latent 并锁定音频流")
                 workflow[node_map["duration"]]["inputs"]["value"] = min(15, max(5, float(duration)))
             elif workflow_key == "ltx23":
                 # LTX 2.3 I2V 模式

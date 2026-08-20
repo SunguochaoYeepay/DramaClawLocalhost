@@ -447,5 +447,82 @@ async def test_minimax_h3_multimodal_references_use_official_input_slots(monkeyp
     assert h3_inputs["ref_videos.ref_video_0"] == ["h3_reference_video_0", 0]
     assert h3_inputs["ref_video_audios.ref_video_audio_0"] == ["h3_reference_video_0", 2]
     assert h3_inputs["ref_audios.ref_audio_0"] == ["h3_reference_audio_0", 0]
+    assert "h3_native_audio_lock" not in workflow
     assert "<Video 1>" in h3_inputs["prompt"]
     assert "<Audio 1>" in h3_inputs["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_minimax_h3_dialogue_audio_uses_native_audio_lock(monkeypatch, tmp_path):
+    reference_image = tmp_path / "speaker.png"
+    reference_audio = tmp_path / "dialogue.wav"
+    output = tmp_path / "result.mp4"
+    reference_image.write_bytes(b"image")
+    reference_audio.write_bytes(b"audio")
+    generator = ComfyUIVideoGenerator(workflow_type="minimax_h3")
+    captured: dict[str, object] = {}
+
+    async def fake_upload(_data, filename, **_kwargs):
+        return {"name": filename}
+
+    async def fake_queue(workflow, _client_id):
+        captured["workflow"] = workflow
+        return {"prompt_id": "h3-dialogue-lock-test"}
+
+    async def fake_history(_prompt_id):
+        return {
+            "h3-dialogue-lock-test": {
+                "outputs": {"92": {"images": [{"filename": "result.mp4"}]}}
+            }
+        }
+
+    async def fake_download(_filename, _subfolder=""):
+        return b"video"
+
+    class FakeWebSocket:
+        async def recv(self):
+            return json.dumps(
+                {
+                    "type": "executing",
+                    "data": {"prompt_id": "h3-dialogue-lock-test", "node": None},
+                }
+            )
+
+        async def close(self):
+            return None
+
+    async def fake_connect(*_args, **_kwargs):
+        return FakeWebSocket()
+
+    monkeypatch.setattr(generator, "_upload_image", fake_upload)
+    monkeypatch.setattr(generator, "_upload_file", fake_upload)
+    monkeypatch.setattr(generator, "_queue_prompt", fake_queue)
+    monkeypatch.setattr(generator, "_get_history", fake_history)
+    monkeypatch.setattr(generator, "_download_video", fake_download)
+    monkeypatch.setattr(video_generator_module.websockets, "connect", fake_connect)
+
+    result = await generator.generate(
+        image_path=str(reference_image),
+        prompt="The designated speaker delivers <Audio 1> exactly.",
+        output_path=str(output),
+        duration=5,
+        references=[
+            ShotReference("audio", str(reference_audio), "exact dialogue"),
+        ],
+        h3_audio_mode="dialogue_audio_reference",
+    )
+
+    workflow = captured["workflow"]
+    lock = workflow["h3_native_audio_lock"]
+    assert result.status.value == "done"
+    assert lock["class_type"] == "MiniMaxH3NativeAudioLock"
+    assert lock["inputs"] == {
+        "model": ["137", 0],
+        "av_latent": ["136", 1],
+        "audio_vae": ["120", 0],
+        "audio": ["h3_reference_audio_0", 0],
+    }
+    assert workflow["124"]["inputs"]["model"] == ["h3_native_audio_lock", 0]
+    assert workflow["126"]["inputs"]["model"] == ["h3_native_audio_lock", 0]
+    assert workflow["125"]["inputs"]["latent_image"] == ["h3_native_audio_lock", 1]
+    assert workflow["130"]["inputs"]["audio"] == ["h3_native_audio_lock", 2]

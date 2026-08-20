@@ -25,6 +25,11 @@ class H3PromptMode(StrEnum):
     REF2VA = "ref2va"
 
 
+class H3AudioMode(StrEnum):
+    MOTION_ONLY = "motion_only"
+    DIALOGUE_AUDIO_REFERENCE = "dialogue_audio_reference"
+
+
 @dataclass(frozen=True)
 class H3Reference:
     media_type: str
@@ -101,6 +106,14 @@ def normalize_h3_prompt_mode(mode: str | H3PromptMode | None) -> H3PromptMode | 
         return mode
     key = "".join(ch for ch in str(mode or "").strip().lower() if ch.isalnum())
     return _MODE_ALIASES.get(key)
+
+
+def normalize_h3_audio_mode(mode: str | H3AudioMode | None) -> H3AudioMode:
+    if isinstance(mode, H3AudioMode):
+        return mode
+    if str(mode or "").strip().lower() == H3AudioMode.DIALOGUE_AUDIO_REFERENCE:
+        return H3AudioMode.DIALOGUE_AUDIO_REFERENCE
+    return H3AudioMode.MOTION_ONLY
 
 
 def infer_h3_prompt_mode(
@@ -203,6 +216,7 @@ def build_h3_prompt_draft(
     has_first_frame: bool | None = None,
     has_last_frame: bool = False,
     output_language: str = "en",
+    audio_mode: str | H3AudioMode | None = None,
 ) -> str:
     """Build an editable prompt that follows the official H3 section order."""
     refs = _normalized_references(references)
@@ -225,6 +239,8 @@ def build_h3_prompt_draft(
 
     manifest = _reference_manifest(refs, output_language)
     if resolved_mode == H3PromptMode.REF2VA:
+        resolved_audio_mode = normalize_h3_audio_mode(audio_mode)
+        audio_manifest = [item for item in manifest if item["media_type"] == "audio"]
         definitions = "; ".join(
             _localized(
                 output_language,
@@ -261,6 +277,62 @@ def build_h3_prompt_draft(
             )
             if part
         )
+        if (
+            resolved_audio_mode == H3AudioMode.DIALOGUE_AUDIO_REFERENCE
+            and len(audio_manifest) == 1
+        ):
+            dialogue_audio = audio_manifest[0]["label"]
+            definitions = f"{definitions}; " + _localized(
+                output_language,
+                f"{dialogue_audio} is the exact spoken performance for the designated on-screen speaker",
+                f"{dialogue_audio} 是指定出镜人物的准确对白表演",
+            )
+            summary = _localized(
+                output_language,
+                f"The designated speaker says the exact words with the exact timing of {dialogue_audio}; "
+                "all other people remain silent and react naturally. " + action,
+                f"指定人物严格按照 {dialogue_audio} 的原始台词和时间说话；其他人物保持沉默并自然反应。{action}",
+            )
+            retention = _localized(
+                output_language,
+                "Preserve identity, face, wardrobe, scene, and composition. Do not add, remove, translate, "
+                "rewrite, or replace any spoken words, and do not make another person speak.",
+                "保持人物身份、面部、服装、场景和构图。不得新增、删减、翻译、改写或替换任何台词，"
+                "不得让其他人物开口说话。",
+            )
+            detailed = " ".join(
+                (
+                    _localized(
+                        output_language,
+                        f"[Shot 1] Live-action, a continuous shot lasting {duration} seconds.",
+                        f"[Shot 1] 真人实拍，一个持续 {duration} 秒的连续镜头。",
+                    ),
+                    action,
+                    _localized(
+                        output_language,
+                        f"The designated speaker's lip shapes, jaw movement, breath pauses, facial expression, "
+                        f"and subtle head motion stay synchronized to {dialogue_audio} throughout the shot.",
+                        f"指定人物的唇形、下颌动作、呼吸停顿、面部表情和细微头部动作在整个镜头中与 {dialogue_audio} 同步。",
+                    ),
+                )
+            )
+            return "\n".join(
+                (
+                    f"subject_definitions: {definitions}",
+                    f"summary: {summary}",
+                    f"retention_analysis: {retention}",
+                    f"detailed_description: {detailed}",
+                    "overall_soundscape: "
+                    + _localized(
+                        output_language,
+                        f"Preserve {dialogue_audio} as the primary spoken soundtrack. Add only quiet room tone; "
+                        "no additional speech, narration, singing, lyrics, or sound that masks the dialogue.",
+                        f"保留 {dialogue_audio} 作为主要对白音轨。只添加轻微环境底噪；不得添加其他对白、旁白、"
+                        "演唱、歌词或遮盖对白的声音。",
+                    ),
+                    "non_diegetic_music: None.",
+                )
+            )
         return "\n".join(
             (
                 f"subject_definitions: {definitions}",
@@ -351,6 +423,17 @@ def is_valid_h3_prompt_structure(prompt: str, mode: str | H3PromptMode) -> bool:
     return all(position >= 0 for position in positions) and positions == sorted(positions)
 
 
+def is_valid_h3_dialogue_audio_prompt(prompt: str) -> bool:
+    text = _strip_markdown_fence(prompt)
+    return bool(
+        is_valid_h3_prompt_structure(text, H3PromptMode.REF2VA)
+        and "<Audio 1>" in text
+        and "non_diegetic_music: None" in text
+        and ("lip" in text.lower() or "唇形" in text)
+        and ("exact spoken" in text.lower() or "准确对白" in text or "原始台词" in text)
+    )
+
+
 async def compose_h3_prompt(
     *,
     creative_intent: str,
@@ -362,6 +445,7 @@ async def compose_h3_prompt(
     has_first_frame: bool | None = None,
     has_last_frame: bool = False,
     output_language: str = "en",
+    audio_mode: str | H3AudioMode | None = None,
 ) -> str:
     """Compile an official-format draft and optionally refine it through the text gateway."""
     normalized_refs = _normalized_references(references)
@@ -381,6 +465,7 @@ async def compose_h3_prompt(
         has_first_frame=has_first_frame,
         has_last_frame=has_last_frame,
         output_language=output_language,
+        audio_mode=audio_mode,
     )
     try:
         from pydantic_ai import Agent
@@ -399,6 +484,16 @@ async def compose_h3_prompt(
             for key, value in (context or {}).items()
             if key not in {"dialogue", "narration"}
         }
+        resolved_audio_mode = normalize_h3_audio_mode(audio_mode)
+        sound_instruction = (
+            "Treat the single <Audio 1> as the designated speaker's exact dialogue performance. "
+            "Synchronize lip shapes, jaw motion, breaths, expression, and subtle head motion to it. "
+            "Do not add, remove, translate, rewrite, or replace speech; keep all other people silent. "
+            "Set non_diegetic_music to None. "
+            if resolved_audio_mode == H3AudioMode.DIALOGUE_AUDIO_REFERENCE
+            else "Always write scene-appropriate instrumental music in non_diegetic_music, evolving with the action and camera. "
+            "Do not add dialogue, narration, voiceover, spoken words, singing, lyrics, or <d> tags; the user will add speech manually. "
+        )
         task = (
             "Rewrite the supplied MiniMax H3 request using the official h3-prompt-writing skill rules.\n"
             f"Official skill: {OFFICIAL_SKILL_URL}\n"
@@ -406,13 +501,13 @@ async def compose_h3_prompt(
             f"{language_instruction} "
             "Preserve exact field names and section order. Use [Shot N] and exact cut timestamps. "
             "For camera movement specify motion type, amplitude, and speed. Keep every reference label stable and resolved. "
-            "Always write scene-appropriate instrumental music in non_diegetic_music, evolving with the action and camera. "
-            "Do not add dialogue, narration, voiceover, spoken words, singing, lyrics, or <d> tags; the user will add speech manually. "
+            f"{sound_instruction}"
             "Return only the final prompt, without Markdown fences or explanation.\n\n"
             + json.dumps(
                 {
                     "mode": resolved_mode.value,
                     "duration_seconds": float(duration_seconds),
+                    "audio_mode": resolved_audio_mode.value,
                     "asset_manifest": _reference_manifest(
                         normalized_refs,
                         output_language,
@@ -432,7 +527,10 @@ async def compose_h3_prompt(
         )
         result = await agent.run(task)
         refined = _strip_markdown_fence(result.output.prompt)
-        if is_valid_h3_prompt_structure(refined, resolved_mode):
+        refined_is_valid = is_valid_h3_prompt_structure(refined, resolved_mode)
+        if resolved_audio_mode == H3AudioMode.DIALOGUE_AUDIO_REFERENCE:
+            refined_is_valid = refined_is_valid and is_valid_h3_dialogue_audio_prompt(refined)
+        if refined_is_valid:
             return refined
         logger.warning("H3 prompt compiler returned invalid section structure; using draft")
     except Exception:

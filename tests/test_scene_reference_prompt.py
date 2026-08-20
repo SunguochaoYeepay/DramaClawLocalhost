@@ -1,3 +1,6 @@
+from pathlib import Path
+from types import SimpleNamespace
+
 from novelvideo.generators.scene_reference_images import build_scene_reference_prompt
 from novelvideo.models import NovelScene
 
@@ -66,11 +69,15 @@ async def test_scene_reference_newapi_uses_normalized_gateway_base_url(monkeypat
         captured["base_url"] = kwargs.get("base_url")
         return b"image-bytes", "", ""
 
+    import novelvideo.config as config
+
     monkeypatch.setattr(
-        scene_reference_images,
-        "NEWAPI_BASE_URL",
-        "https://relayclaw.cdnfg.com/",
-        raising=False,
+        config,
+        "get_effective_newapi_gateway_config",
+        lambda: SimpleNamespace(
+            api_key="test-key",
+            base_url="https://relayclaw.cdnfg.com/v1",
+        ),
     )
     monkeypatch.setattr(
         scene_reference_images,
@@ -82,6 +89,59 @@ async def test_scene_reference_newapi_uses_normalized_gateway_base_url(monkeypat
         project_dir=tmp_path,
         scene=NovelScene(name="Hall", environment_prompt="wide hall"),
         kind="master",
+        provider="newapi",
     )
 
     assert captured["base_url"] == "https://relayclaw.cdnfg.com/v1"
+
+
+async def test_scene_reference_comfyui_qwen_does_not_fall_back_to_openrouter(
+    monkeypatch, tmp_path
+):
+    from novelvideo.generators import scene_reference_images
+
+    captured: dict[str, object] = {}
+
+    class FakeComfyUIImageGenerator:
+        def __init__(self, model: str):
+            captured["model"] = model
+
+        async def generate(self, **kwargs):
+            captured["generate"] = kwargs
+            output_path = Path(kwargs["output_path"])
+            output_path.write_bytes(b"local-comfyui-image")
+            return type(
+                "Result",
+                (),
+                {"success": True, "error": "", "image_base64": ""},
+            )()
+
+        async def generate_with_references(self, **kwargs):
+            captured["references"] = kwargs["reference_images"]
+            output_path = Path(kwargs["output_path"])
+            output_path.write_bytes(b"local-comfyui-image")
+            return type(
+                "Result",
+                (),
+                {"success": True, "error": "", "image_base64": ""},
+            )()
+
+    def fail_openrouter(**_kwargs):
+        raise AssertionError("ComfyUI scene generation must not call OpenRouter")
+
+    monkeypatch.setattr(
+        "novelvideo.generators.comfyui_image.ComfyUIImageGenerator",
+        FakeComfyUIImageGenerator,
+    )
+    monkeypatch.setattr(scene_reference_images, "_call_openrouter_image_api", fail_openrouter)
+
+    output = await scene_reference_images.generate_scene_reference_image(
+        project_dir=tmp_path,
+        scene=NovelScene(name="Hall", environment_prompt="wide hall"),
+        kind="master",
+        provider="comfyui",
+        model="qwen-image",
+    )
+
+    assert captured["model"] == "qwen-image"
+    assert output.read_bytes() == b"local-comfyui-image"

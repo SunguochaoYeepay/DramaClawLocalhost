@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Elastic-2.0
 // Copyright (c) 2026 ClaymoreLab
-import { useEffect, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import {
   Box,
   ChevronDown,
@@ -14,11 +14,16 @@ import {
   Trash2,
   UserRound,
   Workflow,
+  FileJson,
+  Upload,
   type LucideIcon,
 } from "lucide-react";
 import {
   createBlankFreezoneCanvas,
   deleteFreezoneCanvas,
+  importProductionPackage,
+  previewProductionPackage,
+  type ProductionPackagePreview,
   type FreezoneCanvasSummary,
 } from "@/api/canvas";
 import { ApiError } from "@/api/client";
@@ -65,6 +70,12 @@ export function CanvasesTab({
   const [restoringMainline, setRestoringMainline] = useState(false);
   const [expandedMembers, setExpandedMembers] = useState(false);
   const [expandedOther, setExpandedOther] = useState(false);
+  const [packageDialogOpen, setPackageDialogOpen] = useState(false);
+  const [packageText, setPackageText] = useState("");
+  const [packagePreview, setPackagePreview] = useState<ProductionPackagePreview | null>(null);
+  const [packageError, setPackageError] = useState<string | null>(null);
+  const [previewingPackage, setPreviewingPackage] = useState(false);
+  const [importingPackage, setImportingPackage] = useState(false);
   const reloadKey = `${reloadToken ?? 0}`;
   const previousReloadKeyRef = useRef(reloadKey);
 
@@ -183,6 +194,64 @@ export function CanvasesTab({
     }
   };
 
+  const handlePackageFile = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+    setPackageError(null);
+    setPackagePreview(null);
+    setPackageText(await file.text());
+  };
+
+  const handlePackagePreview = async () => {
+    setPackageError(null);
+    setPackagePreview(null);
+    let parsed: Record<string, unknown>;
+    try {
+      const value: unknown = JSON.parse(packageText);
+      if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("JSON 根节点必须是对象");
+      parsed = value as Record<string, unknown>;
+    } catch (err) {
+      setPackageError(err instanceof Error ? err.message : String(err));
+      return;
+    }
+    setPreviewingPackage(true);
+    try {
+      setPackagePreview(await previewProductionPackage(project, parsed));
+    } catch (err) {
+      setPackageError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPreviewingPackage(false);
+    }
+  };
+
+  const handlePackageImport = async () => {
+    if (!packagePreview) return;
+    let parsed: Record<string, unknown>;
+    try {
+      const value: unknown = JSON.parse(packageText);
+      if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("JSON 根节点必须是对象");
+      parsed = value as Record<string, unknown>;
+    } catch (err) {
+      setPackageError(err instanceof Error ? err.message : String(err));
+      return;
+    }
+    setImportingPackage(true);
+    setPackageError(null);
+    try {
+      const result = await importProductionPackage(project, parsed);
+      await canvasesQuery.refetch();
+      setPackageDialogOpen(false);
+      setPackageText("");
+      setPackagePreview(null);
+      writeUrl({ canvas: result.canvas_id });
+    } catch (err) {
+      setPackageError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setImportingPackage(false);
+    }
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {error && (
@@ -217,6 +286,17 @@ export function CanvasesTab({
             </button>
           </div>
         </form>
+        <button
+          type="button"
+          onClick={() => {
+            setPackageDialogOpen(true);
+            setPackageError(null);
+          }}
+          className="mb-2 flex w-full items-center justify-center gap-2 rounded-md border border-cyan-300/20 bg-cyan-300/[0.06] px-2.5 py-2 text-[11px] font-medium text-cyan-100/85 transition hover:bg-cyan-300/[0.12]"
+        >
+          <FileJson className="h-3.5 w-3.5" />
+          导入结构化制作包
+        </button>
         {loading ? (
           <div className="py-8 text-center text-xs text-text-muted">
             {t("freezone.canvases.loading")}
@@ -290,6 +370,47 @@ export function CanvasesTab({
           </>
         )}
       </div>
+      {packageDialogOpen && (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-2xl rounded-lg border border-white/15 bg-[#15171d] p-4 shadow-2xl">
+            <div className="mb-2 flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-semibold text-white">导入结构化制作包</h2>
+                <p className="mt-1 text-[11px] text-cyan-100/75">此模式不会调用 AI 分析，内容将按文件原样导入。</p>
+              </div>
+              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded border border-white/10 px-2 py-1 text-[11px] text-white/75 hover:bg-white/10">
+                <Upload className="h-3.5 w-3.5" /> 选择 JSON
+                <input type="file" accept="application/json,.json" className="hidden" onChange={(event) => void handlePackageFile(event)} />
+              </label>
+            </div>
+            <textarea
+              value={packageText}
+              onChange={(event) => {
+                setPackageText(event.target.value);
+                setPackagePreview(null);
+                setPackageError(null);
+              }}
+              placeholder="也可以直接粘贴 JSON"
+              className="h-52 w-full resize-y rounded border border-white/10 bg-black/20 p-2 font-mono text-[11px] text-white/80 outline-none focus:border-cyan-300/40"
+            />
+            {packageError && <div className="mt-2 rounded border border-red-400/30 bg-red-400/10 p-2 text-[11px] text-red-200">{packageError}</div>}
+            {packagePreview && (
+              <div className="mt-2 rounded border border-white/10 bg-white/[0.03] p-3 text-[11px] text-white/75">
+                <div className="grid grid-cols-3 gap-2">
+                  <span>项目：{packagePreview.project_title}</span><span>集数：{packagePreview.episode_number}</span><span>场景：{packagePreview.scene_count}</span>
+                  <span>镜头：{packagePreview.shot_count}</span><span>人物：{packagePreview.character_count}</span><span>音频：{packagePreview.audio_count}</span>
+                </div>
+                {packagePreview.missing_resources.length > 0 && <div className="mt-2 text-amber-200">缺失资源：{packagePreview.missing_resources.map((item) => `${item.field} (${item.id})`).join("、")}</div>}
+              </div>
+            )}
+            <div className="mt-3 flex justify-end gap-2">
+              <button type="button" onClick={() => setPackageDialogOpen(false)} className="rounded border border-white/10 px-3 py-1.5 text-[11px] text-white/65 hover:bg-white/10">取消</button>
+              <button type="button" onClick={() => void handlePackagePreview()} disabled={previewingPackage || !packageText.trim()} className="rounded border border-cyan-300/25 px-3 py-1.5 text-[11px] text-cyan-100 disabled:opacity-40">{previewingPackage ? "校验中…" : "校验并预览"}</button>
+              <button type="button" onClick={() => void handlePackageImport()} disabled={importingPackage || !packagePreview || packagePreview.missing_resources.length > 0} className="rounded bg-cyan-300/20 px-3 py-1.5 text-[11px] text-cyan-50 disabled:opacity-40">{importingPackage ? "导入中…" : "确认导入"}</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

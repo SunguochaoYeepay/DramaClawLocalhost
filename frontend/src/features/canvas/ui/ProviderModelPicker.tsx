@@ -48,12 +48,19 @@ export interface ModelOption {
 }
 
 export const SHARED_PROVIDERS: ProviderOption[] = [
+  { id: 'comfyui', label: 'ComfyUI (本地)' },
   { id: 'huimeng', label: '绘梦 / HuiMeng' },
   { id: 'openrouter', label: 'OpenRouter' },
   { id: 'openai', label: 'OpenAI' },
 ];
 
 export const SHARED_MODELS: ModelOption[] = [
+  {
+    id: 'comfyui_qwen_image',
+    providerId: 'comfyui',
+    apiModel: 'comfyui_qwen_image',
+    label: 'ComfyUI Qwen Image (Local)',
+  },
   {
     id: 'huimeng/gpt-image-2',
     providerId: 'huimeng',
@@ -74,7 +81,7 @@ export const SHARED_MODELS: ModelOption[] = [
   },
 ];
 
-export const DEFAULT_SHARED_MODEL_ID = 'huimeng/gpt-image-2';
+export const DEFAULT_SHARED_MODEL_ID = 'comfyui_qwen_image';
 
 // Video generation models. `id` is the raw backend model id sent to
 // /freezone/video/gen so we don't need a separate apiModel mapping.

@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from fastapi import HTTPException
 
 from novelvideo.freezone.jobs import run_freezone_video_gen
 from novelvideo.generators.video_generator import (
@@ -275,6 +276,82 @@ async def test_h3_last_frame_only_request_routes_as_l2va(monkeypatch, tmp_path: 
 
 
 @pytest.mark.asyncio
+async def test_h3_omni_dialogue_audio_mode_reaches_task_payload(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from novelvideo.api.routes import freezone as routes
+    from novelvideo.api.schemas import FreezoneVideoOmniGenRequest
+
+    captured: dict = {}
+
+    async def fake_resolve_project(*_args, **_kwargs):
+        return None, "admin", "demo", tmp_path, str(tmp_path / "output")
+
+    async def fake_start(**kwargs):
+        captured.update(kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(routes, "_resolve_freezone_project", fake_resolve_project)
+    monkeypatch.setattr(
+        routes,
+        "_resolve_url_list",
+        lambda _project_dir, urls: [str(tmp_path / Path(urls[0]).name)] if urls else [],
+    )
+    monkeypatch.setattr(routes, "_start_or_enqueue_freezone_video_gen", fake_start)
+
+    await routes.freezone_video_omni_gen(
+        project="demo",
+        body=FreezoneVideoOmniGenRequest(
+            prompt="林悦看向丈夫说话。",
+            model="minimax_h3",
+            references=[
+                {"type": "image", "url": "/speaker.png", "role": "林悦人物参考"},
+                {"type": "audio", "url": "/dialogue.wav", "role": "林悦的准确对白音频"},
+            ],
+            h3_audio_mode="dialogue_audio_reference",
+            audio_reference_duration_ms=7200,
+        ),
+        user={"username": "admin"},
+    )
+
+    assert captured["h3_audio_mode"] == "dialogue_audio_reference"
+    assert captured["audio_reference_duration_ms"] == 7200
+    assert captured["audio_reference_url"] == "/dialogue.wav"
+    assert captured["reference_items"][1]["role"] == "林悦的准确对白音频"
+
+
+@pytest.mark.asyncio
+async def test_h3_omni_dialogue_audio_mode_rejects_multiple_audio_references(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from novelvideo.api.routes import freezone as routes
+    from novelvideo.api.schemas import FreezoneVideoOmniGenRequest
+
+    async def fake_resolve_project(*_args, **_kwargs):
+        return None, "admin", "demo", tmp_path, str(tmp_path / "output")
+
+    monkeypatch.setattr(routes, "_resolve_freezone_project", fake_resolve_project)
+
+    with pytest.raises(HTTPException, match="只能连接 1 段音频"):
+        await routes.freezone_video_omni_gen(
+            project="demo",
+            body=FreezoneVideoOmniGenRequest(
+                prompt="人物说话。",
+                model="minimax_h3",
+                references=[
+                    {"type": "image", "url": "/speaker.png"},
+                    {"type": "audio", "url": "/a.wav"},
+                    {"type": "audio", "url": "/b.wav"},
+                ],
+                h3_audio_mode="dialogue_audio_reference",
+            ),
+            user={"username": "admin"},
+        )
+
+
+@pytest.mark.asyncio
 async def test_freezone_video_gen_allows_newapi_seedance2_text_to_video(
     monkeypatch, tmp_path: Path
 ):
@@ -344,6 +421,78 @@ async def test_freezone_video_gen_allows_newapi_fast_text_to_video(monkeypatch, 
     assert captured["create"]["backend"] == "newapi_seedance-1.0-pro-fast"
     assert captured["generate"]["image_path"] is None
     assert captured["generate"]["references"] == []
+
+
+@pytest.mark.asyncio
+async def test_h3_dialogue_audio_is_used_for_prompt_duration_and_final_soundtrack(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    from novelvideo.freezone import jobs
+    from novelvideo.generators.h3_prompt_composer import (
+        H3AudioMode,
+        H3PromptMode,
+        H3Reference,
+        build_h3_prompt_draft,
+    )
+
+    captured: dict[str, object] = {}
+    image_path = tmp_path / "speaker.png"
+    audio_path = tmp_path / "dialogue.wav"
+    image_path.write_bytes(b"image")
+    audio_path.write_bytes(b"audio")
+    prompt = build_h3_prompt_draft(
+        creative_intent="林悦看向镜头说话。",
+        references=[
+            H3Reference("image", "林悦人物参考"),
+            H3Reference("audio", "林悦的准确对白音频"),
+        ],
+        mode=H3PromptMode.REF2VA,
+        audio_mode=H3AudioMode.DIALOGUE_AUDIO_REFERENCE,
+    )
+
+    class FakeVideoGenerator:
+        async def generate(self, **kwargs):
+            captured["generate"] = kwargs
+            output_path = Path(kwargs["output_path"])
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_bytes(b"generated-video")
+            return VideoGenResult(status=VideoGenStatus.DONE, video_path=str(output_path))
+
+    async def fake_run_cmd(cmd: list[str]) -> None:
+        captured["ffmpeg"] = cmd
+        Path(cmd[-1]).write_bytes(b"video-with-original-dialogue")
+
+    monkeypatch.setattr(
+        "novelvideo.generators.video_generator.create_video_generator",
+        lambda **_kwargs: FakeVideoGenerator(),
+    )
+    monkeypatch.setattr(jobs, "_probe_video_duration", lambda _path: _async_value(7.2))
+    monkeypatch.setattr(jobs, "_run_cmd", fake_run_cmd)
+    monkeypatch.setattr(jobs.shutil, "which", lambda _name: "/usr/bin/ffmpeg")
+
+    out = await run_freezone_video_gen(
+        project_dir=tmp_path,
+        job_id="h3_dialogue",
+        prompt=prompt,
+        reference_items=[
+            {"type": "image", "path": str(image_path), "role": "林悦人物参考"},
+            {"type": "audio", "path": str(audio_path), "role": "林悦的准确对白音频"},
+        ],
+        backend="minimax_h3",
+        h3_mode="ref2va",
+        h3_audio_mode="dialogue_audio_reference",
+    )
+
+    assert captured["generate"]["duration"] == 8.0
+    assert captured["generate"]["h3_audio_mode"] == "dialogue_audio_reference"
+    assert "<Audio 1>" in captured["generate"]["prompt"]
+    assert captured["ffmpeg"][captured["ffmpeg"].index("-i") + 3] == str(audio_path)
+    assert out.read_bytes() == b"video-with-original-dialogue"
+
+
+async def _async_value(value):
+    return value
 
 
 def test_seedance2_model_selection_prefers_omni_model_for_mixed_references() -> None:

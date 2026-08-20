@@ -67,6 +67,9 @@ def _append_freezone_video_node_history(
                 "gen_mode": payload.get("gen_mode"),
                 "h3_mode": payload.get("h3_mode"),
                 "h3_profile": payload.get("h3_profile"),
+                "h3_audio_mode": payload.get("h3_audio_mode"),
+                "audio_reference_duration_ms": payload.get("audio_reference_duration_ms"),
+                "audio_reference_url": payload.get("audio_reference_url"),
                 "resolution": payload.get("resolution"),
             }.items()
             if value not in (None, "")
@@ -818,6 +821,12 @@ async def _run_freezone_video_gen_async(
             last_frame_path=payload.get("last_frame_path"),
             h3_mode=str(payload.get("h3_mode") or ""),
             h3_profile=str(payload.get("h3_profile") or "balanced"),
+            h3_audio_mode=str(payload.get("h3_audio_mode") or "motion_only"),
+            audio_reference_duration_ms=(
+                int(payload["audio_reference_duration_ms"])
+                if payload.get("audio_reference_duration_ms")
+                else None
+            ),
             on_progress=_on_progress,
             on_log=_on_log,
         )

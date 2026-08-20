@@ -176,6 +176,7 @@ export type FreezoneVideoAspectRatio =
 export type FreezoneVideoResolution = "480p" | "720p" | "1080p";
 export type MiniMaxH3Mode = "t2va" | "i2va" | "fl2va" | "l2va" | "ref2va";
 export type MiniMaxH3Profile = "draft" | "balanced" | "final";
+export type MiniMaxH3AudioMode = "motion_only" | "dialogue_audio_reference";
 
 /** Local element marker on the source image, used to anchor subjects/objects. */
 export interface FreezoneVideoMark {
@@ -512,6 +513,8 @@ export interface FreezoneVideoOmniGenPayload extends FreezoneNodeContext {
   sceneOptimize?: "anime" | "realistic" | null;
   h3Mode?: MiniMaxH3Mode;
   h3Profile?: MiniMaxH3Profile;
+  h3AudioMode?: MiniMaxH3AudioMode;
+  audioReferenceDurationMs?: number | null;
 }
 
 export async function submitFreezoneVideoOmniGen(
@@ -553,6 +556,10 @@ export async function submitFreezoneVideoOmniGen(
         scene_optimize: payload.sceneOptimize ?? null,
         ...(payload.h3Mode ? { h3_mode: payload.h3Mode } : {}),
         ...(payload.h3Profile ? { h3_profile: payload.h3Profile } : {}),
+        ...(payload.h3AudioMode ? { h3_audio_mode: payload.h3AudioMode } : {}),
+        ...(payload.audioReferenceDurationMs
+          ? { audio_reference_duration_ms: Math.round(payload.audioReferenceDurationMs) }
+          : {}),
         ...nodeContextBody(payload),
       },
     },

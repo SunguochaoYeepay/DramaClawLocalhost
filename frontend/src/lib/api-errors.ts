@@ -110,11 +110,25 @@ export function errorFromBackendBody(status: number, body: unknown, fallback: st
     typeof directErrorCode === "string" && directErrorCode.trim()
       ? directErrorCode
       : findNestedString(body, "error_code");
+  const detailRecord = detail && typeof detail === "object" ? (detail as Record<string, unknown>) : null;
+  const detailCode = detailRecord?.code;
+  const detailErrors = Array.isArray(detailRecord?.errors) ? detailRecord.errors : [];
+  const validationDetails = detailErrors
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const record = item as Record<string, unknown>;
+      const field = typeof record.field === "string" ? record.field : "$";
+      const itemMessage = typeof record.message === "string" ? record.message : "值无效";
+      return `${field}: ${itemMessage}`;
+    })
+    .filter((item): item is string => Boolean(item));
   const message =
     typeof apiError === "string" && apiError.trim()
       ? apiError
       : typeof detail === "string" && detail.trim()
         ? detail
+        : detailCode === "production_package_invalid" && validationDetails.length > 0
+          ? `制作包校验失败：${validationDetails.join("；")}`
         : findNestedString(body, "message") ?? fallback;
 
   if (errorCode === "INSUFFICIENT_CREDITS") {
@@ -140,6 +154,9 @@ export function errorFromBackendBody(status: number, body: unknown, fallback: st
   }
   if (typeof detail === "string" && detail.trim()) {
     return new BackendStatusError(detail, status, body);
+  }
+  if (validationDetails.length > 0) {
+    return new BackendStatusError(message, status, body);
   }
   return null;
 }

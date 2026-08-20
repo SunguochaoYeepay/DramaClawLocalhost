@@ -46,6 +46,9 @@ def test_freezone_video_history_persists_prompt(tmp_path: Path) -> None:
         "node_id": "video_1",
         "canvas_id": "default",
         "prompt": "电影级武侠风，深夜古街，斗笠侠客。",
+        "h3_audio_mode": "dialogue_audio_reference",
+        "audio_reference_url": "/static/dialogue.wav",
+        "audio_reference_duration_ms": 7200,
     }
     rec = _append_freezone_video_node_history(
         ctx=ctx,
@@ -56,6 +59,9 @@ def test_freezone_video_history_persists_prompt(tmp_path: Path) -> None:
     )
     assert rec is not None
     assert rec["prompt"] == payload["prompt"]
+    assert rec["h3_audio_mode"] == "dialogue_audio_reference"
+    assert rec["audio_reference_url"] == "/static/dialogue.wav"
+    assert rec["audio_reference_duration_ms"] == 7200
 
     stored = read_generation_history(
         project_dir=project_dir, canvas_id="default", node_id="video_1"

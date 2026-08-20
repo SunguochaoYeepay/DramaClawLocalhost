@@ -2076,10 +2076,15 @@ def test_split_provider_and_model_accepts_newapi_selection_key() -> None:
     assert model == NEWAPI_IMAGE_MODEL
 
 
-def test_freezone_defaults_to_newapi_gpt_image2() -> None:
-    assert FREEZONE_DEFAULT_IMAGE_MODEL == "newapi_gpt_image2"
-    assert _resolve_freezone_image_provider(None) == "newapi"
+def test_freezone_defaults_to_local_qwen_image() -> None:
+    assert FREEZONE_DEFAULT_IMAGE_MODEL == "comfyui_qwen_image"
+    assert _resolve_freezone_image_provider(None) == "comfyui"
     assert _resolve_freezone_image_provider("newapi") == "newapi"
+    assert freezone_routes.FreezoneGenRequest(prompt="test").model == "comfyui_qwen_image"
+    assert (
+        freezone_routes.FreezoneEditRequest(prompt="test", base_url="/static/source.png").model
+        == "comfyui_qwen_image"
+    )
 
 
 def test_erase_prompt_mentions_masked_region_and_cleanup() -> None:
@@ -6113,6 +6118,7 @@ def test_all_preset_node_factories_emit_preset_managed_true() -> None:
         assert (
             node["data"].get("preset_managed") is True
         ), f"factory output {node['id']} (type={node.get('type')}) missing preset_managed"
+    assert nodes[5]["data"]["model"] == "comfyui_qwen_image"
 
 
 def test_is_preset_managed_canvas_node_prefers_explicit_field() -> None:

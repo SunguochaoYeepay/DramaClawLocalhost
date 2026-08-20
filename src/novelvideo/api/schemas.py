@@ -11,7 +11,7 @@ from novelvideo.freezone.slots import PushTarget
 
 ProjectStatus = Literal["active", "archived", "deleted"]
 ProjectStatusFilter = Literal["all", "active", "archived", "deleted", "visible"]
-FREEZONE_DEFAULT_IMAGE_SELECTION = "huimeng_gpt_image2"
+FREEZONE_DEFAULT_IMAGE_SELECTION = "comfyui_qwen_image"
 FREEZONE_DEFAULT_IMAGE_MODEL = FREEZONE_DEFAULT_IMAGE_SELECTION
 CANVAS_MAX_NODES = 50_000
 CANVAS_MAX_EDGES = 200_000
@@ -467,7 +467,7 @@ class FreezoneGenRequest(BaseModel):
         description="可选风格模板参数，用于把内置风格模板注入图片提示词",
     )
     provider: Optional[str] = None
-    model: Optional[str] = None
+    model: Optional[str] = FREEZONE_DEFAULT_IMAGE_MODEL
     quality: Optional[str] = Field(default="medium", description="图片画质档位，默认 medium")
     model_id: Optional[str] = Field(
         default=None, description="可选：注册表模型 id，用于还原节点时回填 model"
@@ -498,7 +498,7 @@ class FreezoneEditRequest(BaseModel):
         description="可选风格模板参数，用于把内置风格模板注入图片提示词",
     )
     provider: Optional[str] = None
-    model: Optional[str] = None
+    model: Optional[str] = FREEZONE_DEFAULT_IMAGE_MODEL
     quality: Optional[str] = Field(default="medium", description="图片画质档位，默认 medium")
     model_id: Optional[str] = Field(
         default=None, description="可选：注册表模型 id，用于还原节点时回填 model"
@@ -1383,6 +1383,12 @@ class FreezoneVideoOmniGenRequest(BaseModel):
     node_id: str = Field(default="", description="可选：来源节点 id，用于记录节点生成历史")
     h3_mode: Optional[Literal["t2va", "i2va", "fl2va", "l2va", "ref2va"]] = None
     h3_profile: Optional[Literal["draft", "balanced", "final"]] = None
+    h3_audio_mode: Literal["motion_only", "dialogue_audio_reference"] = "motion_only"
+    audio_reference_duration_ms: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description="对白音频时长；H3 对白驱动模式下用于自动匹配视频时长",
+    )
     gen_mode: Optional[str] = Field(default=None, description="可选：生成模式，用于还原节点时回填 genMode")
 
 
@@ -1776,6 +1782,20 @@ class CanvasPayload(BaseModel):
                 },
             )
         return self
+
+
+class ProductionPackagePreviewRequest(BaseModel):
+    """Raw structured production package used by the no-AI import flow."""
+
+    package: dict
+
+
+class ProductionPackageImportRequest(BaseModel):
+    """Confirm a previously previewed package and write it to a canvas."""
+
+    package: dict
+    canvas_id: Optional[str] = None
+    confirm: bool = False
 
 
 class PresetCanvasRequest(BaseModel):

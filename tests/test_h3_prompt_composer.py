@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from novelvideo.generators.h3_prompt_composer import (
+    H3AudioMode,
     H3PromptMode,
     H3Reference,
     build_h3_prompt_draft,
@@ -82,6 +83,40 @@ def test_h3_ref2va_prompt_preserves_reference_roles_and_continuity() -> None:
     assert "<Video 1> is used only for handheld tracking motion" in prompt
     assert "<Audio 1> is used only for ambient rhythm" in prompt
     assert "do not merge subjects or create a slideshow" in prompt
+
+
+def test_h3_dialogue_audio_prompt_drives_designated_speaker_and_disables_music() -> None:
+    prompt = build_h3_prompt_draft(
+        creative_intent="妻子看向丈夫，说完后轻轻叹气。",
+        references=[
+            H3Reference("image", "林悦的人物与客厅构图"),
+            H3Reference("audio", "林悦的准确对白音频"),
+        ],
+        mode=H3PromptMode.REF2VA,
+        audio_mode=H3AudioMode.DIALOGUE_AUDIO_REFERENCE,
+        output_language="zh-CN",
+    )
+
+    assert is_valid_h3_prompt_structure(prompt, H3PromptMode.REF2VA)
+    assert "<Audio 1> 是指定出镜人物的准确对白表演" in prompt
+    assert "唇形、下颌动作、呼吸停顿" in prompt
+    assert "不得新增、删减、翻译、改写或替换任何台词" in prompt
+    assert "保留 <Audio 1> 作为主要对白音轨" in prompt
+    assert "non_diegetic_music: None." in prompt
+
+
+def test_h3_motion_audio_reference_keeps_existing_no_dialogue_behavior() -> None:
+    prompt = build_h3_prompt_draft(
+        creative_intent="人物随音乐节奏转身。",
+        references=[H3Reference("audio", "节奏参考")],
+        mode=H3PromptMode.REF2VA,
+        audio_mode=H3AudioMode.MOTION_ONLY,
+        output_language="zh-CN",
+    )
+
+    assert "<Audio 1> 仅用于节奏参考" in prompt
+    assert "准确对白表演" not in prompt
+    assert "non_diegetic_music: 根据画面情绪" in prompt
 
 
 def test_h3_storyboard_prompt_can_use_simplified_chinese() -> None:

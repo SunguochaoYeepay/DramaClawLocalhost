@@ -54,6 +54,7 @@ import {
   isUploadNode,
   isVideoNode,
   type CanvasNode,
+  type MiniMaxH3AudioMode,
   type MiniMaxH3Profile,
   type Seedance2SceneOptimize,
   type VideoGenCount,
@@ -1058,6 +1059,13 @@ export const VideoNode = memo(
           (entry): entry is { nodeId: string; url: string } => entry != null,
         );
     }, [upstreamNodes, data.referenceOrder]);
+    const productionKeyframePending = Boolean(
+      data.requiresApprovedKeyframe
+      && !upstreamNodes.some((node) => {
+        const nodeData = node.data as Record<string, unknown>;
+        return Boolean(nodeData.imageUrl);
+      }),
+    );
 
     // 统一的「图 / 视 / 音」上游引用条目，给 chips 行用。顺序按连接顺序
     // （与 referenceImages 同步），让 chip 编号 1/2/3... 跟可视顺序一致。
@@ -1115,6 +1123,10 @@ export const VideoNode = memo(
             nodeId: node.id,
             audioUrl,
             displayName: node.data.displayName ?? null,
+            speaker:
+              typeof node.data.speaker === "string" ? node.data.speaker : null,
+            durationMs:
+              typeof node.data.durationMs === "number" ? node.data.durationMs : null,
           });
           continue;
         }
@@ -1294,6 +1306,15 @@ export const VideoNode = memo(
       }
       return { images, videos, audios };
     }, [upstreamNodes]);
+    const canUseH3DialogueAudio = Boolean(
+      isMiniMaxH3Model
+      && genMode === "allReference"
+      && upstreamCounts.audios === 1
+      && upstreamCounts.images >= 1,
+    );
+    const h3AudioMode: MiniMaxH3AudioMode = canUseH3DialogueAudio
+      ? (data.h3AudioMode ?? "dialogue_audio_reference")
+      : "motion_only";
     // HappyHorse 的模式可用性由「上游节点类型」决定，而非素材是否已填。空的图片
     // 节点（尚未生成/上传图）也应让「首帧 / 图片参考」可选——用户先连节点、后填图
     // 是正常顺序。所以这里按节点类型统计，区别于 upstreamCounts 的「已解析 URL」口径。
@@ -1818,7 +1839,9 @@ export const VideoNode = memo(
               ? `图片参考 ${used.image}`
               : item.kind === "video"
                 ? `动作与运镜参考 ${used.video}`
-                : `声音与节奏参考 ${used.audio}`;
+                : h3AudioMode === "dialogue_audio_reference"
+                  ? `${item.kind === "audio" && item.speaker ? item.speaker : "指定人物"}的准确对白音频`
+                  : `声音与节奏参考 ${used.audio}`;
           pushReference(item, role, item.displayName?.trim() || fallbackLabel);
         }
       } else if (mode === "i2va") {
@@ -1865,6 +1888,7 @@ export const VideoNode = memo(
               primary_image_is_subject: mode === "i2va" || mode === "fl2va",
               has_last_frame: mode === "fl2va",
               output_language: "zh-CN",
+              audio_mode: h3AudioMode,
             },
             resolved_inputs: resolvedInputs,
           },
@@ -1892,6 +1916,7 @@ export const VideoNode = memo(
       cameraMovementPreset?.promptFragment,
       durationSec,
       genMode,
+      h3AudioMode,
       h3Continuity,
       id,
       isGenerating,
@@ -2282,6 +2307,7 @@ export const VideoNode = memo(
 
     const submitDisabled =
       isGenerating ||
+      productionKeyframePending ||
       (prompt.trim().length === 0 && upstreamTextJoined.length === 0);
 
     const handleSubmit = useCallback(async () => {
@@ -2569,10 +2595,17 @@ export const VideoNode = memo(
                   (typeof node.data.displayName === "string"
                     ? node.data.displayName
                     : "");
+                const speaker =
+                  typeof node.data.speaker === "string" && node.data.speaker.trim()
+                    ? node.data.speaker.trim()
+                    : "指定人物";
                 references.push({
                   type: "audio",
                   url,
-                  role: "配乐参考",
+                  role:
+                    h3AudioMode === "dialogue_audio_reference"
+                      ? `${speaker}的准确对白音频`
+                      : "配乐参考",
                   label: rawLabel,
                 });
                 audioRefs.push({
@@ -2599,6 +2632,39 @@ export const VideoNode = memo(
               generationStartedAt: null,
             });
             return;
+          }
+          let omniDurationSeconds = durationClamped;
+          let dialogueAudioDurationMs: number | null = null;
+          if (h3AudioMode === "dialogue_audio_reference") {
+            if (audioRefs.length !== 1 || imageCount < 1) {
+              void showErrorDialog(
+                "H3 对白音频驱动需要连接至少 1 张人物图片，并且只能连接 1 段对白音频。",
+                t("common.error"),
+              );
+              updateNodeData(id, { isGenerating: false, generationStartedAt: null });
+              return;
+            }
+            dialogueAudioDurationMs =
+              typeof audioRefs[0].durationMs === "number" && audioRefs[0].durationMs > 0
+                ? audioRefs[0].durationMs
+                : await probeAudioDurationMs(audioRefs[0].url);
+            if (!dialogueAudioDurationMs) {
+              void showErrorDialog("无法读取对白音频时长，请检查音频文件后重试。", t("common.error"));
+              updateNodeData(id, { isGenerating: false, generationStartedAt: null });
+              return;
+            }
+            if (dialogueAudioDurationMs > 15_000) {
+              void showErrorDialog("H3 对白音频最长支持 15 秒，请先裁剪音频。", t("common.error"));
+              updateNodeData(id, { isGenerating: false, generationStartedAt: null });
+              return;
+            }
+            omniDurationSeconds = clampVideoDuration(
+              Math.ceil(dialogueAudioDurationMs / 1000),
+              durationBounds,
+            );
+            if (omniDurationSeconds !== durationSec) {
+              updateNodeData(id, { durationSec: omniDurationSeconds });
+            }
           }
           // Seedance 2.0 后端限制音频总时长 ≤ 15.2s，超了会以 InvalidParameter
           // 报错。提交前先本地校验：durationMs 缺失时用 <audio> 探测兜底，超限就
@@ -2634,11 +2700,13 @@ export const VideoNode = memo(
               references,
               aspectRatio: submitAspectRatio,
               resolution: qualityToResolution(quality),
-              durationSeconds: durationClamped,
+              durationSeconds: omniDurationSeconds,
               generateAudio,
               model: modelId,
               genMode,
               ...h3RequestOptions,
+              h3AudioMode,
+              audioReferenceDurationMs: dialogueAudioDurationMs,
               humanReview: isSeedance20Model && humanReview,
               sceneOptimize: sceneOptimize ?? null,
               canvasId,
@@ -2843,6 +2911,7 @@ export const VideoNode = memo(
       durationSec,
       generateAudio,
       genMode,
+      h3AudioMode,
       h3Continuity,
       effectiveH3Profile,
       humanReview,
@@ -3692,6 +3761,7 @@ export const VideoNode = memo(
                     sceneOptimizeOptions={sceneOptimizeOptions}
                     generateAudio={generateAudio}
                     h3Profile={isMiniMaxH3Model ? effectiveH3Profile : undefined}
+                    h3AudioMode={canUseH3DialogueAudio ? h3AudioMode : undefined}
                     h3NativeProfileOnly={h3NativeProfileOnly}
                     h3Continuity={isMiniMaxH3Model && data.h3BatchId && data.h3BatchIndex !== 0
                       ? h3Continuity
@@ -3771,7 +3841,9 @@ export const VideoNode = memo(
                     type="button"
                     disabled={submitDisabled}
                     title={
-                      isGenerating
+                      productionKeyframePending
+                        ? "请先生成关键帧"
+                        : isGenerating
                         ? t("node.videoNode.submitBusy")
                         : t("node.videoNode.submit")
                     }
@@ -4086,6 +4158,7 @@ interface VideoConfigChipProps {
   sceneOptimizeOptions: readonly Seedance2SceneOptimize[];
   generateAudio: boolean;
   h3Profile?: MiniMaxH3Profile;
+  h3AudioMode?: MiniMaxH3AudioMode;
   h3NativeProfileOnly?: boolean;
   h3Continuity?: boolean;
   onChange: (patch: Partial<VideoNodeData>) => void;
@@ -4101,6 +4174,7 @@ function VideoConfigChip({
   sceneOptimizeOptions,
   generateAudio,
   h3Profile,
+  h3AudioMode,
   h3NativeProfileOnly = false,
   h3Continuity,
   onChange,
@@ -4187,6 +4261,12 @@ function VideoConfigChip({
                 ? "多图参考 · 原生20步"
                 : H3_PROFILE_LABELS[h3Profile]}
             </span>
+          </>
+        ) : null}
+        {h3AudioMode === "dialogue_audio_reference" ? (
+          <>
+            <span className="text-text-muted/80">·</span>
+            <span>对白驱动</span>
           </>
         ) : null}
         {h3Continuity !== undefined ? (
@@ -4287,6 +4367,39 @@ function VideoConfigChip({
                   })}
                 </div>
               )}
+            </>
+          ) : null}
+
+          {h3AudioMode ? (
+            <>
+              <div className={VIDEO_PARAM_LABEL_CLASS}>H3 音频用途</div>
+              <div className={`grid grid-cols-2 ${VIDEO_PARAM_ROW_CLASS}`}>
+                {([
+                  ["dialogue_audio_reference", "对白驱动（实验）"],
+                  ["motion_only", "声音/节奏参考"],
+                ] as const).map(([mode, label]) => {
+                  const isActive = h3AudioMode === mode;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      title={
+                        mode === "dialogue_audio_reference"
+                          ? "让画面人物按唯一音频说话并尽量同步口型，输出保留原对白音轨"
+                          : "音频仅用于声音氛围和动作节奏参考"
+                      }
+                      onClick={() => onChange({ h3AudioMode: mode })}
+                      className={`${VIDEO_PARAM_BUTTON_BASE_CLASS} ${
+                        isActive
+                          ? VIDEO_PARAM_ACTIVE_BUTTON_CLASS
+                          : VIDEO_PARAM_IDLE_BUTTON_CLASS
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
             </>
           ) : null}
 
@@ -4654,6 +4767,8 @@ type ReferenceMediaItem =
       nodeId: string;
       audioUrl: string;
       displayName?: string | null;
+      speaker?: string | null;
+      durationMs?: number | null;
     };
 
 interface ReferenceMediaCapEntry {
