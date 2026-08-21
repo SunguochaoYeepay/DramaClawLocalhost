@@ -398,7 +398,8 @@ export function CanvasesTab({
               <div className="mt-2 rounded border border-white/10 bg-white/[0.03] p-3 text-[11px] text-white/75">
                 <div className="grid grid-cols-3 gap-2">
                   <span>项目：{packagePreview.project_title}</span><span>集数：{packagePreview.episode_number}</span><span>场景：{packagePreview.scene_count}</span>
-                  <span>镜头：{packagePreview.shot_count}</span><span>人物：{packagePreview.character_count}</span><span>音频：{packagePreview.audio_count}</span>
+                  <span>镜头：{packagePreview.shot_count}</span><span>视觉人物：{packagePreview.visual_character_count}</span><span>场景参考：{packagePreview.location_count}</span>
+                  <span>道具参考：{packagePreview.prop_reference_count}</span><span>音频：{packagePreview.audio_count}</span>
                 </div>
                 {packagePreview.missing_resources.length > 0 && <div className="mt-2 text-amber-200">缺失资源：{packagePreview.missing_resources.map((item) => `${item.field} (${item.id})`).join("、")}</div>}
               </div>

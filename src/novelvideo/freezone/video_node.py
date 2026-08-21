@@ -368,6 +368,11 @@ def get_freezone_video_model_options() -> list[dict[str, Any]]:
         ),
     ]
     for backend_id, label, provider_id, min_dur, max_dur in local_backends:
+        resolution_options = (
+            ["480p", "720p", "1080p"]
+            if backend_id == "minimax_h3"
+            else ["720p", "1080p"]
+        )
         item = {
             "id": backend_id,
             "providerId": provider_id,
@@ -376,8 +381,8 @@ def get_freezone_video_model_options() -> list[dict[str, Any]]:
             "api_model": backend_id,
             "label": label,
             "backend": backend_id,
-            "resolutionOptions": ["720p", "1080p"],
-            "resolution_options": ["720p", "1080p"],
+            "resolutionOptions": resolution_options,
+            "resolution_options": resolution_options,
             "minDuration": min_dur,
             "min_duration": min_dur,
             "maxDuration": max_dur,

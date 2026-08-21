@@ -1063,7 +1063,13 @@ export const VideoNode = memo(
       data.requiresApprovedKeyframe
       && !upstreamNodes.some((node) => {
         const nodeData = node.data as Record<string, unknown>;
-        return Boolean(nodeData.imageUrl);
+        const requiredKeyframeId = typeof data.keyframeNodeId === "string"
+          ? data.keyframeNodeId
+          : null;
+        const isRequiredKeyframe = requiredKeyframeId
+          ? node.id === requiredKeyframeId
+          : node.id.includes(":keyframe:");
+        return isRequiredKeyframe && Boolean(nodeData.imageUrl);
       }),
     );
 
@@ -4329,7 +4335,7 @@ function VideoConfigChip({
                       : VIDEO_PARAM_IDLE_BUTTON_CLASS
                   }`}
                 >
-                  {q}
+                  {h3Profile && q === "480P" ? "测试 480P" : q}
                 </button>
               );
             })}

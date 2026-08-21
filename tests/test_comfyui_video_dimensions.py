@@ -33,6 +33,8 @@ def test_wan_backend_options_and_request_values_are_explicit():
     director = next(
         option for option in _api_video_backend_options() if option.value == "ltx23_director"
     )
+    h3 = next(option for option in _api_video_backend_options() if option.value == "minimax_h3")
+    assert h3.resolution_options == ["480p", "720p", "1080p"]
     assert director.resolution_options == ["720p", "1080p"]
     assert director.ratio_options == list(LOCAL_WAN_RATIO_OPTIONS)
     assert _local_wan_resolution("1080p") == "1080p"

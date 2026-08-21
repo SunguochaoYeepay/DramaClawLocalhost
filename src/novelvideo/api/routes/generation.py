@@ -1704,6 +1704,7 @@ def _api_video_backend_options() -> list[VideoBackendOption]:
             option.resolution_options = list(LOCAL_LTX_RESOLUTION_OPTIONS)
             option.ratio_options = list(LOCAL_WAN_RATIO_OPTIONS)
         elif option.value == "minimax_h3":
+            option.resolution_options = list(LOCAL_WAN_RESOLUTION_OPTIONS)
             option.ratio_options = list(LOCAL_WAN_RATIO_OPTIONS)
 
     return backend_options

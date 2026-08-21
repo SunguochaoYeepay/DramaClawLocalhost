@@ -166,6 +166,9 @@ def test_video_model_options_and_resolution_work() -> None:
     assert ids == set(names)
     assert api_models == set(names)
     assert next(item for item in options if item["id"] == "minimax_h3")["providerId"] == "minimax_h3"
+    assert next(item for item in options if item["id"] == "minimax_h3")[
+        "resolutionOptions"
+    ] == ["480p", "720p", "1080p"]
     assert "Seedance1.0 Pro Fast" in labels
     assert "Seedance1.5 Pro" in labels
     assert "Seedance2.0 Fast" in labels

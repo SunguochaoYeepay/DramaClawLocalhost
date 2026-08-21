@@ -82,6 +82,9 @@ export interface ProductionPackagePreview {
   scene_count: number;
   shot_count: number;
   character_count: number;
+  visual_character_count: number;
+  location_count: number;
+  prop_reference_count: number;
   dialogue_count: number;
   audio_count: number;
   asset_count: number;
